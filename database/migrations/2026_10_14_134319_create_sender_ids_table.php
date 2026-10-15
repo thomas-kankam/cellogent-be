@@ -21,7 +21,6 @@ return new class extends Migration
             $table->string('rejected_by');
             $table->timestamp('rejected_at');
             $table->string('rejected_reason');
-            $table->timestamp('rejected_at');
             $table->timestamps();
         });
     }
