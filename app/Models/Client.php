@@ -22,7 +22,6 @@ class Client extends Actor
 
     protected $hidden = [
         "updated_at",
-        "deleted_at",
     ];
 
     protected $casts = [

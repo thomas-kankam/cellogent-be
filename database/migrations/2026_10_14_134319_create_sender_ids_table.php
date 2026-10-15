@@ -13,6 +13,15 @@ return new class extends Migration
     {
         Schema::create('sender_ids', function (Blueprint $table) {
             $table->id();
+            $table->string('client_id');
+            $table->string('sender_id');
+            $table->string('status');
+            $table->string('approved_by');
+            $table->timestamp('approved_at');
+            $table->string('rejected_by');
+            $table->timestamp('rejected_at');
+            $table->string('rejected_reason');
+            $table->timestamp('rejected_at');
             $table->timestamps();
         });
     }
