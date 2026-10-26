@@ -19,9 +19,10 @@ return new class extends Migration
             $table->string('phone_number')->nullable();
             $table->string('status')->default('active');
             $table->string('role_id')->nullable();
-            $table->string('ghana_card_number')->nullable();
             $table->string('profile_image')->nullable();
             $table->timestamp('last_login_at')->nullable();
+            $table->string('onboarding_type')->nullable();
+            $table->string('onboarding_by')->nullable();
             $table->timestamps();
         });
     }

@@ -18,12 +18,18 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->string('phone_number')->nullable();
             $table->date('date_of_birth')->nullable();
+            $table->string('gender')->nullable();
+            $table->string('account_type')->nullable();
+            $table->string('business_name')->nullable();
             $table->string('region')->nullable();
             $table->string('city')->nullable();
             $table->string('address')->nullable();
             $table->string('status')->default('active');
             $table->string('profile_image')->nullable();
             $table->timestamp('last_login_at')->nullable();
+            $table->string('onboarding_type')->nullable();
+            $table->string('onboarding_by')->nullable();
+            $table->string('referral_code')->nullable();
             $table->timestamps();
         });
     }
