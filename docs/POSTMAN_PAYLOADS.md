@@ -116,7 +116,7 @@ Later logins use `type: login`:
 }
 ```
 
-Save `data.token.access_token`.
+Save `data.access_token`. Token fields (`access_token`, `token_type`, `expires_at`) sit on `data` next to the profile — there is no `token` or `account` wrapper. `expires_at` is the datetime stored on the token row.
 
 ---
 
@@ -174,7 +174,7 @@ Seeded admin email: `admin@cellogent.com` (or `SEED_ADMIN_EMAIL`)
 }
 ```
 
-`POST /admin/verify_otp` — response includes `data.account.role` and `data.account.role.permissions`
+`POST /admin/verify_otp` — same flat `data` shape as client login, plus `role` and `role.permissions`.
 
 ```json
 {

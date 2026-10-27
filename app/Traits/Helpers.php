@@ -5,6 +5,7 @@ namespace App\Traits;
 use App\Models\Actor;
 use App\Support\GhanaPhone;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -32,16 +33,20 @@ trait Helpers
     /**
      * Issue a Passport personal-access token for the given guard's provider.
      *
-     * @return array{access_token: string, token_type: string, expires_in: int}
+     * @return array{access_token: string, token_type: string, expires_at: string|null}
      */
     protected function issueApiToken(Actor $actor, string $tokenName): array
     {
         $result = $actor->createToken($tokenName);
+        $stored = $result->token->expires_at ?? null;
+        $expiresAt = $stored
+            ? Carbon::parse($stored)
+            : now()->addSeconds((int) ($result->expiresIn ?? 0));
 
         return [
             'access_token' => $result->accessToken,
             'token_type' => $result->tokenType ?? 'Bearer',
-            'expires_in' => $result->expiresIn ?? 0,
+            'expires_at' => $expiresAt->toDateTimeString(),
         ];
     }
 

@@ -17,15 +17,17 @@ class AuthTokenService
     }
 
     /**
-     * @return array{token: array<string, mixed>, account: array<string, mixed>}
+     * Flat login payload: token fields sit next to the profile (no wrappers).
+     *
+     * @return array<string, mixed>
      */
     public function login(Actor $actor): array
     {
         $actor->forceFill(['last_login_at' => now()])->save();
 
-        return [
-            'token' => $this->issueApiToken($actor, $actor->guardName().'-access'),
-            'account' => $this->profiles->present($actor->fresh()),
-        ];
+        return array_merge(
+            $this->issueApiToken($actor, $actor->guardName().'-access'),
+            $this->profiles->present($actor->fresh()),
+        );
     }
 }
