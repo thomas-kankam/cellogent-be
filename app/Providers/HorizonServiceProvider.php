@@ -3,22 +3,30 @@
 namespace App\Providers;
 
 use Illuminate\Support\Facades\Gate;
-use Laravel\Horizon\Horizon;
-use Laravel\Horizon\HorizonApplicationServiceProvider;
+use Illuminate\Support\ServiceProvider;
 
-class HorizonServiceProvider extends HorizonApplicationServiceProvider
+/**
+ * Horizon is optional. Windows PHP has no pcntl, and WSL may not have
+ * `composer install` yet. This provider no-ops until the package exists.
+ */
+class HorizonServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        parent::boot();
+        if (! class_exists(\Laravel\Horizon\Horizon::class)) {
+            return;
+        }
 
-        Horizon::night();
+        $this->gate();
+
+        \Laravel\Horizon\Horizon::auth(function ($request) {
+            return Gate::check('viewHorizon', [$request->user()])
+                || $this->app->environment('local');
+        });
+
+        \Laravel\Horizon\Horizon::night();
     }
 
-    /**
-     * Local: anyone can open /horizon.
-     * Production: restrict by email in HORIZON_EMAIL.
-     */
     protected function gate(): void
     {
         Gate::define('viewHorizon', function ($user = null) {
