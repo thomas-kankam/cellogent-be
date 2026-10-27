@@ -17,12 +17,12 @@ class Client extends Actor
         'city',
         'address',
         'status',
+        'is_verified',
+        'verified_at',
         'profile_image',
-        'email_verified_at',
         'last_login_at',
         'onboarding_type',
         'onboarding_by',
-        'referral_code',
     ];
 
     protected $hidden = [
@@ -33,7 +33,8 @@ class Client extends Actor
     {
         return [
             'date_of_birth' => 'date',
-            'email_verified_at' => 'datetime',
+            'is_verified' => 'boolean',
+            'verified_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
     }
@@ -50,7 +51,10 @@ class Client extends Actor
 
     public function subscription()
     {
-        return $this->hasOne(Subscription::class)->latestOfMany();
+        return $this->hasOne(Subscription::class)->ofMany(
+            ['id' => 'max'],
+            fn ($query) => $query->where('status', 'active'),
+        );
     }
 
     public function onboardedBy()

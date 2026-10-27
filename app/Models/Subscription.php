@@ -11,6 +11,7 @@ class Subscription extends Model
         'plan_id',
         'plan_name',
         'status',
+        'price',
         'units',
         'starts_at',
         'ends_at',
@@ -21,6 +22,7 @@ class Subscription extends Model
     protected function casts(): array
     {
         return [
+            'price' => 'decimal:2',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
         ];

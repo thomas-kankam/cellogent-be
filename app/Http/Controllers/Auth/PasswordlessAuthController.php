@@ -67,10 +67,27 @@ abstract class PasswordlessAuthController extends Controller
             return $this->respondFrom($result);
         }
 
-        $result['data'] = $this->tokens->login($result['actor']);
+        $after = $this->afterOtpVerified(
+            $result['actor'],
+            $request->input('type', 'login'),
+        );
+
+        if ($after !== null) {
+            return $this->respondFrom($after);
+        }
+
+        $result['data'] = $this->tokens->login($result['actor']->fresh());
         $result['message'] = 'Login successful.';
 
         return $this->respondFrom($result);
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     */
+    protected function afterOtpVerified($actor, string $type): ?array
+    {
+        return null;
     }
 
     public function logout(Request $request): JsonResponse

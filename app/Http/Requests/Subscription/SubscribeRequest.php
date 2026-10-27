@@ -10,6 +10,7 @@ class SubscribeRequest extends ApiFormRequest
     {
         return [
             'plan_id' => ['required', 'integer'],
+            'months' => ['required', 'integer', 'min:1'],
             'type' => ['nullable', 'in:custom,non_expiry,monthly'],
             'network' => ['nullable', 'string', 'max:50'],
             'method' => ['nullable', 'string', 'in:momo,card,bank,wallet'],

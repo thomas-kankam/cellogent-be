@@ -4,6 +4,7 @@ namespace App\Http\Requests\Order;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Models\Payment;
+use App\Support\GhanaPhone;
 
 class StoreOrderRequest extends ApiFormRequest
 {
@@ -17,6 +18,7 @@ class StoreOrderRequest extends ApiFormRequest
             'network' => ['nullable', 'string', 'max:50'],
             'method' => ['nullable', 'string', 'in:momo,card,bank,wallet'],
             'meta_data' => ['nullable', 'array'],
+            'meta_data.phone' => ['nullable', 'string', GhanaPhone::rule()],
         ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Concerns\LogsActivity;
 use App\Jobs\ProcessProfileImageJob;
 use App\Models\Actor;
+use App\Support\GhanaPhone;
 use Illuminate\Http\UploadedFile;
 
 class ProfileService
@@ -21,6 +22,10 @@ class ProfileService
      */
     public function update(Actor $actor, array $attributes, ?UploadedFile $image = null): array
     {
+        if (array_key_exists('phone_number', $attributes)) {
+            $attributes['phone_number'] = GhanaPhone::normalize($attributes['phone_number']);
+        }
+
         $actor->fill($attributes)->save();
 
         if ($image) {

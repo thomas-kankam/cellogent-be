@@ -24,7 +24,6 @@ class PermissionSeeder extends Seeder
             ['module' => 'api_key', 'name' => 'api_key.manage'],
             ['module' => 'admin', 'name' => 'admin.manage'],
             ['module' => 'client', 'name' => 'client.manage'],
-            ['module' => 'referral', 'name' => 'referral.view'],
             ['module' => 'activity_log', 'name' => 'activity_log.view'],
         ];
 

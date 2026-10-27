@@ -10,6 +10,7 @@ class AssignSubscriptionRequest extends ApiFormRequest
     {
         return [
             'plan_id' => ['required', 'integer'],
+            'months' => ['required', 'integer', 'min:1'],
             'type' => ['nullable', 'in:custom,non_expiry,monthly'],
         ];
     }

@@ -16,7 +16,7 @@ Every response uses the same envelope:
 }
 ```
 
-`reason` values you should branch on: `otp_sent`, `verified`, `expired`, `not_found`, `invalid`, `account_inactive`, `email_taken`, `created`, `success`, `validation_error`, `unauthenticated`, `too_many_requests`.
+`reason` values you should branch on: `otp_sent`, `verified`, `expired`, `not_found`, `invalid`, `account_inactive`, `unverified`, `email_taken`, `created`, `success`, `validation_error`, `unauthenticated`, `too_many_requests`.
 
 Auth header after verify: `Authorization: Bearer {{access_token}}`
 
@@ -29,7 +29,7 @@ Local only: OTP request/signup may include `data.debug_otp` when `APP_ENV=local`
 ## Client — self signup
 
 `POST /client/signup`  
-Do **not** send `referral_code`. The 6-character referral code is generated on the server.
+Creates the client with `is_verified: false`. No wallet, subscription, or archive yet. A registration OTP is emailed.
 
 **Individual** (`account_type=individual`) — required: `first_name`, `last_name`, `date_of_birth`, `email`.  
 JSON:
@@ -60,7 +60,7 @@ Body: `form-data`
 | address | 12 Ring Road |
 | profile_image | *(file)* |
 
-Then verify with `type: registration`. The response `data.account.referral_code` is the generated code.
+Then `POST /client/verify_otp` with `type: registration`. That sets `is_verified` / `verified_at`, opens a wallet, grants a 10-unit 1-month Trial, writes a complimentary `subscription_archieves` row (no payment), and returns a Passport token. Login OTPs (`type: login`) are rejected until that registration OTP succeeds.
 
 ---
 
@@ -95,6 +95,18 @@ Then verify with `type: registration`. The response `data.account.referral_code`
 ## Client — OTP verify (returns Passport token + wallet + subscription)
 
 `POST /client/verify_otp`
+
+After signup, use `type: registration`:
+
+```json
+{
+  "email": "ama@example.com",
+  "otp": "482193",
+  "type": "registration"
+}
+```
+
+Later logins use `type: login`:
 
 ```json
 {
@@ -319,11 +331,14 @@ All of these need `Authorization: Bearer {{access_token}}`.
 ```json
 {
   "plan_id": 1,
+  "months": 1,
   "type": "monthly",
   "network": "MTN",
   "method": "momo"
 }
 ```
+
+`months` must match one of the plan `details[]` options (e.g. 1, 2, 3).
 
 `GET /client/sender-ids`
 
@@ -371,7 +386,11 @@ All of these need `Authorization: Bearer {{access_token}}`.
 {
   "name": "Gold",
   "status": "active",
-  "details": { "months": 1, "units": 8000, "price": 200 }
+  "details": [
+    { "price": 200, "units": 8000, "months": 1 },
+    { "price": 380, "units": 16000, "months": 2 },
+    { "price": 540, "units": 24000, "months": 3 }
+  ]
 }
 ```
 
@@ -388,6 +407,7 @@ All of these need `Authorization: Bearer {{access_token}}`.
 ```json
 {
   "plan_id": 2,
+  "months": 2,
   "type": "monthly"
 }
 ```

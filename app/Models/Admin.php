@@ -12,7 +12,6 @@ class Admin extends Actor
         'status',
         'role_id',
         'profile_image',
-        'email_verified_at',
         'last_login_at',
         'onboarding_type',
         'onboarding_by',
@@ -25,7 +24,6 @@ class Admin extends Actor
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
     }

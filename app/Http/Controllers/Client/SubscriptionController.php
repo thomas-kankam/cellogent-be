@@ -55,17 +55,25 @@ class SubscriptionController extends Controller
             return $this->apiResponse(true, 'Plan not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
+        $months = $request->integer('months');
+        $option = $plan->optionForMonths($months);
+
+        if (! $option) {
+            return $this->apiResponse(true, 'This plan has no option for that duration.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         $type = $request->input('type', 'monthly');
 
         return $this->respondFrom($this->payments->initiate($request->user(), [
             'type' => 'sms_units',
-            'name' => $plan->name.' plan',
-            'unit_price' => $plan->price(),
+            'name' => $plan->name.' '.$months.' month plan',
+            'unit_price' => $option['price'],
             'quantity' => 1,
             'network' => $request->input('network'),
             'method' => $request->input('method', 'momo'),
             'meta_data' => [
                 'plan_id' => $plan->id,
+                'months' => $months,
                 'type' => $type,
             ],
         ]));

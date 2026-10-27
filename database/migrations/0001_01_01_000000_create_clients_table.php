@@ -25,12 +25,12 @@ return new class extends Migration
             $table->string('city')->nullable();
             $table->string('address')->nullable();
             $table->string('status')->default('active')->index();
+            $table->boolean('is_verified')->default(false)->index();
+            $table->timestamp('verified_at')->nullable();
             $table->string('profile_image')->nullable();
-            $table->timestamp('email_verified_at')->nullable();
             $table->timestamp('last_login_at')->nullable();
             $table->string('onboarding_type')->nullable()->index(); // self | admin
             $table->unsignedBigInteger('onboarding_by')->nullable();
-            $table->string('referral_code')->nullable()->unique();
             $table->timestamps();
         });
     }

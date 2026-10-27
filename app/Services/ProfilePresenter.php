@@ -59,8 +59,9 @@ class ProfilePresenter
             'city' => $actor->city,
             'address' => $actor->address,
             'status' => $actor->status,
+            'is_verified' => (bool) $actor->is_verified,
+            'verified_at' => optional($actor->verified_at)->toDateTimeString(),
             'profile_image' => $actor->profileImageUrl(),
-            'referral_code' => $actor->referral_code,
             'onboarding_type' => $actor->onboarding_type,
             'last_login_at' => optional($actor->last_login_at)->toDateTimeString(),
             'wallet' => $actor->wallet ? [
@@ -72,6 +73,7 @@ class ProfilePresenter
                 'plan_id' => $actor->subscription->plan_id,
                 'plan_name' => $actor->subscription->plan_name,
                 'status' => $actor->subscription->status,
+                'price' => $actor->subscription->price,
                 'units' => $actor->subscription->units,
                 'type' => $actor->subscription->type,
                 'duration_in_months' => $actor->subscription->duration_in_months,

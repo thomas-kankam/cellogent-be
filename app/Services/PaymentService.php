@@ -179,14 +179,17 @@ class PaymentService
 
         if ($payment->purpose === 'sms_units' && $payment->order_id) {
             $order = Order::query()->with('items')->find($payment->order_id);
-            $planId = $order?->items->first()?->meta_data['plan_id'] ?? null;
-            $type = $order?->items->first()?->meta_data['type'] ?? 'monthly';
+            $meta = $order?->items->first()?->meta_data ?? [];
+            $planId = $meta['plan_id'] ?? null;
+            $months = (int) ($meta['months'] ?? 1);
+            $type = $meta['type'] ?? 'monthly';
             $plan = $planId ? Plan::query()->find($planId) : null;
 
             if ($plan) {
                 $this->subscriptions->activatePlan(
                     $client,
                     $plan,
+                    $months,
                     $type,
                     $payment->id,
                     $payment->reference_id,

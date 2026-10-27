@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Profile;
 
 use App\Http\Requests\ApiFormRequest;
+use App\Support\GhanaPhone;
 
 class UpdateProfileRequest extends ApiFormRequest
 {
@@ -11,7 +12,7 @@ class UpdateProfileRequest extends ApiFormRequest
         return [
             'first_name' => ['sometimes', 'string', 'max:100'],
             'last_name' => ['sometimes', 'string', 'max:100'],
-            'phone_number' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'phone_number' => ['sometimes', 'required', 'string', GhanaPhone::rule()],
             'date_of_birth' => ['sometimes', 'nullable', 'date'],
             'gender' => ['sometimes', 'nullable', 'string', 'max:20'],
             'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],

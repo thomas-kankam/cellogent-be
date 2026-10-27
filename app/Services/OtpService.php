@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Concerns\LogsActivity;
 use App\Models\Actor;
+use App\Models\Client;
 use App\Repositories\ActorRepository;
 use App\Repositories\OtpRepository;
 use App\Support\ApiCode;
@@ -42,6 +43,11 @@ class OtpService
 
         if ($actor->status !== 'active') {
             return $this->result(true, 'This account is not active.', ApiCode::FORBIDDEN, ApiReason::ACCOUNT_INACTIVE);
+        }
+
+        $blocked = $this->unverifiedClientBlock($actor, $type);
+        if ($blocked) {
+            return $blocked;
         }
 
         $throttleKey = "otp:{$guard}:{$email}";
@@ -85,6 +91,11 @@ class OtpService
             return $this->result(true, 'Account not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
+        $blocked = $this->unverifiedClientBlock($actor, $type);
+        if ($blocked) {
+            return $blocked;
+        }
+
         $otp = $this->otps->latestOpen($guard, $email, $type);
 
         if (! $otp) {
@@ -106,7 +117,6 @@ class OtpService
         }
 
         $otp->update(['used_at' => now()]);
-        $actor->forceFill(['email_verified_at' => $actor->email_verified_at ?? now()])->save();
 
         $this->activity()->forActorSelf($actor, 'OTP verified', 'otp', 'verified', ['type' => $type]);
 
@@ -162,6 +172,25 @@ class OtpService
         }
 
         return $this->result(false, 'OTP sent.', ApiCode::SUCCESS, ApiReason::OTP_SENT, $data);
+    }
+
+    /**
+     * Unverified clients may only use the registration OTP until they confirm signup.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     */
+    protected function unverifiedClientBlock(Actor $actor, string $type): ?array
+    {
+        if ($actor instanceof Client && ! $actor->is_verified && $type !== 'registration') {
+            return $this->result(
+                true,
+                'Verify the registration OTP sent to your email first.',
+                ApiCode::FORBIDDEN,
+                ApiReason::UNVERIFIED,
+            );
+        }
+
+        return null;
     }
 
     /**

@@ -10,9 +10,4 @@ class ClientRepository
     {
         return Client::create($attributes);
     }
-
-    public function findByReferralCode(string $code): ?Client
-    {
-        return Client::query()->where('referral_code', $code)->first();
-    }
 }

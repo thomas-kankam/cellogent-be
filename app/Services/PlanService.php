@@ -22,7 +22,7 @@ class PlanService
         return [
             'id' => $plan->id,
             'name' => $plan->name,
-            'details' => $plan->details ?? [],
+            'details' => $plan->options(),
             'status' => $plan->status,
             'created_by' => $plan->created_by,
             'updated_by' => $plan->updated_by,
@@ -37,11 +37,7 @@ class PlanService
     {
         $plan = Plan::create([
             'name' => $input['name'],
-            'details' => [
-                'months' => (int) ($input['details']['months'] ?? $input['months'] ?? 1),
-                'units' => (int) ($input['details']['units'] ?? $input['units'] ?? 0),
-                'price' => (float) ($input['details']['price'] ?? $input['price'] ?? 0),
-            ],
+            'details' => $this->normalizeDetails($input['details'] ?? []),
             'status' => $input['status'] ?? 'active',
             'created_by' => $admin->id,
         ]);
@@ -59,23 +55,9 @@ class PlanService
      */
     public function update(Admin $admin, Plan $plan, array $input): array
     {
-        $details = $plan->details ?? [];
-        if (isset($input['details']) && is_array($input['details'])) {
-            $details = array_merge($details, $input['details']);
-        }
-        if (array_key_exists('months', $input)) {
-            $details['months'] = (int) $input['months'];
-        }
-        if (array_key_exists('units', $input)) {
-            $details['units'] = (int) $input['units'];
-        }
-        if (array_key_exists('price', $input)) {
-            $details['price'] = (float) $input['price'];
-        }
-
         $plan->update([
             'name' => $input['name'] ?? $plan->name,
-            'details' => $details,
+            'details' => isset($input['details']) ? $this->normalizeDetails($input['details']) : $plan->options(),
             'status' => $input['status'] ?? $plan->status,
             'updated_by' => $admin->id,
         ]);
@@ -85,5 +67,24 @@ class PlanService
         ]);
 
         return $this->result(false, 'Plan updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($plan->fresh()));
+    }
+
+    /**
+     * @param  array<int, mixed>  $details
+     * @return list<array{months: int, units: int, price: float}>
+     */
+    protected function normalizeDetails(array $details): array
+    {
+        if (isset($details['months']) || isset($details['price']) || isset($details['units'])) {
+            $details = [$details];
+        }
+
+        return array_values(array_map(function ($option) {
+            return [
+                'months' => (int) ($option['months'] ?? 1),
+                'units' => (int) ($option['units'] ?? 0),
+                'price' => (float) ($option['price'] ?? 0),
+            ];
+        }, $details));
     }
 }

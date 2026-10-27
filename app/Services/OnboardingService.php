@@ -5,9 +5,8 @@ namespace App\Services;
 use App\Concerns\LogsActivity;
 use App\Models\Admin;
 use App\Models\Client;
-use App\Models\Plan;
-use App\Models\Referral;
 use App\Models\Subscription;
+use App\Models\SubscriptionArchive;
 use App\Models\Wallet;
 use App\Repositories\ActorRepository;
 use App\Repositories\AdminRepository;
@@ -36,6 +35,7 @@ class OnboardingService
 
     /**
      * Client creates their own account, then receives a registration OTP.
+     * Wallet and trial are not created until that OTP is verified.
      *
      * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
@@ -53,7 +53,7 @@ class OnboardingService
                 'first_name' => $input['first_name'] ?? null,
                 'last_name' => $input['last_name'] ?? null,
                 'email' => $email,
-                'phone_number' => $input['phone_number'] ?? null,
+                'phone_number' => $this->formatGhanaPhone($input['phone_number'] ?? null),
                 'date_of_birth' => $input['date_of_birth'] ?? null,
                 'gender' => $input['gender'] ?? null,
                 'account_type' => $input['account_type'] ?? null,
@@ -62,11 +62,10 @@ class OnboardingService
                 'city' => $input['city'] ?? null,
                 'address' => $input['address'] ?? null,
                 'status' => 'active',
+                'is_verified' => false,
+                'verified_at' => null,
                 'onboarding_type' => 'self',
-                'referral_code' => $this->uniqueReferralCode($input),
             ]);
-
-            $this->provisionClient($client);
 
             if ($image) {
                 $client->storeProfileImage($image, 'client');
@@ -118,7 +117,7 @@ class OnboardingService
                 'first_name' => $input['first_name'] ?? null,
                 'last_name' => $input['last_name'] ?? null,
                 'email' => $email,
-                'phone_number' => $input['phone_number'] ?? null,
+                'phone_number' => $this->formatGhanaPhone($input['phone_number'] ?? null),
                 'date_of_birth' => $input['date_of_birth'] ?? null,
                 'gender' => $input['gender'] ?? null,
                 'account_type' => $input['account_type'] ?? null,
@@ -127,12 +126,11 @@ class OnboardingService
                 'city' => $input['city'] ?? null,
                 'address' => $input['address'] ?? null,
                 'status' => 'active',
+                'is_verified' => false,
+                'verified_at' => null,
                 'onboarding_type' => 'admin',
                 'onboarding_by' => $admin->id,
-                'referral_code' => $this->uniqueReferralCode($input),
             ]);
-
-            $this->provisionClient($client);
 
             if ($image) {
                 $client->storeProfileImage($image, 'client');
@@ -185,7 +183,7 @@ class OnboardingService
                 'first_name' => $input['first_name'] ?? null,
                 'last_name' => $input['last_name'] ?? null,
                 'email' => $email,
-                'phone_number' => $input['phone_number'] ?? null,
+                'phone_number' => $this->formatGhanaPhone($input['phone_number'] ?? null),
                 'status' => 'active',
                 'role_id' => $input['role_id'],
                 'onboarding_type' => 'admin',
@@ -234,68 +232,74 @@ class OnboardingService
         ];
     }
 
-    protected function provisionClient(Client $client, ?string $incomingReferralCode = null): void
-    {
-        Wallet::create([
-            'client_id' => $client->id,
-            'balance' => 0,
-            'currency' => 'GHS',
-            'status' => 'active',
-        ]);
-
-        $plan = Plan::query()->where('name', 'Bronze')->where('status', 'active')->first();
-        $months = $plan?->months() ?? 1;
-
-        Subscription::create([
-            'client_id' => $client->id,
-            'plan_id' => $plan?->id,
-            'plan_name' => $plan?->name ?? 'Bronze',
-            'status' => 'active',
-            'units' => $plan?->units() ?? 0,
-            'starts_at' => now(),
-            'ends_at' => now()->addMonths($months),
-            'type' => 'monthly',
-            'duration_in_months' => $months,
-        ]);
-
-        if ($incomingReferralCode) {
-            $referrer = $this->clients->findByReferralCode($incomingReferralCode);
-
-            if ($referrer && $referrer->id !== $client->id) {
-                Referral::create([
-                    'referrer_id' => $referrer->id,
-                    'referred_id' => $client->id,
-                    'code' => $incomingReferralCode,
-                    'status' => 'active',
-                ]);
-
-                $this->activity()->record(
-                    'Referral captured',
-                    'referral',
-                    'created',
-                    'client',
-                    $referrer,
-                    $client,
-                    ['code' => $incomingReferralCode],
-                );
-            }
-        }
-    }
-
     /**
-     * @param  array<string, mixed>  $input
+     * After the registration OTP succeeds: mark verified, open a wallet,
+     * grant a 10-unit trial, and keep an archive row of that complimentary pack.
      */
-    protected function uniqueReferralCode(array $input): string
+    public function completeClientVerification(Client $client): void
     {
-        $source = ($input['account_type'] ?? '') === 'business'
-            ? (string) ($input['business_name'] ?? '')
-            : trim(($input['first_name'] ?? '').' '.($input['last_name'] ?? ''));
+        DB::transaction(function () use ($client) {
+            /** @var Client $client */
+            $client = Client::query()->lockForUpdate()->findOrFail($client->id);
 
-        do {
-            $code = $this->makeReferralCode($source);
-        } while ($this->clients->findByReferralCode($code));
+            if ($client->is_verified) {
+                return;
+            }
 
-        return $code;
+            $client->forceFill([
+                'is_verified' => true,
+                'verified_at' => now(),
+            ])->save();
+
+            Wallet::query()->firstOrCreate(
+                ['client_id' => $client->id],
+                [
+                    'balance' => 0,
+                    'currency' => 'GHS',
+                    'status' => 'active',
+                ],
+            );
+
+            $starts = now();
+            $ends = $starts->copy()->addMonth();
+
+            Subscription::create([
+                'client_id' => $client->id,
+                'plan_id' => null,
+                'plan_name' => 'Trial',
+                'status' => 'active',
+                'price' => 0,
+                'units' => 10,
+                'starts_at' => $starts,
+                'ends_at' => $ends,
+                'type' => 'trial',
+                'duration_in_months' => 1,
+            ]);
+
+            SubscriptionArchive::create([
+                'client_id' => $client->id,
+                'plan_id' => null,
+                'plan_name' => 'Trial',
+                'plan_price' => 0,
+                'plan_type' => 'trial',
+                'duration_in_months' => 1,
+                'starts_at' => $starts,
+                'ends_at' => $ends,
+                'payment_status' => null,
+                'payment_id' => null,
+                'payment_reference' => null,
+            ]);
+
+            $this->activity()->record(
+                'Trial granted after OTP verification',
+                'subscription',
+                'created',
+                'client',
+                $client,
+                $client,
+                ['units' => 10, 'source' => 'cellogent'],
+            );
+        });
     }
 
     /**

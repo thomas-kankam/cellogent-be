@@ -29,7 +29,6 @@ class RoleSeeder extends Seeder
                     'profile.manage',
                     'activity_log.view',
                     'sender_id.approve',
-                    'referral.view',
                 ])
                 ->pluck('id')
         );

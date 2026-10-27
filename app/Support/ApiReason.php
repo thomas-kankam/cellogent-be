@@ -34,6 +34,8 @@ final class ApiReason
 
     public const ACCOUNT_INACTIVE = 'account_inactive';
 
+    public const UNVERIFIED = 'unverified';
+
     public const EMAIL_TAKEN = 'email_taken';
 
     public const ALREADY_PROCESSED = 'already_processed';

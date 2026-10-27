@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('plans', function (Blueprint $table) {
             $table->id();
             $table->string('name')->index(); // Gold, Silver, Bronze, Platinum
-            $table->json('details')->nullable(); // { months, units, price }
+            $table->json('details')->nullable(); // [{ months, units, price }, ...]
             $table->string('status')->default('active')->index();
             $table->unsignedBigInteger('created_by')->nullable();
             $table->unsignedBigInteger('updated_by')->nullable();

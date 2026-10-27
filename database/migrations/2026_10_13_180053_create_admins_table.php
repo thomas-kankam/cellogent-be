@@ -20,7 +20,6 @@ return new class extends Migration
             $table->string('status')->default('active')->index();
             $table->unsignedBigInteger('role_id')->nullable()->index();
             $table->string('profile_image')->nullable();
-            $table->timestamp('email_verified_at')->nullable();
             $table->timestamp('last_login_at')->nullable();
             $table->string('onboarding_type')->nullable();
             $table->unsignedBigInteger('onboarding_by')->nullable();

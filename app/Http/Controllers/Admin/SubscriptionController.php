@@ -58,6 +58,7 @@ class SubscriptionController extends Controller
         return $this->respondFrom($this->subscriptions->activatePlan(
             $client,
             $plan,
+            $request->integer('months'),
             $request->input('type', 'monthly'),
             null,
             'admin-assign',

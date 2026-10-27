@@ -28,6 +28,7 @@ class SubscriptionService
             'plan_id' => $subscription->plan_id,
             'plan_name' => $subscription->plan_name,
             'status' => $subscription->status,
+            'price' => $subscription->price,
             'units' => $subscription->units,
             'type' => $subscription->type,
             'duration_in_months' => $subscription->duration_in_months,
@@ -74,6 +75,7 @@ class SubscriptionService
     public function activatePlan(
         Client $client,
         Plan $plan,
+        int $months = 1,
         string $type = 'monthly',
         ?int $paymentId = null,
         ?string $paymentReference = null,
@@ -84,16 +86,20 @@ class SubscriptionService
             return $this->result(true, 'This plan is not available.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        $option = $plan->optionForMonths($months);
+
+        if (! $option) {
+            return $this->result(true, 'This plan has no option for that duration.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         $current = $this->currentFor($client);
 
         if ($current) {
-            $previousPlan = $current->plan_id ? Plan::query()->find($current->plan_id) : null;
-
             SubscriptionArchive::create([
                 'client_id' => $client->id,
                 'plan_id' => $current->plan_id,
                 'plan_name' => $current->plan_name,
-                'plan_price' => $previousPlan?->price(),
+                'plan_price' => $current->price,
                 'plan_type' => $current->type,
                 'duration_in_months' => $current->duration_in_months,
                 'starts_at' => $current->starts_at,
@@ -106,20 +112,20 @@ class SubscriptionService
             $current->update(['status' => 'archived']);
         }
 
-        $months = $plan->months();
         $starts = now();
-        $ends = $type === 'non_expiry' ? null : $starts->copy()->addMonths($months);
+        $ends = $type === 'non_expiry' ? null : $starts->copy()->addMonths($option['months']);
 
         $subscription = Subscription::create([
             'client_id' => $client->id,
             'plan_id' => $plan->id,
             'plan_name' => $plan->name,
             'status' => 'active',
-            'units' => $plan->units(),
+            'price' => $option['price'],
+            'units' => $option['units'],
             'starts_at' => $starts,
             'ends_at' => $ends,
             'type' => $type,
-            'duration_in_months' => $months,
+            'duration_in_months' => $option['months'],
         ]);
 
         $this->activity()->record(

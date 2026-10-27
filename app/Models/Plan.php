@@ -21,18 +21,41 @@ class Plan extends Model
         ];
     }
 
-    public function months(): int
+    /**
+     * @return list<array{months: int, units: int, price: float}>
+     */
+    public function options(): array
     {
-        return (int) ($this->details['months'] ?? 1);
+        $details = $this->details ?? [];
+
+        if ($details === []) {
+            return [];
+        }
+
+        if (isset($details['months']) || isset($details['price']) || isset($details['units'])) {
+            $details = [$details];
+        }
+
+        return array_values(array_map(function ($option) {
+            return [
+                'months' => (int) ($option['months'] ?? 1),
+                'units' => (int) ($option['units'] ?? 0),
+                'price' => (float) ($option['price'] ?? 0),
+            ];
+        }, $details));
     }
 
-    public function units(): int
+    /**
+     * @return array{months: int, units: int, price: float}|null
+     */
+    public function optionForMonths(int $months): ?array
     {
-        return (int) ($this->details['units'] ?? 0);
-    }
+        foreach ($this->options() as $option) {
+            if ($option['months'] === $months) {
+                return $option;
+            }
+        }
 
-    public function price(): float
-    {
-        return (float) ($this->details['price'] ?? 0);
+        return null;
     }
 }

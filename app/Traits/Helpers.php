@@ -3,12 +3,13 @@
 namespace App\Traits;
 
 use App\Models\Actor;
+use App\Support\GhanaPhone;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
- * Small reusable helpers: OTP digits, Passport tokens, file uploads, referral codes.
+ * Small reusable helpers: OTP digits, Passport tokens, file uploads, Ghana phones.
  */
 trait Helpers
 {
@@ -57,23 +58,11 @@ trait Helpers
     }
 
     /**
-     * 6-character unique-looking code: letters from the name/business, then random alphanumerics.
-     * "Ama Foods" -> AMF4K2, "Kojo Asante" -> KOA9B1
+     * 0244000000 → 233244000000
      */
-    protected function makeReferralCode(string $source = ''): string
+    protected function formatGhanaPhone(?string $phone): ?string
     {
-        $letters = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $source));
-        $prefix = substr($letters, 0, 3);
-        $suffixLength = 6 - strlen($prefix);
-        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        $suffix = '';
-
-        for ($i = 0; $i < $suffixLength; $i++) {
-            $suffix .= $alphabet[random_int(0, strlen($alphabet) - 1)];
-        }
-
-        $code = substr($prefix.$suffix, 0, 6);
-
-        return str_pad($code, 6, $alphabet[random_int(0, strlen($alphabet) - 1)]);
+        return GhanaPhone::normalize($phone);
     }
+
 }
