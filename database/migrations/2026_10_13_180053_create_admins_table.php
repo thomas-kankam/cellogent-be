@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * Admins are passwordless too. They are created by another admin (never self-signup).
      */
     public function up(): void
     {
@@ -17,19 +17,17 @@ return new class extends Migration
             $table->string('last_name')->nullable();
             $table->string('email')->unique();
             $table->string('phone_number')->nullable();
-            $table->string('status')->default('active');
-            $table->string('role_id')->nullable();
+            $table->string('status')->default('active')->index();
+            $table->unsignedBigInteger('role_id')->nullable()->index();
             $table->string('profile_image')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
             $table->timestamp('last_login_at')->nullable();
             $table->string('onboarding_type')->nullable();
-            $table->string('onboarding_by')->nullable();
+            $table->unsignedBigInteger('onboarding_by')->nullable();
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('admins');

@@ -9,10 +9,12 @@ class Role extends Model
     protected $fillable = [
         'name',
         'description',
+        'created_by',
+        'updated_by',
     ];
 
     protected $hidden = [
-        "updated_at",
+        'updated_at',
     ];
 
     public function admins()
@@ -22,6 +24,6 @@ class Role extends Model
 
     public function permissions()
     {
-        return $this->belongsToMany(Permission::class);
+        return $this->belongsToMany(Permission::class, 'role_permissions')->withTimestamps();
     }
 }

@@ -12,16 +12,11 @@ class Permission extends Model
     ];
 
     protected $hidden = [
-        "updated_at",
+        'updated_at',
     ];
-
-    public function admins()
-    {
-        return $this->belongsToMany(Admin::class);
-    }
 
     public function roles()
     {
-        return $this->belongsToMany(Role::class);
+        return $this->belongsToMany(Role::class, 'role_permissions')->withTimestamps();
     }
 }

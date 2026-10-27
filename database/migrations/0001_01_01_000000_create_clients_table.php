@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * Clients authenticate with OTP (passwordless). No password column.
      */
     public function up(): void
     {
@@ -24,19 +24,17 @@ return new class extends Migration
             $table->string('region')->nullable();
             $table->string('city')->nullable();
             $table->string('address')->nullable();
-            $table->string('status')->default('active');
+            $table->string('status')->default('active')->index();
             $table->string('profile_image')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
             $table->timestamp('last_login_at')->nullable();
-            $table->string('onboarding_type')->nullable();
-            $table->string('onboarding_by')->nullable();
-            $table->string('referral_code')->nullable();
+            $table->string('onboarding_type')->nullable()->index(); // self | admin
+            $table->unsignedBigInteger('onboarding_by')->nullable();
+            $table->string('referral_code')->nullable()->unique();
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('clients');

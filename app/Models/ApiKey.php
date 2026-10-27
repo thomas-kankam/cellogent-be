@@ -13,9 +13,12 @@ class ApiKey extends Model
         'status',
     ];
 
-    protected $casts = [
-        'expires_at' => 'datetime',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'expires_at' => 'datetime',
+        ];
+    }
 
     public function client()
     {

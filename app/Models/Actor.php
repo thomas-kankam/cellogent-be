@@ -2,14 +2,22 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Concerns\HasProfileImage;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Passport\HasApiTokens;
 use Laravel\Passport\Contracts\OAuthenticatable;
+use Laravel\Passport\HasApiTokens;
 
-abstract class Actor extends Authenticatable implements MustVerifyEmail, OAuthenticatable
+/**
+ * Shared authenticatable parent for Client and Admin.
+ * Passport tokens are issued on this class via HasApiTokens.
+ */
+abstract class Actor extends Authenticatable implements OAuthenticatable
 {
-    use HasFactory, HasApiTokens, Notifiable;
+    use HasApiTokens, HasProfileImage, Notifiable;
+
+    /**
+     * Guard name used in OTP rows and activity logs: "client" or "admin".
+     */
+    abstract public function guardName(): string;
 }

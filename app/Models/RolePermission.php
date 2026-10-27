@@ -10,18 +10,4 @@ class RolePermission extends Model
         'role_id',
         'permission_id',
     ];
-
-    protected $hidden = [
-        "updated_at",
-    ];
-
-    public function role()
-    {
-        return $this->belongsTo(Role::class);
-    }
-
-    public function permission()
-    {
-        return $this->belongsTo(Permission::class);
-    }
 }
