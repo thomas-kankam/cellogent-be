@@ -51,10 +51,12 @@ class Client extends Actor
 
     public function subscription()
     {
-        return $this->hasOne(Subscription::class)->ofMany(
-            ['id' => 'max'],
-            fn ($query) => $query->where('status', 'active'),
-        );
+        return $this->hasOne(Subscription::class);
+    }
+
+    public function subscriptionArchives()
+    {
+        return $this->hasMany(SubscriptionArchive::class);
     }
 
     public function onboardedBy()

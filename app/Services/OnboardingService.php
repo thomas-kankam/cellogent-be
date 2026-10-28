@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Concerns\LogsActivity;
+use App\Models\Actor;
 use App\Models\Admin;
 use App\Models\Client;
 use App\Models\Subscription;
@@ -91,10 +92,7 @@ class OnboardingService
             'message' => 'Account created. OTP sent to your email.',
             'status_code' => ApiCode::CREATED,
             'reason' => ApiReason::CREATED,
-            'data' => [
-                'account' => $this->profiles->present($client->fresh()),
-                'otp' => $otp['data'],
-            ],
+            'data' => $this->onboardPayload($client->fresh(), $otp),
         ];
     }
 
@@ -157,10 +155,7 @@ class OnboardingService
             'message' => 'Client onboarded. OTP sent to their email.',
             'status_code' => ApiCode::CREATED,
             'reason' => ApiReason::CREATED,
-            'data' => [
-                'account' => $this->profiles->present($client->fresh()),
-                'otp' => $otp['data'],
-            ],
+            'data' => $this->onboardPayload($client->fresh(), $otp),
         ];
     }
 
@@ -225,10 +220,7 @@ class OnboardingService
             'message' => 'Admin onboarded. OTP sent to their email.',
             'status_code' => ApiCode::CREATED,
             'reason' => ApiReason::CREATED,
-            'data' => [
-                'account' => $this->profiles->present($newAdmin->fresh('role.permissions')),
-                'otp' => $otp['data'],
-            ],
+            'data' => $this->onboardPayload($newAdmin->fresh('role.permissions'), $otp),
         ];
     }
 
@@ -263,18 +255,20 @@ class OnboardingService
             $starts = now();
             $ends = $starts->copy()->addMonth();
 
-            Subscription::create([
-                'client_id' => $client->id,
-                'plan_id' => null,
-                'plan_name' => 'Trial',
-                'status' => 'active',
-                'price' => 0,
-                'units' => 10,
-                'starts_at' => $starts,
-                'ends_at' => $ends,
-                'type' => 'trial',
-                'duration_in_months' => 1,
-            ]);
+            Subscription::query()->firstOrCreate(
+                ['client_id' => $client->id],
+                [
+                    'plan_id' => null,
+                    'plan_name' => 'Trial',
+                    'status' => 'active',
+                    'price' => 0,
+                    'units' => 10,
+                    'starts_at' => $starts,
+                    'ends_at' => $ends,
+                    'type' => 'trial',
+                    'duration_in_months' => 1,
+                ],
+            );
 
             SubscriptionArchive::create([
                 'client_id' => $client->id,
@@ -300,6 +294,17 @@ class OnboardingService
                 ['units' => 10, 'source' => 'cellogent'],
             );
         });
+    }
+
+    /**
+     * Profile fields plus OTP fields on the same data object.
+     *
+     * @param  array{data?: array<string, mixed>}  $otp
+     * @return array<string, mixed>
+     */
+    protected function onboardPayload(Actor $actor, array $otp): array
+    {
+        return array_merge($this->profiles->present($actor), $otp['data'] ?? []);
     }
 
     /**

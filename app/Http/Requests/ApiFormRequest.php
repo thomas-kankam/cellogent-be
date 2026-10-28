@@ -47,7 +47,7 @@ abstract class ApiFormRequest extends FormRequest
             'Validation failed.',
             ApiCode::VALIDATION,
             ApiReason::VALIDATION_ERROR,
-            ['errors' => $validator->errors()->toArray()],
+            $validator->errors()->toArray(),
         ));
     }
 }

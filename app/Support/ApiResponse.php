@@ -8,20 +8,17 @@ use Illuminate\Http\JsonResponse;
 /**
  * Single JSON envelope for every API endpoint.
  *
- * Shape:
- * {
- *   "in_error": false,
- *   "status_code": "200",
- *   "message": "OTP verified",
- *   "reason": "verified",
- *   "data": { ... },
- *   "point_in_time": "2026-10-26 16:00:00"
- * }
+ * data is the payload itself (object or list) — no extra wrappers like
+ * data.account, data.token, data.items, or data.data.
+ *
+ * Lists add pagination as a sibling of data:
+ * { data: [ ... ], pagination: { current_page, per_page, total, last_page } }
  */
 final class ApiResponse
 {
     /**
-     * @param  array<string, mixed>  $data
+     * @param  array<int|string, mixed>  $data
+     * @param  array<string, mixed>  $meta
      */
     public static function make(
         bool $inError,
@@ -29,20 +26,26 @@ final class ApiResponse
         int $statusCode,
         string $reason,
         array $data = [],
+        array $meta = [],
     ): JsonResponse {
-        return response()->json([
+        $payload = [
             'in_error' => $inError,
             'status_code' => (string) $statusCode,
             'message' => $message,
             'reason' => $reason,
             'data' => $data,
-            'point_in_time' => now()->toDateTimeString(),
-        ], $statusCode);
+        ];
+
+        if (isset($meta['pagination'])) {
+            $payload['pagination'] = $meta['pagination'];
+        }
+
+        $payload['point_in_time'] = now()->toDateTimeString();
+
+        return response()->json($payload, $statusCode);
     }
 
     /**
-     * Wrap a Laravel paginator. `$transform` receives one model/row and returns an array.
-     *
      * @param  callable(mixed): array<string, mixed>  $transform
      */
     public static function paginated(
@@ -52,14 +55,20 @@ final class ApiResponse
         callable $transform,
         int $statusCode = ApiCode::SUCCESS,
     ): JsonResponse {
-        return self::make(false, $message, $statusCode, $reason, [
-            'items' => collect($paginator->items())->map($transform)->values()->all(),
-            'pagination' => [
-                'current_page' => $paginator->currentPage(),
-                'per_page' => $paginator->perPage(),
-                'total' => $paginator->total(),
-                'last_page' => $paginator->lastPage(),
+        return self::make(
+            false,
+            $message,
+            $statusCode,
+            $reason,
+            collect($paginator->items())->map($transform)->values()->all(),
+            [
+                'pagination' => [
+                    'current_page' => $paginator->currentPage(),
+                    'per_page' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                    'last_page' => $paginator->lastPage(),
+                ],
             ],
-        ]);
+        );
     }
 }

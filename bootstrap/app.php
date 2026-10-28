@@ -40,7 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'Validation failed.',
                     ApiCode::VALIDATION,
                     ApiReason::VALIDATION_ERROR,
-                    ['errors' => $e->errors()],
+                    $e->errors(),
                 );
             }
         });

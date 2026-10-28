@@ -24,6 +24,8 @@ Profile photo is always a **file** field (`profile_image`), never base64. Use `f
 
 Local only: OTP request/signup may include `data.debug_otp` when `APP_ENV=local`.
 
+Single records go on `data` as a flat object (no `account` / `token` / `otp` wrappers). Lists use `data` as an array with `pagination` beside it.
+
 ---
 
 ## Client — self signup
@@ -284,7 +286,7 @@ One client's timeline (who requested a sender ID, who approved, reason, time):
 
 `GET /admin/clients/1/activity-logs?module=sender_id`
 
-Example `data.items[]` row:
+Example `data[]` row:
 
 ```json
 {
@@ -445,16 +447,21 @@ All of these need `Authorization: Bearer {{access_token}}`.
 `page=1&per_page=15`  
 `per_page` max is 100.
 
-List `data` shape:
+Lists put rows on `data` (an array) and pagination next to it — not inside `data`:
 
 ```json
 {
-  "items": [],
+  "in_error": false,
+  "status_code": "200",
+  "message": "Plans loaded.",
+  "reason": "success",
+  "data": [],
   "pagination": {
     "current_page": 1,
     "per_page": 15,
     "total": 40,
     "last_page": 3
-  }
+  },
+  "point_in_time": "2026-10-27 16:00:00"
 }
 ```

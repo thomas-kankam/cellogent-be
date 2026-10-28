@@ -89,10 +89,15 @@ class PaymentService
                 ['payment_id' => $payment->id, 'purpose' => $payment->purpose],
             );
 
-            return $this->result(false, 'Payment initiated.', ApiCode::CREATED, ApiReason::CREATED, [
-                'payment' => $this->present($payment),
-                'order' => $this->orders->present($order),
-            ]);
+            return $this->result(
+                false,
+                'Payment initiated.',
+                ApiCode::CREATED,
+                ApiReason::CREATED,
+                array_merge($this->present($payment), [
+                    'order' => $this->orders->present($order),
+                ]),
+            );
         });
     }
 
@@ -139,9 +144,7 @@ class PaymentService
                 ['payment_id' => $payment->id, 'purpose' => $payment->purpose],
             );
 
-            return $this->result(false, 'Payment completed.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
-                'payment' => $this->present($payment->fresh()),
-            ]);
+            return $this->result(false, 'Payment completed.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($payment->fresh()));
         });
     }
 

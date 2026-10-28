@@ -123,10 +123,9 @@ class RoleService
             'message' => 'Role assigned.',
             'status_code' => ApiCode::SUCCESS,
             'reason' => ApiReason::SUCCESS,
-            'data' => [
+            'data' => array_merge($this->present($role), [
                 'admin_id' => $target->id,
-                'role' => $this->present($role),
-            ],
+            ]),
         ];
     }
 }

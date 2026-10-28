@@ -60,15 +60,11 @@ class SubscriptionService
 
     public function currentFor(Client $client): ?Subscription
     {
-        return Subscription::query()
-            ->where('client_id', $client->id)
-            ->where('status', 'active')
-            ->latest('id')
-            ->first();
+        return Subscription::query()->where('client_id', $client->id)->first();
     }
 
     /**
-     * Move the current pack into archives, then start a new one from a plan.
+     * Snapshot the current pack into archives, then update the client's one subscription row.
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
@@ -108,25 +104,25 @@ class SubscriptionService
                 'payment_id' => $paymentId,
                 'payment_reference' => $paymentReference,
             ]);
-
-            $current->update(['status' => 'archived']);
         }
 
         $starts = now();
         $ends = $type === 'non_expiry' ? null : $starts->copy()->addMonths($option['months']);
 
-        $subscription = Subscription::create([
-            'client_id' => $client->id,
-            'plan_id' => $plan->id,
-            'plan_name' => $plan->name,
-            'status' => 'active',
-            'price' => $option['price'],
-            'units' => $option['units'],
-            'starts_at' => $starts,
-            'ends_at' => $ends,
-            'type' => $type,
-            'duration_in_months' => $option['months'],
-        ]);
+        $subscription = Subscription::query()->updateOrCreate(
+            ['client_id' => $client->id],
+            [
+                'plan_id' => $plan->id,
+                'plan_name' => $plan->name,
+                'status' => 'active',
+                'price' => $option['price'],
+                'units' => $option['units'],
+                'starts_at' => $starts,
+                'ends_at' => $ends,
+                'type' => $type,
+                'duration_in_months' => $option['months'],
+            ],
+        );
 
         $this->activity()->record(
             'Subscription activated',

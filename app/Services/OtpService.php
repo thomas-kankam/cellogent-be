@@ -162,8 +162,8 @@ class OtpService
 
         $data = [
             'email' => $actor->email,
-            'expires_in_minutes' => $minutes,
             'channel' => $channel,
+            'expires_at' => now()->addMinutes($minutes)->toDateTimeString(),
         ];
 
         // Local-only helper so you can finish Postman without opening the mailbox.

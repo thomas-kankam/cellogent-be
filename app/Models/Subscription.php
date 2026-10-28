@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Subscription extends Model
 {
+    /**
+     * One live pack per client. Replaced packs go to subscription_archieves.
+     */
     protected $fillable = [
         'client_id',
         'plan_id',
