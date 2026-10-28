@@ -92,7 +92,9 @@ abstract class PasswordlessAuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()?->token()?->revoke();
+        $user = $request->user();
+        $token = $user?->currentAccessToken() ?? $user?->token();
+        $token?->revoke();
 
         return $this->apiResponse(false, 'Logged out.', ApiCode::SUCCESS, ApiReason::SUCCESS);
     }

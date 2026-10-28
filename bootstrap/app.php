@@ -25,35 +25,32 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,
         ]);
+
+        // API-only: never redirect guests to a named "login" web route.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->shouldRenderJsonWhen(fn () => true);
+
         $exceptions->render(function (AuthenticationException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return ApiResponse::make(true, 'Unauthenticated.', ApiCode::UNAUTHENTICATED, ApiReason::UNAUTHENTICATED);
-            }
+            return ApiResponse::make(true, 'Unauthenticated.', ApiCode::UNAUTHENTICATED, ApiReason::UNAUTHENTICATED);
         });
 
         $exceptions->render(function (ValidationException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return ApiResponse::make(
-                    true,
-                    'Validation failed.',
-                    ApiCode::VALIDATION,
-                    ApiReason::VALIDATION_ERROR,
-                    $e->errors(),
-                );
-            }
+            return ApiResponse::make(
+                true,
+                'Validation failed.',
+                ApiCode::VALIDATION,
+                ApiReason::VALIDATION_ERROR,
+                $e->errors(),
+            );
         });
 
         $exceptions->render(function (ModelNotFoundException|NotFoundHttpException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return ApiResponse::make(true, 'Resource not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-            }
+            return ApiResponse::make(true, 'Resource not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         });
 
         $exceptions->render(function (TooManyRequestsHttpException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return ApiResponse::make(true, 'Too many requests.', ApiCode::TOO_MANY, ApiReason::TOO_MANY_REQUESTS);
-            }
+            return ApiResponse::make(true, 'Too many requests.', ApiCode::TOO_MANY, ApiReason::TOO_MANY_REQUESTS);
         });
     })->create();
