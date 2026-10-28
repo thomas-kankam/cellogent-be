@@ -26,31 +26,47 @@ return Application::configure(basePath: dirname(__DIR__))
             'account.active' => EnsureAccountIsActive::class,
         ]);
 
-        // API-only: never redirect guests to a named "login" web route.
-        $middleware->redirectGuestsTo(fn () => null);
+        // API guests get 401 JSON. Do not send Horizon / web to a named "login" route.
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return null;
+            }
+
+            return '/';
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(fn () => true);
+        $exceptions->shouldRenderJsonWhen(function (Request $request) {
+            return $request->is('api/*') || $request->expectsJson();
+        });
 
         $exceptions->render(function (AuthenticationException $e, Request $request) {
-            return ApiResponse::make(true, 'Unauthenticated.', ApiCode::UNAUTHENTICATED, ApiReason::UNAUTHENTICATED);
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::make(true, 'Unauthenticated.', ApiCode::UNAUTHENTICATED, ApiReason::UNAUTHENTICATED);
+            }
         });
 
         $exceptions->render(function (ValidationException $e, Request $request) {
-            return ApiResponse::make(
-                true,
-                'Validation failed.',
-                ApiCode::VALIDATION,
-                ApiReason::VALIDATION_ERROR,
-                $e->errors(),
-            );
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::make(
+                    true,
+                    'Validation failed.',
+                    ApiCode::VALIDATION,
+                    ApiReason::VALIDATION_ERROR,
+                    $e->errors(),
+                );
+            }
         });
 
         $exceptions->render(function (ModelNotFoundException|NotFoundHttpException $e, Request $request) {
-            return ApiResponse::make(true, 'Resource not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::make(true, 'Resource not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+            }
         });
 
         $exceptions->render(function (TooManyRequestsHttpException $e, Request $request) {
-            return ApiResponse::make(true, 'Too many requests.', ApiCode::TOO_MANY, ApiReason::TOO_MANY_REQUESTS);
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::make(true, 'Too many requests.', ApiCode::TOO_MANY, ApiReason::TOO_MANY_REQUESTS);
+            }
         });
     })->create();

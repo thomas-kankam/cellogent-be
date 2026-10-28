@@ -20,8 +20,13 @@ class HorizonServiceProvider extends ServiceProvider
         $this->gate();
 
         \Laravel\Horizon\Horizon::auth(function ($request) {
-            return Gate::check('viewHorizon', [$request->user()])
-                || $this->app->environment('local');
+            if ($this->horizonIsOpen($request)) {
+                return true;
+            }
+
+            $user = $request->user();
+
+            return $user !== null && Gate::allows('viewHorizon', $user);
         });
 
         \Laravel\Horizon\Horizon::night();
@@ -30,11 +35,28 @@ class HorizonServiceProvider extends ServiceProvider
     protected function gate(): void
     {
         Gate::define('viewHorizon', function ($user = null) {
-            if ($this->app->environment('local')) {
+            if ($this->horizonIsOpen(request())) {
                 return true;
             }
 
             return $user && $user->email === env('HORIZON_EMAIL');
         });
+    }
+
+    /**
+     * Browser dashboard on this machine (artisan serve / local env).
+     * Gate::check() must not run first for guests — that 403s before the local check.
+     */
+    protected function horizonIsOpen($request): bool
+    {
+        if ($this->app->environment(['local', 'development'])) {
+            return true;
+        }
+
+        $host = $request->getHost();
+        $ip = $request->ip();
+
+        return in_array($host, ['127.0.0.1', 'localhost'], true)
+            || in_array($ip, ['127.0.0.1', '::1'], true);
     }
 }
