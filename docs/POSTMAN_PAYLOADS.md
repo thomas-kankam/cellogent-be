@@ -306,9 +306,7 @@ Example `data[]` row:
 
 ## Client — plans, wallet, subscription, sender IDs, payments, orders
 
-All of these need `Authorization: Bearer {{access_token}}`.
-
-`GET /client/plans`
+`GET /client/plans` is public (active plans only). The rest need `Authorization: Bearer {{access_token}}`.
 
 `GET /client/wallet`
 

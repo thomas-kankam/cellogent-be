@@ -31,14 +31,14 @@ Route::prefix('client')->group(function () {
         Route::post('verify_otp', [ClientAuthController::class, 'verifyOtp']);
     });
 
+    Route::get('plans', [ClientPlanController::class, 'index']);
+
     Route::middleware(['auth:client', 'account.active'])->group(function () {
         Route::get('profile', [ClientProfileController::class, 'profile']);
         Route::post('profile', [ClientProfileController::class, 'updateProfile']);
         Route::put('profile', [ClientProfileController::class, 'updateProfile']);
         Route::get('activity-logs', [ClientActivityLogController::class, 'index']);
         Route::post('logout', [ClientAuthController::class, 'logout']);
-
-        Route::get('plans', [ClientPlanController::class, 'index']);
 
         Route::get('wallet', [ClientWalletController::class, 'show']);
         Route::get('wallet/top-ups', [ClientWalletController::class, 'topUps']);
