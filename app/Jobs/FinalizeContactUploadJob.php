@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Client;
 use App\Models\Contact;
 use App\Models\ContactGroup;
+use App\Support\ContactUploadFinalizer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -53,5 +54,7 @@ class FinalizeContactUploadJob implements ShouldQueue
         Cache::forget("contact-import:{$this->importId}:inserted");
         Cache::forget("contact-import:{$this->importId}:skipped");
         Cache::forget("contact-import:{$this->importId}:failed");
+
+        ContactUploadFinalizer::forgetImport($this->importId);
     }
 }

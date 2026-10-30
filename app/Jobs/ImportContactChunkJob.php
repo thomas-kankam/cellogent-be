@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Contact;
+use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -23,6 +24,7 @@ class ImportContactChunkJob implements ShouldQueue
         public string $importId,
         public int $clientId,
         public int $groupId,
+        public string $diskPath,
         public array $rows,
     ) {
         $this->onQueue('contacts-upload');
@@ -96,6 +98,14 @@ class ImportContactChunkJob implements ShouldQueue
         Cache::increment("contact-import:{$this->importId}:inserted", count($toInsert));
         Cache::increment("contact-import:{$this->importId}:skipped", $skipped);
         Cache::increment("contact-import:{$this->importId}:failed", $failed);
+
+        Cache::increment("contact-import:{$this->importId}:chunks_done");
+        ContactUploadFinalizer::maybeFinalize(
+            $this->importId,
+            $this->clientId,
+            $this->groupId,
+            $this->diskPath,
+        );
     }
 
     /**

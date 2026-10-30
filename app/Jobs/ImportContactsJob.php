@@ -4,15 +4,14 @@ namespace App\Jobs;
 
 use App\Models\Client;
 use App\Models\ContactGroup;
-use Illuminate\Bus\Batch;
+use App\Support\ContactUploadFinalizer;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use OpenSpout\Reader\XLSX\Reader;
-use Throwable;
 
 class ImportContactsJob implements ShouldQueue, ShouldBeUnique
 {
@@ -48,14 +47,15 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        $importId = (string) Str::uuid();
+        ContactUploadFinalizer::beginImport($importId, $this->diskPath);
+
         $fullPath = Storage::disk('local')->path($this->diskPath);
         $reader = new Reader;
         $reader->open($fullPath);
 
-        $importId = (string) Str::uuid();
         $header = [];
         $buffer = [];
-        $jobs = [];
         $total = 0;
         $isHeader = true;
 
@@ -80,7 +80,7 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
                 $buffer[] = $this->mapRow($header, $cells);
 
                 if (count($buffer) >= self::CHUNK) {
-                    $jobs[] = new ImportContactChunkJob($importId, $this->clientId, $this->groupId, $buffer);
+                    $this->dispatchChunk($importId, $buffer);
                     $buffer = [];
                 }
             }
@@ -91,29 +91,20 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
         $reader->close();
 
         if ($buffer !== []) {
-            $jobs[] = new ImportContactChunkJob($importId, $this->clientId, $this->groupId, $buffer);
+            $this->dispatchChunk($importId, $buffer);
         }
 
-        $diskPath = $this->diskPath;
-        $clientId = $this->clientId;
-        $groupId = $this->groupId;
+        ContactUploadFinalizer::markReaderComplete($importId, $total);
+        ContactUploadFinalizer::maybeFinalize($importId, $this->clientId, $this->groupId, $this->diskPath);
+    }
 
-        if ($jobs === []) {
-            FinalizeContactUploadJob::dispatch($importId, $clientId, $groupId, $diskPath, 0);
-
-            return;
-        }
-
-        Bus::batch($jobs)
-            ->name('contact-upload-'.$groupId)
-            ->onQueue('contacts-upload')
-            ->then(function (Batch $batch) use ($importId, $clientId, $groupId, $diskPath, $total) {
-                FinalizeContactUploadJob::dispatch($importId, $clientId, $groupId, $diskPath, $total);
-            })
-            ->catch(function (Batch $batch, Throwable $e) use ($importId, $clientId, $groupId, $diskPath, $total) {
-                FinalizeContactUploadJob::dispatch($importId, $clientId, $groupId, $diskPath, $total);
-            })
-            ->dispatch();
+    /**
+     * @param  list<array<string, mixed>>  $buffer
+     */
+    protected function dispatchChunk(string $importId, array $buffer): void
+    {
+        Cache::increment("contact-import:{$importId}:chunks_expected");
+        ImportContactChunkJob::dispatch($importId, $this->clientId, $this->groupId, $this->diskPath, $buffer);
     }
 
     /**
