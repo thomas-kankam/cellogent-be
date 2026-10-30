@@ -12,7 +12,6 @@ use App\Support\ApiCode;
 use App\Support\ApiReason;
 use App\Support\GhanaPhone;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ContactService
@@ -142,8 +141,9 @@ class ContactService
      */
     public function queueUpload(Client $client, ContactGroup $group, UploadedFile $file): array
     {
-        $name = 'contact-uploads/'.$client->id.'/'.Str::uuid()->toString().'.csv';
-        Storage::disk('local')->put($name, file_get_contents($file->getRealPath()));
+        $directory = 'contact-uploads/'.$client->id;
+        $filename = Str::uuid()->toString().'.xlsx';
+        $name = $file->storeAs($directory, $filename, 'local');
 
         ImportContactsJob::dispatch($client->id, $group->id, $name);
 

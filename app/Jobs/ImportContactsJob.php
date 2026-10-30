@@ -3,14 +3,18 @@
 namespace App\Jobs;
 
 use App\Models\Client;
-use App\Models\Contact;
 use App\Models\ContactGroup;
-use App\Support\GhanaPhone;
+use Illuminate\Bus\Batch;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use OpenSpout\Reader\XLSX\Reader;
+use Throwable;
 
-class ImportContactsJob implements ShouldQueue
+class ImportContactsJob implements ShouldQueue, ShouldBeUnique
 {
     use Queueable;
 
@@ -18,12 +22,21 @@ class ImportContactsJob implements ShouldQueue
 
     public int $timeout = 3600;
 
+    public int $uniqueFor = 3600;
+
+    public const CHUNK = 500;
+
     public function __construct(
         public int $clientId,
         public int $groupId,
         public string $diskPath,
     ) {
         $this->onQueue('contacts-upload');
+    }
+
+    public function uniqueId(): string
+    {
+        return 'contact-upload-group-'.$this->groupId;
     }
 
     public function handle(): void
@@ -36,122 +49,102 @@ class ImportContactsJob implements ShouldQueue
         }
 
         $fullPath = Storage::disk('local')->path($this->diskPath);
-        $handle = fopen($fullPath, 'r');
+        $reader = new Reader;
+        $reader->open($fullPath);
 
-        if ($handle === false) {
+        $importId = (string) Str::uuid();
+        $header = [];
+        $buffer = [];
+        $jobs = [];
+        $total = 0;
+        $isHeader = true;
+
+        foreach ($reader->getSheetIterator() as $sheet) {
+            foreach ($sheet->getRowIterator() as $row) {
+                $cells = $row->toArray();
+
+                if ($isHeader) {
+                    $header = array_map(fn ($col) => strtolower(trim((string) $col)), $cells);
+                    $isHeader = false;
+
+                    continue;
+                }
+
+                if ($this->rowIsEmpty($cells)) {
+                    continue;
+                }
+
+                $total++;
+                $buffer[] = $this->mapRow($header, $cells);
+
+                if (count($buffer) >= self::CHUNK) {
+                    $jobs[] = new ImportContactChunkJob($importId, $this->clientId, $this->groupId, $buffer);
+                    $buffer = [];
+                }
+            }
+
+            break;
+        }
+
+        $reader->close();
+
+        if ($buffer !== []) {
+            $jobs[] = new ImportContactChunkJob($importId, $this->clientId, $this->groupId, $buffer);
+        }
+
+        $diskPath = $this->diskPath;
+        $clientId = $this->clientId;
+        $groupId = $this->groupId;
+
+        if ($jobs === []) {
+            FinalizeContactUploadJob::dispatch($importId, $clientId, $groupId, $diskPath, 0);
+
             return;
         }
 
-        $header = fgetcsv($handle);
-        $header = array_map(fn ($col) => strtolower(trim((string) $col)), $header ?: []);
-
-        $inserted = 0;
-        $skipped = 0;
-        $failed = 0;
-        $total = 0;
-
-        while (($row = fgetcsv($handle)) !== false) {
-            $total++;
-
-            if (count(array_filter($row, fn ($v) => $v !== null && $v !== '')) === 0) {
-                continue;
-            }
-
-            $record = $this->mapRow($header, $row);
-            $phone = GhanaPhone::normalize($record['phone_number'] ?? null);
-
-            if (! $phone) {
-                $failed++;
-
-                continue;
-            }
-
-            $email = $this->blankToNull($record['email'] ?? null);
-            $dob = $this->blankToNull($record['date_of_birth'] ?? null);
-
-            if ($this->duplicateInGroup($group->id, $phone, $email, $dob)) {
-                $skipped++;
-
-                continue;
-            }
-
-            try {
-                Contact::create([
-                    'client_id' => $client->id,
-                    'contact_group_id' => $group->id,
-                    'first_name' => $this->blankToNull($record['first_name'] ?? null),
-                    'last_name' => $this->blankToNull($record['last_name'] ?? null),
-                    'email' => $email,
-                    'gender' => $this->blankToNull($record['gender'] ?? null),
-                    'phone_number' => $phone,
-                    'date_of_birth' => $dob,
-                    'region' => $this->blankToNull($record['region'] ?? null),
-                    'city' => $this->blankToNull($record['city'] ?? null),
-                    'gps_address' => $this->blankToNull($record['gps_address'] ?? null),
-                    'address' => $this->blankToNull($record['address'] ?? null),
-                    'dnd_status' => ($record['dnd_status'] ?? '') === 'active' ? 'active' : 'inactive',
-                ]);
-                $inserted++;
-            } catch (\Throwable) {
-                $skipped++;
-            }
-        }
-
-        fclose($handle);
-
-        $count = Contact::query()->where('contact_group_id', $group->id)->count();
-        $group->update(['count_of_contacts' => $count]);
-
-        Storage::disk('local')->delete($this->diskPath);
-
-        SendContactUploadMailJob::dispatch($client->email, [
-            'group_name' => $group->name,
-            'total' => $total,
-            'inserted' => $inserted,
-            'skipped' => $skipped,
-            'failed' => $failed,
-            'count_of_contacts' => $count,
-        ], trim($client->first_name.' '.$client->last_name) ?: null);
+        Bus::batch($jobs)
+            ->name('contact-upload-'.$groupId)
+            ->onQueue('contacts-upload')
+            ->then(function (Batch $batch) use ($importId, $clientId, $groupId, $diskPath, $total) {
+                FinalizeContactUploadJob::dispatch($importId, $clientId, $groupId, $diskPath, $total);
+            })
+            ->catch(function (Batch $batch, Throwable $e) use ($importId, $clientId, $groupId, $diskPath, $total) {
+                FinalizeContactUploadJob::dispatch($importId, $clientId, $groupId, $diskPath, $total);
+            })
+            ->dispatch();
     }
 
     /**
-     * @param  list<string>  $header
-     * @param  list<string|null>  $row
-     * @return array<string, string>
+     * @param  list<mixed>  $header
+     * @param  list<mixed>  $row
+     * @return array<string, mixed>
      */
     protected function mapRow(array $header, array $row): array
     {
         $mapped = [];
 
         foreach ($header as $i => $key) {
-            $mapped[$key] = isset($row[$i]) ? trim((string) $row[$i]) : '';
+            $mapped[$key] = $row[$i] ?? null;
         }
 
         return $mapped;
     }
 
-    protected function duplicateInGroup(int $groupId, string $phone, ?string $email, ?string $dob): bool
+    /**
+     * @param  list<mixed>  $cells
+     */
+    protected function rowIsEmpty(array $cells): bool
     {
-        return Contact::query()
-            ->where('contact_group_id', $groupId)
-            ->where(function ($query) use ($phone, $email, $dob) {
-                $query->where('phone_number', $phone);
+        foreach ($cells as $cell) {
+            if ($cell instanceof \DateTimeInterface) {
+                return false;
+            }
 
-                if ($email) {
-                    $query->orWhere('email', $email);
-                }
+            if (trim((string) $cell) !== '') {
+                return false;
+            }
+        }
 
-                if ($dob) {
-                    $query->orWhere('date_of_birth', $dob);
-                }
-            })
-            ->exists();
-    }
-
-    protected function blankToNull(?string $value): ?string
-    {
-        $value = trim((string) $value);
-
-        return $value === '' ? null : $value;
+        return true;
     }
 }

@@ -9,7 +9,7 @@ class UploadContactsRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:51200'],
+            'file' => ['required', 'file', 'mimes:xlsx', 'max:102400'],
         ];
     }
 }
