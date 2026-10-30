@@ -20,13 +20,7 @@ class HorizonServiceProvider extends ServiceProvider
         $this->gate();
 
         \Laravel\Horizon\Horizon::auth(function ($request) {
-            if ($this->horizonIsOpen($request)) {
-                return true;
-            }
-
-            $user = $request->user();
-
-            return $user !== null && Gate::allows('viewHorizon', $user);
+            return $this->canViewHorizon($request);
         });
 
         \Laravel\Horizon\Horizon::night();
@@ -35,17 +29,36 @@ class HorizonServiceProvider extends ServiceProvider
     protected function gate(): void
     {
         Gate::define('viewHorizon', function ($user = null) {
-            if ($this->horizonIsOpen(request())) {
-                return true;
-            }
-
-            return $user && $user->email === env('HORIZON_EMAIL');
+            return $this->canViewHorizon(request());
         });
+    }
+
+    protected function canViewHorizon($request): bool
+    {
+        if ($this->horizonIsOpen($request)) {
+            return true;
+        }
+
+        $token = (string) config('horizon.token', '');
+
+        if ($token !== '' && hash_equals($token, (string) $request->query('token', ''))) {
+            $request->session()->put('horizon.authenticated', true);
+
+            return true;
+        }
+
+        if ($request->hasSession() && $request->session()->get('horizon.authenticated') === true) {
+            return true;
+        }
+
+        $user = $request->user();
+        $emails = array_values(array_filter(array_map('trim', explode(',', (string) env('HORIZON_EMAIL', '')))));
+
+        return $user !== null && in_array($user->email, $emails, true);
     }
 
     /**
      * Browser dashboard on this machine (artisan serve / local env).
-     * Gate::check() must not run first for guests — that 403s before the local check.
      */
     protected function horizonIsOpen($request): bool
     {

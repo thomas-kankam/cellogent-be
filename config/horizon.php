@@ -43,6 +43,9 @@ return [
 
     'path' => env('HORIZON_PATH', 'horizon'),
 
+    // Production dashboard access: /horizon?token=...
+    'token' => env('HORIZON_TOKEN'),
+
     /*
     |--------------------------------------------------------------------------
     | Horizon Redis Connection
