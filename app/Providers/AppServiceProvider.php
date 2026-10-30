@@ -9,6 +9,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        @ini_set('pcre.jit', '0');
+
         // PHP 8.4 tempnam() warns (Laravel turns it into ErrorException) when the
         // target folder is missing or not writable and it falls back to /tmp.
         $this->ensureWritableDirectories();
