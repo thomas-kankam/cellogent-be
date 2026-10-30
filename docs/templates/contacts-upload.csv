@@ -1,0 +1,5 @@
+first_name,last_name,email,gender,phone_number,date_of_birth,region,city,gps_address,address,dnd_status
+Ama,Mensah,ama@example.com,female,244000000,5/12/1994,Greater Accra,Accra,GA-123-4567,12 Ring Road,inactive
+Kojo,Asante,kojo@example.com,male,200000000,11/3/1990,Ashanti,Kumasi,AK-987-6543,45 Kejetia,inactive
+Abena,Owusu,,female,556906969,5/11/1999,Greater Accra,Accra,,Spintex Road,active
+Thomas,Kankam,kankamthomas6@gmail.com,male,556906969,5/11/1999,Greater Accra,Accra,GR-124-4244,Accra,active

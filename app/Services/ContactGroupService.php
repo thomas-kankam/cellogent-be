@@ -125,6 +125,6 @@ class ContactGroupService
             'group_id' => $id,
         ]);
 
-        return $this->result(false, 'Contact group permanently removed. Contacts were not deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+        return $this->result(false, 'Contact group permanently removed.', ApiCode::SUCCESS, ApiReason::SUCCESS);
     }
 }
