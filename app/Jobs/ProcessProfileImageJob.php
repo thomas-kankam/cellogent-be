@@ -22,7 +22,7 @@ class ProcessProfileImageJob implements ShouldQueue
         public int $actorId,
         public string $path,
     ) {
-        $this->onQueue('uploads');
+        $this->onQueue('default');
     }
 
     public function handle(): void

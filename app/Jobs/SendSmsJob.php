@@ -20,7 +20,7 @@ class SendSmsJob implements ShouldQueue
         public string $phoneNumber,
         public string $message,
     ) {
-        $this->onQueue('sms');
+        $this->onQueue('sms-blast-quick');
     }
 
     public function handle(): void

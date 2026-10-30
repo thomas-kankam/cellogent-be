@@ -22,7 +22,7 @@ class SendOtpMailJob implements ShouldQueue
         public string $purpose,
         public ?string $displayName = null,
     ) {
-        $this->onQueue('mail');
+        $this->onQueue('email-triggers');
     }
 
     public function handle(): void

@@ -43,4 +43,13 @@ class SenderIdController extends Controller
     {
         return $this->respondFrom($this->senderIds->request($request->user(), $request->string('name')->toString()));
     }
+
+    public function destroy(Request $request, SenderId $senderId): JsonResponse
+    {
+        if ((int) $senderId->client_id !== (int) $request->user()->id) {
+            return $this->apiResponse(true, 'Sender ID not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->respondFrom($this->senderIds->delete($request->user(), $senderId));
+    }
 }

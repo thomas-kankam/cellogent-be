@@ -13,8 +13,11 @@ use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionContro
 use App\Http\Controllers\Admin\WalletController as AdminWalletController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\ClientAuthController;
+use App\Http\Controllers\Client\ApiKeyController as ClientApiKeyController;
 use App\Http\Controllers\Client\ClientActivityLogController;
 use App\Http\Controllers\Client\ClientProfileController;
+use App\Http\Controllers\Client\ContactController as ClientContactController;
+use App\Http\Controllers\Client\ContactGroupController as ClientContactGroupController;
 use App\Http\Controllers\Client\OrderController as ClientOrderController;
 use App\Http\Controllers\Client\PaymentController as ClientPaymentController;
 use App\Http\Controllers\Client\PlanController as ClientPlanController;
@@ -51,6 +54,31 @@ Route::prefix('client')->group(function () {
         Route::get('sender-ids', [ClientSenderIdController::class, 'index']);
         Route::post('sender-ids', [ClientSenderIdController::class, 'store']);
         Route::get('sender-ids/{senderId}', [ClientSenderIdController::class, 'show']);
+        Route::delete('sender-ids/{senderId}', [ClientSenderIdController::class, 'destroy']);
+
+        Route::get('contact-groups', [ClientContactGroupController::class, 'index']);
+        Route::get('contact-groups/trashed', [ClientContactGroupController::class, 'trashed']);
+        Route::post('contact-groups', [ClientContactGroupController::class, 'store']);
+        Route::get('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'show']);
+        Route::put('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'update']);
+        Route::delete('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'destroy']);
+        Route::post('contact-groups/{contactGroup}/restore', [ClientContactGroupController::class, 'restore']);
+        Route::delete('contact-groups/{contactGroup}/force', [ClientContactGroupController::class, 'forceDestroy']);
+
+        Route::get('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'index']);
+        Route::post('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'store']);
+        Route::post('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'upload']);
+        Route::get('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'show']);
+        Route::put('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'update']);
+        Route::patch('contact-groups/{contactGroup}/contacts/{contact}/dnd', [ClientContactController::class, 'dnd']);
+        Route::delete('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'destroy']);
+
+        Route::get('api-keys', [ClientApiKeyController::class, 'index']);
+        Route::post('api-keys', [ClientApiKeyController::class, 'store']);
+        Route::get('api-keys/{apiKey}', [ClientApiKeyController::class, 'show']);
+        Route::put('api-keys/{apiKey}', [ClientApiKeyController::class, 'update']);
+        Route::post('api-keys/{apiKey}/regenerate', [ClientApiKeyController::class, 'regenerate']);
+        Route::delete('api-keys/{apiKey}', [ClientApiKeyController::class, 'destroy']);
 
         Route::get('payments', [ClientPaymentController::class, 'index']);
         Route::get('payments/{payment}', [ClientPaymentController::class, 'show']);

@@ -6,14 +6,12 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('contacts', function (Blueprint $table) {
             $table->id();
-            $table->string('contact_group_id')->nullable();
+            $table->unsignedBigInteger('client_id')->index();
+            $table->unsignedBigInteger('contact_group_id')->index();
             $table->string('first_name')->nullable();
             $table->string('last_name')->nullable();
             $table->string('email')->nullable();
@@ -24,14 +22,15 @@ return new class extends Migration
             $table->string('city')->nullable();
             $table->string('gps_address')->nullable();
             $table->string('address')->nullable();
-            $table->string('dnd_status')->default('inactive');
+            $table->string('dnd_status')->default('inactive')->index(); // inactive = can receive SMS
             $table->timestamps();
+
+            $table->unique(['contact_group_id', 'phone_number'], 'contacts_group_phone_unique');
+            $table->unique(['contact_group_id', 'email'], 'contacts_group_email_unique');
+            $table->unique(['contact_group_id', 'date_of_birth'], 'contacts_group_dob_unique');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('contacts');

@@ -78,4 +78,14 @@ class Client extends Actor
     {
         return $this->hasMany(ApiKey::class);
     }
+
+    public function contactGroups()
+    {
+        return $this->hasMany(ContactGroup::class);
+    }
+
+    public function contacts()
+    {
+        return $this->hasMany(Contact::class);
+    }
 }

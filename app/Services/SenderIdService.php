@@ -109,4 +109,23 @@ class SenderIdService
 
         return $this->result(false, 'Sender ID rejected.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($senderId->fresh()));
     }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function delete(Client $client, SenderId $senderId): array
+    {
+        if ((int) $senderId->client_id !== (int) $client->id) {
+            return $this->result(true, 'Sender ID not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $id = $senderId->id;
+        $senderId->delete();
+
+        $this->activity()->record('Sender ID deleted', 'sender_id', 'deleted', 'client', $client, $client, [
+            'sender_id' => $id,
+        ]);
+
+        return $this->result(false, 'Sender ID deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+    }
 }

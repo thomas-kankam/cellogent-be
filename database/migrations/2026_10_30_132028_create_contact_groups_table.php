@@ -8,18 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('api_keys', function (Blueprint $table) {
+        Schema::create('contact_groups', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('client_id')->index();
-            $table->string('token');
-            $table->timestamp('expires_at')->nullable();
-            $table->string('status')->default('active')->index();
+            $table->string('name')->nullable();
+            $table->string('description')->nullable();
+            $table->unsignedInteger('count_of_contacts')->default(0);
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('api_keys');
+        Schema::dropIfExists('contact_groups');
     }
 };

@@ -101,6 +101,11 @@ return [
 
     'waits' => [
         'redis:default' => 60,
+        'redis:contacts-upload' => 60,
+        'redis:sms-blast-quick' => 60,
+        'redis:sms-blast-bulk' => 60,
+        'redis:sms-api' => 60,
+        'redis:email-triggers' => 60,
     ],
 
     /*
@@ -200,34 +205,79 @@ return [
     */
 
     'defaults' => [
-        'supervisor-1' => [
+        'supervisor-default' => [
             'connection' => 'redis',
-            'queue' => ['default', 'mail', 'sms', 'uploads'],
+            'queue' => ['default'],
             'balance' => 'auto',
-            'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,
-            'maxTime' => 0,
-            'maxJobs' => 0,
             'memory' => 128,
             'tries' => 1,
             'timeout' => 60,
-            'nice' => 0,
+        ],
+        'supervisor-contacts-upload' => [
+            'connection' => 'redis',
+            'queue' => ['contacts-upload'],
+            'balance' => 'auto',
+            'maxProcesses' => 1,
+            'memory' => 512,
+            'tries' => 1,
+            'timeout' => 3600,
+        ],
+        'supervisor-sms-blast-quick' => [
+            'connection' => 'redis',
+            'queue' => ['sms-blast-quick'],
+            'balance' => 'auto',
+            'maxProcesses' => 1,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
+        ],
+        'supervisor-sms-blast-bulk' => [
+            'connection' => 'redis',
+            'queue' => ['sms-blast-bulk'],
+            'balance' => 'auto',
+            'maxProcesses' => 1,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 3600,
+        ],
+        'supervisor-sms-api' => [
+            'connection' => 'redis',
+            'queue' => ['sms-api'],
+            'balance' => 'auto',
+            'maxProcesses' => 1,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
+        ],
+        'supervisor-email-triggers' => [
+            'connection' => 'redis',
+            'queue' => ['email-triggers'],
+            'balance' => 'auto',
+            'maxProcesses' => 1,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
         ],
     ],
 
     'environments' => [
         'production' => [
-            'supervisor-1' => [
-                'maxProcesses' => 10,
-                'balanceMaxShift' => 1,
-                'balanceCooldown' => 3,
-            ],
+            'supervisor-default' => ['maxProcesses' => 2],
+            'supervisor-contacts-upload' => ['maxProcesses' => 2],
+            'supervisor-sms-blast-quick' => ['maxProcesses' => 4],
+            'supervisor-sms-blast-bulk' => ['maxProcesses' => 2],
+            'supervisor-sms-api' => ['maxProcesses' => 4],
+            'supervisor-email-triggers' => ['maxProcesses' => 2],
         ],
 
         'local' => [
-            'supervisor-1' => [
-                'maxProcesses' => 3,
-            ],
+            'supervisor-default' => ['maxProcesses' => 1],
+            'supervisor-contacts-upload' => ['maxProcesses' => 1],
+            'supervisor-sms-blast-quick' => ['maxProcesses' => 1],
+            'supervisor-sms-blast-bulk' => ['maxProcesses' => 1],
+            'supervisor-sms-api' => ['maxProcesses' => 1],
+            'supervisor-email-triggers' => ['maxProcesses' => 1],
         ],
     ],
 
