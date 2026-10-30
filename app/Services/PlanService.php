@@ -24,8 +24,8 @@ class PlanService
             'name' => $plan->name,
             'details' => $plan->options(),
             'status' => $plan->status,
-            'created_by' => $plan->created_by,
-            'updated_by' => $plan->updated_by,
+            // 'created_by' => $plan->created_by,
+            // 'updated_by' => $plan->updated_by,
         ];
     }
 
