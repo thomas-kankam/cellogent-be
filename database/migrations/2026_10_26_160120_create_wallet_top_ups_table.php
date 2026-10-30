@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('wallet_top_ups', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('wallet_id')->index();
-            $table->unsignedBigInteger('client_id')->index();
+            $table->unsignedBigInteger('client_id')->index(); // many top-ups per client
             $table->decimal('amount', 12, 2);
             $table->decimal('previous_balance', 12, 2)->nullable();
             $table->unsignedBigInteger('payment_id')->nullable()->index();

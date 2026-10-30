@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('subscriptions', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('client_id')->unique();
+            $table->unsignedBigInteger('client_id')->unique(); // one live subscription per client
             $table->unsignedBigInteger('plan_id')->nullable()->index();
             $table->string('plan_name')->nullable(); // Gold, Silver, Bronze, Platinum
             $table->string('status')->default('active')->index();

@@ -28,12 +28,27 @@ class WalletService
      */
     public function present(Wallet $wallet): array
     {
+        $wallet->loadMissing('client');
+        $client = $wallet->client;
+
         return [
             'id' => $wallet->id,
             'client_id' => $wallet->client_id,
             'status' => $wallet->status,
             'balance' => $wallet->balance,
             'currency' => $wallet->currency,
+            'client' => $client ? [
+                'id' => $client->id,
+                'first_name' => $client->first_name,
+                'last_name' => $client->last_name,
+                'email' => $client->email,
+                'phone_number' => $client->phone_number,
+                'account_type' => $client->account_type,
+                'business_name' => $client->business_name,
+                'status' => $client->status,
+                'is_verified' => (bool) $client->is_verified,
+                'profile_image' => $client->profileImageUrl(),
+            ] : null,
         ];
     }
 

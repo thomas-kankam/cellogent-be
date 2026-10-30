@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('wallets', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('client_id')->index();
+            $table->unsignedBigInteger('client_id')->unique(); // one wallet per client
             $table->string('status')->default('active')->index();
             $table->decimal('balance', 12, 2)->default(0);
             $table->string('currency')->default('GHS');

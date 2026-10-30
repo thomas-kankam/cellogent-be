@@ -49,6 +49,11 @@ class Client extends Actor
         return $this->hasOne(Wallet::class);
     }
 
+    public function walletTopUps()
+    {
+        return $this->hasMany(WalletTopUp::class);
+    }
+
     public function subscription()
     {
         return $this->hasOne(Subscription::class);

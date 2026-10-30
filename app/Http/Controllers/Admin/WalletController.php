@@ -20,7 +20,7 @@ class WalletController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = Wallet::query()->latest('id');
+        $query = Wallet::query()->with('client')->latest('id');
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->integer('client_id'));

@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('subscription_archieves', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('client_id')->index();
+            $table->unsignedBigInteger('client_id')->index(); // many archives per client
             $table->unsignedBigInteger('plan_id')->nullable()->index();
             $table->string('plan_name')->nullable();
             $table->decimal('plan_price', 12, 2)->nullable();
