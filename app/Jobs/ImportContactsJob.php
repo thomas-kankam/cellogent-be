@@ -64,7 +64,9 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
                 $cells = $row->toArray();
 
                 if ($isHeader) {
-                    $header = array_map(fn ($col) => strtolower(trim((string) $col)), $cells);
+                    $header = array_map(function ($col) {
+                        return strtolower(trim(str_replace([' ', '-'], '_', (string) $col)));
+                    }, $cells);
                     $isHeader = false;
 
                     continue;

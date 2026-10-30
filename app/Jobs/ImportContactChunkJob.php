@@ -39,7 +39,7 @@ class ImportContactChunkJob implements ShouldQueue
         $failed = 0;
 
         foreach ($this->rows as $record) {
-            $phone = GhanaPhone::normalize($this->cell($record, 'phone_number'));
+            $phone = GhanaPhone::toMobile($this->scalarCell($record, 'phone_number'));
 
             if (! $phone) {
                 $failed++;
@@ -150,6 +150,24 @@ class ImportContactChunkJob implements ShouldQueue
     protected function cell(array $record, string $key): mixed
     {
         return $record[$key] ?? null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    protected function scalarCell(array $record, string $key): ?string
+    {
+        $value = $this->cell($record, $key);
+
+        if ($value instanceof \DateTimeInterface) {
+            return null;
+        }
+
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        return (string) $value;
     }
 
     protected function normalizeDob(mixed $value): ?string

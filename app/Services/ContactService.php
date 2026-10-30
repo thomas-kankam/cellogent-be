@@ -53,9 +53,13 @@ class ContactService
      */
     public function create(Client $client, ContactGroup $group, array $input): array
     {
-        $phone = GhanaPhone::normalize($input['phone_number'] ?? null);
+        $phone = GhanaPhone::toMobile($input['phone_number'] ?? null);
         $email = $this->blankToNull($input['email'] ?? null);
         $dob = $this->blankToNull($input['date_of_birth'] ?? null);
+
+        if (! $phone) {
+            return $this->result(true, 'A valid Ghana phone number is required.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
+        }
 
         if ($this->clash($group->id, $phone, $email, $dob)) {
             return $this->result(true, 'This phone, email, or date of birth is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
@@ -89,10 +93,14 @@ class ContactService
     public function update(ContactGroup $group, Contact $contact, array $input): array
     {
         $phone = array_key_exists('phone_number', $input)
-            ? GhanaPhone::normalize($input['phone_number'])
+            ? GhanaPhone::toMobile($input['phone_number'])
             : $contact->phone_number;
         $email = array_key_exists('email', $input) ? $this->blankToNull($input['email']) : $contact->email;
         $dob = array_key_exists('date_of_birth', $input) ? $this->blankToNull($input['date_of_birth']) : $contact->date_of_birth;
+
+        if (! $phone) {
+            return $this->result(true, 'A valid Ghana phone number is required.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
+        }
 
         if ($this->clash($group->id, $phone, $email, $dob, $contact->id)) {
             return $this->result(true, 'This phone, email, or date of birth is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);

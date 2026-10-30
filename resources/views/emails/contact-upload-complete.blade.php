@@ -22,7 +22,7 @@
                             <tr><td>Rows read</td><td>{{ $stats['total'] }}</td></tr>
                             <tr><td>Added</td><td>{{ $stats['inserted'] }}</td></tr>
                             <tr><td>Skipped (already in this group)</td><td>{{ $stats['skipped'] }}</td></tr>
-                            <tr><td>Failed</td><td>{{ $stats['failed'] }}</td></tr>
+                            <tr><td>Failed (missing or invalid phone number)</td><td>{{ $stats['failed'] }}</td></tr>
                             <tr><td>Contacts in group now</td><td>{{ $stats['count_of_contacts'] }}</td></tr>
                         </table>
                     </td>

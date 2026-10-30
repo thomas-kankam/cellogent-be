@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('last_name')->nullable();
             $table->string('email')->nullable();
             $table->string('gender')->nullable();
-            $table->string('phone_number')->nullable();
+            $table->string('phone_number'); // required — SMS is sent to this number
             $table->string('date_of_birth')->nullable();
             $table->string('region')->nullable();
             $table->string('city')->nullable();

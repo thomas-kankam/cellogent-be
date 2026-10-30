@@ -23,4 +23,12 @@ class StoreContactRequest extends ApiFormRequest
             'dnd_status' => ['nullable', 'in:active,inactive'],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'phone_number.required' => 'A phone number is required. SMS is sent to this number.',
+            'phone_number.regex' => 'Use a Ghana mobile number, for example 0244000000 or 233244000000.',
+        ];
+    }
 }

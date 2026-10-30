@@ -36,6 +36,20 @@ final class GhanaPhone
     }
 
     /**
+     * Normalized Ghana mobile, or null if the value cannot receive SMS.
+     */
+    public static function toMobile(?string $value): ?string
+    {
+        $normalized = self::normalize($value);
+
+        if ($normalized === null || ! preg_match('/^233\d{9}$/', $normalized)) {
+            return null;
+        }
+
+        return $normalized;
+    }
+
+    /**
      * Laravel rule: 233 followed by exactly 9 digits.
      */
     public static function rule(): string
