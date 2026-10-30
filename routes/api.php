@@ -54,6 +54,7 @@ Route::prefix('client')->group(function () {
         Route::get('sender-ids', [ClientSenderIdController::class, 'index']);
         Route::post('sender-ids', [ClientSenderIdController::class, 'store']);
         Route::get('sender-ids/{senderId}', [ClientSenderIdController::class, 'show']);
+        Route::put('sender-ids/{senderId}', [ClientSenderIdController::class, 'update']);
         Route::delete('sender-ids/{senderId}', [ClientSenderIdController::class, 'destroy']);
 
         Route::get('contact-groups', [ClientContactGroupController::class, 'index']);

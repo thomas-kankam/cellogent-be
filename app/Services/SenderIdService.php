@@ -63,6 +63,53 @@ class SenderIdService
     /**
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
+    public function update(Client $client, SenderId $senderId, string $name): array
+    {
+        if ((int) $senderId->client_id !== (int) $client->id) {
+            return $this->result(true, 'Sender ID not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $taken = SenderId::query()
+            ->where('client_id', $client->id)
+            ->where('id', '!=', $senderId->id)
+            ->whereRaw('LOWER(name) = ?', [strtolower($name)])
+            ->whereIn('status', ['pending', 'approved'])
+            ->exists();
+
+        if ($taken) {
+            return $this->result(true, 'You already have this sender ID pending or approved.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $nameChanged = strcasecmp($senderId->name, $name) !== 0;
+
+        $payload = ['name' => $name];
+
+        if ($nameChanged && in_array($senderId->status, ['approved', 'rejected'], true)) {
+            $payload['status'] = 'pending';
+            $payload['approved_by'] = null;
+            $payload['approved_at'] = null;
+            $payload['rejected_by'] = null;
+            $payload['rejected_at'] = null;
+            $payload['rejection_reason'] = null;
+        }
+
+        $senderId->update($payload);
+
+        $this->activity()->record('Sender ID updated', 'sender_id', 'updated', 'client', $client, $client, [
+            'sender_id' => $senderId->id,
+        ]);
+
+        $fresh = $senderId->fresh();
+        $message = $fresh->status === 'pending' && $nameChanged
+            ? 'Sender ID updated and sent for approval.'
+            : 'Sender ID updated.';
+
+        return $this->result(false, $message, ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($fresh));
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
     public function approve(Admin $admin, SenderId $senderId): array
     {
         if ($senderId->status !== 'pending') {
