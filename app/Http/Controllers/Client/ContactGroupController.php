@@ -17,6 +17,11 @@ class ContactGroupController extends Controller
     {
     }
 
+    public function stats(Request $request): JsonResponse
+    {
+        return $this->respondFrom($this->groups->stats($request->user()));
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = ContactGroup::query()->where('client_id', $request->user()->id)->latest('id');

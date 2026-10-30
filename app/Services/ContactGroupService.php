@@ -32,6 +32,25 @@ class ContactGroupService
         ];
     }
 
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function stats(Client $client): array
+    {
+        $clientId = $client->id;
+        $monthStart = now()->startOfMonth();
+
+        return $this->result(false, 'Contact stats loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
+            'total_groups' => ContactGroup::query()->where('client_id', $clientId)->count(),
+            'total_contacts' => Contact::query()->where('client_id', $clientId)->count(),
+            'new_this_month' => Contact::query()
+                ->where('client_id', $clientId)
+                ->where('created_at', '>=', $monthStart)
+                ->count(),
+            'archived_groups' => ContactGroup::onlyTrashed()->where('client_id', $clientId)->count(),
+        ]);
+    }
+
     public function refreshCount(ContactGroup $group): ContactGroup
     {
         $group->update([
