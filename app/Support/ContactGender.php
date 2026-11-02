@@ -3,8 +3,8 @@
 namespace App\Support;
 
 /**
- * Sheets and forms send M or F. The database stores m or f.
- * API responses show Male or Female.
+ * Sheets and forms may send m, M, f, F, male, or female.
+ * The database stores m or f. API responses show Male or Female.
  */
 final class ContactGender
 {

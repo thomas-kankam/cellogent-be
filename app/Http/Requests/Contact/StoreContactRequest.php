@@ -30,7 +30,7 @@ class StoreContactRequest extends ApiFormRequest
         return [
             'phone_number.required' => 'A phone number is required. SMS is sent to this number.',
             'phone_number.regex' => 'Use a Ghana mobile number, for example 0244000000 or 233244000000.',
-            'gender.in' => 'Use M or F for gender.',
+            'gender.in' => 'Use male, female, M, or F for gender.',
         ];
     }
 
