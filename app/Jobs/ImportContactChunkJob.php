@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Support\ContactUploadFinalizer;
+use App\Support\ContactDate;
 use App\Support\ContactGender;
 use App\Support\GhanaPhone;
 use App\Support\LongQueue;
@@ -62,7 +63,7 @@ class ImportContactChunkJob implements ShouldQueue
             }
 
             $email = $record['email'] !== null ? strtolower($this->limit($record['email'])) : null;
-            $dob = $this->normalizeDob($record['date_of_birth']);
+            $dob = ContactDate::store($record['date_of_birth']);
 
             if (isset($seenPhone[$phone])
                 || ($email && isset($seenEmail[$email]))
@@ -122,20 +123,5 @@ class ImportContactChunkJob implements ShouldQueue
     protected function limit(?string $value): ?string
     {
         return $value === null ? null : mb_substr($value, 0, 255);
-    }
-
-    protected function normalizeDob(?string $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {
-            return substr($value, 0, 10);
-        }
-
-        $parsed = strtotime($value);
-
-        return $parsed ? date('Y-m-d', $parsed) : $this->limit($value);
     }
 }

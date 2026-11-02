@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Contact;
 
 use App\Http\Requests\ApiFormRequest;
+use App\Support\ContactDate;
 use App\Support\ContactGender;
 use App\Support\GhanaPhone;
 
@@ -16,7 +17,7 @@ class StoreContactRequest extends ApiFormRequest
             'email' => ['nullable', 'email', 'max:255'],
             'gender' => ['nullable', 'in:m,f'],
             'phone_number' => ['required', 'string', GhanaPhone::rule()],
-            'date_of_birth' => ['nullable', 'date'],
+            'date_of_birth' => ['nullable', 'date_format:Y-m-d'],
             'region' => ['nullable', 'string', 'max:100'],
             'city' => ['nullable', 'string', 'max:100'],
             'gps_address' => ['nullable', 'string', 'max:150'],
@@ -31,6 +32,7 @@ class StoreContactRequest extends ApiFormRequest
             'phone_number.required' => 'A phone number is required. SMS is sent to this number.',
             'phone_number.regex' => 'Use a Ghana mobile number, for example 0244000000 or 233244000000.',
             'gender.in' => 'Use male, female, M, or F for gender.',
+            'date_of_birth.date_format' => 'Use a date of birth like 1994-05-12 or 12/05/1994.',
         ];
     }
 
@@ -38,15 +40,22 @@ class StoreContactRequest extends ApiFormRequest
     {
         parent::prepareForValidation();
 
-        if (! $this->exists('gender')) {
-            return;
+        if ($this->exists('gender')) {
+            $raw = $this->input('gender');
+            $blank = $raw === null || trim((string) $raw) === '';
+
+            $this->merge([
+                'gender' => $blank ? null : (ContactGender::store($raw) ?? '__invalid__'),
+            ]);
         }
 
-        $raw = $this->input('gender');
-        $blank = $raw === null || trim((string) $raw) === '';
+        if ($this->exists('date_of_birth')) {
+            $raw = $this->input('date_of_birth');
+            $blank = $raw === null || trim((string) $raw) === '';
 
-        $this->merge([
-            'gender' => $blank ? null : (ContactGender::store($raw) ?? '__invalid__'),
-        ]);
+            $this->merge([
+                'date_of_birth' => $blank ? null : (ContactDate::store($raw) ?? '__invalid__'),
+            ]);
+        }
     }
 }

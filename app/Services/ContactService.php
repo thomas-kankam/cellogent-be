@@ -11,6 +11,7 @@ use App\Models\ContactGroup;
 use App\Models\ContactImport;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
+use App\Support\ContactDate;
 use App\Support\ContactGender;
 use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
@@ -58,7 +59,7 @@ class ContactService
     {
         $phone = GhanaPhone::toMobile($input['phone_number'] ?? null);
         $email = $this->blankToNull($input['email'] ?? null);
-        $dob = $this->blankToNull($input['date_of_birth'] ?? null);
+        $dob = ContactDate::store($input['date_of_birth'] ?? null);
 
         if (! $phone) {
             return $this->result(true, 'A valid Ghana phone number is required.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
@@ -99,7 +100,7 @@ class ContactService
             ? GhanaPhone::toMobile($input['phone_number'])
             : $contact->phone_number;
         $email = array_key_exists('email', $input) ? $this->blankToNull($input['email']) : $contact->email;
-        $dob = array_key_exists('date_of_birth', $input) ? $this->blankToNull($input['date_of_birth']) : $contact->date_of_birth;
+        $dob = array_key_exists('date_of_birth', $input) ? ContactDate::store($input['date_of_birth']) : $contact->date_of_birth;
 
         if (! $phone) {
             return $this->result(true, 'A valid Ghana phone number is required.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
