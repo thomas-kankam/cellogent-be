@@ -8,13 +8,13 @@ use App\Jobs\ImportContactsJob;
 use App\Models\Client;
 use App\Models\Contact;
 use App\Models\ContactGroup;
+use App\Models\ContactImport;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 use App\Support\ContactGender;
 use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class ContactService
@@ -152,15 +152,14 @@ class ContactService
      */
     public function queueUpload(Client $client, ContactGroup $group, UploadedFile $file): array
     {
-        $activeId = Cache::get('contact-group:'.$group->id.':active-import');
-        $active = is_string($activeId) ? ContactUploadFinalizer::status($activeId) : null;
+        $active = ContactImport::query()
+            ->where('contact_group_id', $group->id)
+            ->whereIn('status', ['queued', 'processing'])
+            ->latest('created_at')
+            ->first();
 
-        if ($active && in_array($active['status'] ?? '', ['queued', 'processing'], true)) {
-            return $this->result(true, 'An upload is already running for this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID, [
-                'import_id' => $activeId,
-                'contact_group_id' => $group->id,
-                'status' => $active['status'],
-            ]);
+        if ($active) {
+            return $this->result(true, 'An upload is already running for this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID, $active->present());
         }
 
         $directory = 'contact-uploads/'.$client->id;
@@ -196,6 +195,23 @@ class ContactService
         }
 
         return $this->result(false, 'Upload status loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $status);
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function latestUpload(ContactGroup $group): array
+    {
+        $row = ContactImport::query()
+            ->where('contact_group_id', $group->id)
+            ->latest('created_at')
+            ->first();
+
+        if (! $row) {
+            return $this->result(true, 'No upload found for this group.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->result(false, 'Latest upload loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $row->present());
     }
 
     protected function clash(int $groupId, ?string $phone, ?string $email, ?string $dob, ?int $ignoreId = null): bool

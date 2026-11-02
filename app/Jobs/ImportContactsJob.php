@@ -7,7 +7,6 @@ use App\Models\ContactGroup;
 use App\Support\ContactUploadFinalizer;
 use App\Support\LongQueue;
 use App\Support\XlsxStringCache;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -18,15 +17,13 @@ use OpenSpout\Reader\XLSX\Reader;
  * Streams the xlsx and fans out one ImportContactChunkJob per CHUNK rows.
  * 100k rows = 20 chunk jobs, processed in parallel by the contacts-upload workers.
  */
-class ImportContactsJob implements ShouldQueue, ShouldBeUnique
+class ImportContactsJob implements ShouldQueue
 {
     use Queueable;
 
     public int $tries = 1;
 
     public int $timeout = 3600;
-
-    public int $uniqueFor = 3600;
 
     /** Rows per chunk job. Larger = fewer jobs; each row is a small list, so 5k is ~1MB in Redis. */
     public const CHUNK = 5000;
@@ -63,11 +60,6 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
     ) {
         $this->onConnection(LongQueue::connection());
         $this->onQueue('contacts-upload');
-    }
-
-    public function uniqueId(): string
-    {
-        return 'contact-upload-group-'.$this->groupId;
     }
 
     public function handle(): void
