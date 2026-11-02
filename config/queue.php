@@ -73,6 +73,17 @@ return [
             'after_commit' => false,
         ],
 
+        // Long jobs (contact uploads, bulk SMS). retry_after must be longer than the
+        // slowest job's timeout, or Redis hands a still-running job to a second worker.
+        'redis-long' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => 'contacts-upload',
+            'retry_after' => (int) env('REDIS_LONG_QUEUE_RETRY_AFTER', 3700),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

@@ -101,9 +101,9 @@ return [
 
     'waits' => [
         'redis:default' => 60,
-        'redis:contacts-upload' => 60,
+        'redis-long:contacts-upload' => 60,
         'redis:sms-blast-quick' => 60,
-        'redis:sms-blast-bulk' => 60,
+        'redis-long:sms-blast-bulk' => 60,
         'redis:sms-api' => 60,
         'redis:email-triggers' => 60,
     ],
@@ -215,7 +215,7 @@ return [
             'timeout' => 60,
         ],
         'supervisor-contacts-upload' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long',
             'queue' => ['contacts-upload'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
@@ -234,7 +234,7 @@ return [
             'timeout' => 60,
         ],
         'supervisor-sms-blast-bulk' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long',
             'queue' => ['sms-blast-bulk'],
             'balance' => 'auto',
             'maxProcesses' => 2,

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
+use App\Support\LongQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -35,6 +36,7 @@ class ImportContactChunkJob implements ShouldQueue
         public string $diskPath,
         public array $rows,
     ) {
+        $this->onConnection(LongQueue::connection());
         $this->onQueue('contacts-upload');
     }
 

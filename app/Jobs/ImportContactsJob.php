@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Client;
 use App\Models\ContactGroup;
 use App\Support\ContactUploadFinalizer;
+use App\Support\LongQueue;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -59,6 +60,7 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
         public int $groupId,
         public string $diskPath,
     ) {
+        $this->onConnection(LongQueue::connection());
         $this->onQueue('contacts-upload');
     }
 

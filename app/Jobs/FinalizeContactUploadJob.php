@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Support\ContactUploadFinalizer;
+use App\Support\LongQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -24,6 +25,7 @@ class FinalizeContactUploadJob implements ShouldQueue
         public string $diskPath,
         public int $total,
     ) {
+        $this->onConnection(LongQueue::connection());
         $this->onQueue('contacts-upload');
     }
 
