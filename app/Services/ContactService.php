@@ -168,7 +168,11 @@ class ContactService
         $name = $file->storeAs($directory, $filename, 'local');
 
         $importId = (string) Str::uuid();
-        ContactUploadFinalizer::markQueued($importId, $client->id, $group->id);
+        ContactUploadFinalizer::markQueued($importId, $client->id, $group->id, [
+            'file_name' => $this->originalFileName($file),
+            'file_size' => (int) $file->getSize(),
+            'mime_type' => $file->getClientMimeType() ?: $file->getMimeType(),
+        ]);
 
         ImportContactsJob::dispatch($importId, $client->id, $group->id, $name);
 
@@ -177,11 +181,20 @@ class ContactService
             'import_id' => $importId,
         ]);
 
-        return $this->result(false, 'Upload queued. Poll the status url until status is completed.', ApiCode::CREATED, ApiReason::CREATED, [
-            'import_id' => $importId,
-            'contact_group_id' => $group->id,
-            'status' => 'queued',
-        ]);
+        return $this->result(
+            false,
+            'Upload queued. Poll the status url until status is completed.',
+            ApiCode::CREATED,
+            ApiReason::CREATED,
+            ContactImport::query()->findOrFail($importId)->present(),
+        );
+    }
+
+    protected function originalFileName(UploadedFile $file): string
+    {
+        $name = trim(str_replace(['\\', '/'], '', $file->getClientOriginalName()));
+
+        return $name === '' ? 'contacts.xlsx' : mb_substr($name, 0, 255);
     }
 
     /**

@@ -12,6 +12,9 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->unsignedBigInteger('client_id')->index();
             $table->unsignedBigInteger('contact_group_id')->index();
+            $table->string('file_name');
+            $table->unsignedBigInteger('file_size')->default(0);
+            $table->string('mime_type')->nullable();
             $table->string('status')->default('queued')->index(); // queued, processing, completed, failed
             $table->unsignedInteger('total')->default(0);
             $table->unsignedInteger('inserted')->default(0);

@@ -11,13 +11,19 @@ use Illuminate\Support\Facades\Cache;
  */
 final class ContactUploadFinalizer
 {
-    public static function markQueued(string $importId, int $clientId, int $groupId): void
+    /**
+     * @param  array{file_name: string, file_size: int, mime_type: ?string}  $file
+     */
+    public static function markQueued(string $importId, int $clientId, int $groupId, array $file): void
     {
         ContactImport::query()->updateOrCreate(
             ['id' => $importId],
             [
                 'client_id' => $clientId,
                 'contact_group_id' => $groupId,
+                'file_name' => $file['file_name'],
+                'file_size' => $file['file_size'],
+                'mime_type' => $file['mime_type'],
                 'status' => 'queued',
                 'total' => 0,
                 'inserted' => 0,
