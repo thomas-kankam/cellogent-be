@@ -12,7 +12,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use OpenSpout\Reader\XLSX\Reader;
 
 /**
@@ -57,6 +56,7 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
     ];
 
     public function __construct(
+        public string $importId,
         public int $clientId,
         public int $groupId,
         public string $diskPath,
@@ -76,11 +76,12 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
         $client = Client::query()->find($this->clientId);
 
         if (! $group || ! $client || ! Storage::disk('local')->exists($this->diskPath)) {
+            ContactUploadFinalizer::markFailed($this->importId, $this->groupId);
+
             return;
         }
 
-        $importId = (string) Str::uuid();
-        ContactUploadFinalizer::beginImport($importId, $this->diskPath);
+        ContactUploadFinalizer::beginImport($this->importId, $this->diskPath);
 
         $reader = new Reader(null, new XlsxStringCache);
         $reader->open(Storage::disk('local')->path($this->diskPath));
@@ -111,7 +112,7 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
                 $buffer[] = $values;
 
                 if (count($buffer) >= self::CHUNK) {
-                    $this->dispatchChunk($importId, $buffer);
+                    $this->dispatchChunk($this->importId, $buffer);
                     $buffer = [];
                 }
             }
@@ -122,11 +123,16 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
         $reader->close();
 
         if ($buffer !== []) {
-            $this->dispatchChunk($importId, $buffer);
+            $this->dispatchChunk($this->importId, $buffer);
         }
 
-        ContactUploadFinalizer::markReaderComplete($importId, $total);
-        ContactUploadFinalizer::maybeFinalize($importId, $this->clientId, $this->groupId, $this->diskPath);
+        ContactUploadFinalizer::markReaderComplete($this->importId, $total);
+        ContactUploadFinalizer::maybeFinalize($this->importId, $this->clientId, $this->groupId, $this->diskPath);
+    }
+
+    public function failed(?\Throwable $e): void
+    {
+        ContactUploadFinalizer::markFailed($this->importId, $this->groupId);
     }
 
     /**

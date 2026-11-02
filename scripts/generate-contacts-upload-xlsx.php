@@ -41,7 +41,7 @@ $writer->addRow(Row::fromValues([
 
 $regions = ['Greater Accra', 'Ashanti', 'Northern', 'Western', 'Eastern'];
 $cities = ['Accra', 'Kumasi', 'Tamale', 'Takoradi', 'Koforidua'];
-$genders = ['male', 'female'];
+$genders = ['M', 'F'];
 
 for ($i = 0; $i < $rows; $i++) {
     $nine = (string) (244000000 + $i);

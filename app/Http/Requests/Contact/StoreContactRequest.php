@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Contact;
 
 use App\Http\Requests\ApiFormRequest;
+use App\Support\ContactGender;
 use App\Support\GhanaPhone;
 
 class StoreContactRequest extends ApiFormRequest
@@ -13,7 +14,7 @@ class StoreContactRequest extends ApiFormRequest
             'first_name' => ['nullable', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
             'email' => ['nullable', 'email', 'max:255'],
-            'gender' => ['nullable', 'string', 'max:20'],
+            'gender' => ['nullable', 'in:m,f'],
             'phone_number' => ['required', 'string', GhanaPhone::rule()],
             'date_of_birth' => ['nullable', 'date'],
             'region' => ['nullable', 'string', 'max:100'],
@@ -29,6 +30,23 @@ class StoreContactRequest extends ApiFormRequest
         return [
             'phone_number.required' => 'A phone number is required. SMS is sent to this number.',
             'phone_number.regex' => 'Use a Ghana mobile number, for example 0244000000 or 233244000000.',
+            'gender.in' => 'Use M or F for gender.',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        parent::prepareForValidation();
+
+        if (! $this->exists('gender')) {
+            return;
+        }
+
+        $raw = $this->input('gender');
+        $blank = $raw === null || trim((string) $raw) === '';
+
+        $this->merge([
+            'gender' => $blank ? null : (ContactGender::store($raw) ?? '__invalid__'),
+        ]);
     }
 }

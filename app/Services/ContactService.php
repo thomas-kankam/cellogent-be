@@ -10,8 +10,11 @@ use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
+use App\Support\ContactGender;
+use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class ContactService
@@ -35,7 +38,7 @@ class ContactService
             'first_name' => $contact->first_name,
             'last_name' => $contact->last_name,
             'email' => $contact->email,
-            'gender' => $contact->gender,
+            'gender' => ContactGender::label($contact->gender),
             'phone_number' => $contact->phone_number,
             'date_of_birth' => $contact->date_of_birth,
             'region' => $contact->region,
@@ -71,7 +74,7 @@ class ContactService
             'first_name' => $input['first_name'] ?? null,
             'last_name' => $input['last_name'] ?? null,
             'email' => $email,
-            'gender' => $input['gender'] ?? null,
+            'gender' => ContactGender::store($input['gender'] ?? null),
             'phone_number' => $phone,
             'date_of_birth' => $dob,
             'region' => $input['region'] ?? null,
@@ -110,7 +113,7 @@ class ContactService
             'first_name' => $input['first_name'] ?? $contact->first_name,
             'last_name' => $input['last_name'] ?? $contact->last_name,
             'email' => $email,
-            'gender' => $input['gender'] ?? $contact->gender,
+            'gender' => array_key_exists('gender', $input) ? ContactGender::store($input['gender']) : $contact->gender,
             'phone_number' => $phone,
             'date_of_birth' => $dob,
             'region' => $input['region'] ?? $contact->region,
@@ -149,20 +152,50 @@ class ContactService
      */
     public function queueUpload(Client $client, ContactGroup $group, UploadedFile $file): array
     {
+        $activeId = Cache::get('contact-group:'.$group->id.':active-import');
+        $active = is_string($activeId) ? ContactUploadFinalizer::status($activeId) : null;
+
+        if ($active && in_array($active['status'] ?? '', ['queued', 'processing'], true)) {
+            return $this->result(true, 'An upload is already running for this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID, [
+                'import_id' => $activeId,
+                'contact_group_id' => $group->id,
+                'status' => $active['status'],
+            ]);
+        }
+
         $directory = 'contact-uploads/'.$client->id;
         $filename = Str::uuid()->toString().'.xlsx';
         $name = $file->storeAs($directory, $filename, 'local');
 
-        ImportContactsJob::dispatch($client->id, $group->id, $name);
+        $importId = (string) Str::uuid();
+        ContactUploadFinalizer::markQueued($importId, $client->id, $group->id);
+
+        ImportContactsJob::dispatch($importId, $client->id, $group->id, $name);
 
         $this->activity()->record('Contact upload queued', 'contact_group', 'created', 'client', $client, $client, [
             'group_id' => $group->id,
+            'import_id' => $importId,
         ]);
 
-        return $this->result(false, 'Upload queued. You will get an email when it finishes.', ApiCode::CREATED, ApiReason::CREATED, [
+        return $this->result(false, 'Upload queued. Poll the status url until status is completed.', ApiCode::CREATED, ApiReason::CREATED, [
+            'import_id' => $importId,
             'contact_group_id' => $group->id,
-            'queue' => 'contacts-upload',
+            'status' => 'queued',
         ]);
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function uploadStatus(ContactGroup $group, string $importId): array
+    {
+        $status = ContactUploadFinalizer::status($importId);
+
+        if (! $status || (int) ($status['contact_group_id'] ?? 0) !== $group->id) {
+            return $this->result(true, 'Upload not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->result(false, 'Upload status loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $status);
     }
 
     protected function clash(int $groupId, ?string $phone, ?string $email, ?string $dob, ?int $ignoreId = null): bool

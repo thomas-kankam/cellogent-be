@@ -61,6 +61,17 @@ class ContactController extends Controller
         return $this->respondFrom($this->contacts->queueUpload($request->user(), $group, $request->file('file')));
     }
 
+    public function uploadStatus(Request $request, int $contactGroup, string $import): JsonResponse
+    {
+        $group = $this->ownedGroup($request, $contactGroup);
+
+        if (! $group) {
+            return $this->apiResponse(true, 'Contact group not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->respondFrom($this->contacts->uploadStatus($group, $import));
+    }
+
     public function show(Request $request, int $contactGroup, int $contact): JsonResponse
     {
         $row = $this->ownedContact($request, $contactGroup, $contact);

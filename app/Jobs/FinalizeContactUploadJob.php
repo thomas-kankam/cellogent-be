@@ -42,21 +42,31 @@ class FinalizeContactUploadJob implements ShouldQueue
 
         Storage::disk('local')->delete($this->diskPath);
 
+        $inserted = (int) Cache::get("contact-import:{$this->importId}:inserted", 0);
+        $skipped = (int) Cache::get("contact-import:{$this->importId}:skipped", 0);
+        $failed = (int) Cache::get("contact-import:{$this->importId}:failed", 0);
+
         if ($client) {
             SendContactUploadMailJob::dispatch($client->email, [
                 'group_name' => $group?->name ?? 'Contact group',
                 'total' => $this->total,
-                'inserted' => (int) Cache::get("contact-import:{$this->importId}:inserted", 0),
-                'skipped' => (int) Cache::get("contact-import:{$this->importId}:skipped", 0),
-                'failed' => (int) Cache::get("contact-import:{$this->importId}:failed", 0),
+                'inserted' => $inserted,
+                'skipped' => $skipped,
+                'failed' => $failed,
                 'count_of_contacts' => $count,
             ], trim($client->first_name.' '.$client->last_name) ?: null);
         }
 
-        Cache::forget("contact-import:{$this->importId}:inserted");
-        Cache::forget("contact-import:{$this->importId}:skipped");
-        Cache::forget("contact-import:{$this->importId}:failed");
-
-        ContactUploadFinalizer::forgetImport($this->importId);
+        ContactUploadFinalizer::markFinished($this->importId, 'completed', [
+            'import_id' => $this->importId,
+            'contact_group_id' => $this->groupId,
+            'status' => 'completed',
+            'total' => $this->total,
+            'inserted' => $inserted,
+            'skipped' => $skipped,
+            'failed' => $failed,
+            'progress' => 100,
+            'count_of_contacts' => $count,
+        ]);
     }
 }

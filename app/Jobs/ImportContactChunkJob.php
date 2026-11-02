@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Support\ContactUploadFinalizer;
+use App\Support\ContactGender;
 use App\Support\GhanaPhone;
 use App\Support\LongQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -85,7 +86,7 @@ class ImportContactChunkJob implements ShouldQueue
                 'first_name' => $this->limit($record['first_name']),
                 'last_name' => $this->limit($record['last_name']),
                 'email' => $email,
-                'gender' => $this->limit($record['gender']),
+                'gender' => ContactGender::store($record['gender']),
                 'phone_number' => $phone,
                 'date_of_birth' => $dob,
                 'region' => $this->limit($record['region']),
