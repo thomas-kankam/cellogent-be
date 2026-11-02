@@ -2,23 +2,31 @@
 
 namespace App\Jobs;
 
-use App\Models\Contact;
 use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Cleans one chunk of rows and bulk-inserts them.
+ * Duplicates against existing contacts are dropped by the group unique indexes (INSERT IGNORE),
+ * so no lookup query is needed before inserting.
+ */
 class ImportContactChunkJob implements ShouldQueue
 {
     use Queueable;
 
     public int $tries = 1;
 
-    public int $timeout = 180;
+    public int $timeout = 300;
+
+    /** Rows per INSERT statement (13 columns x 1000 stays well under MySQL's 65k placeholder limit). */
+    protected const INSERT_SIZE = 1000;
 
     /**
-     * @param  list<array<int, mixed>>  $rows
+     * @param  list<list<?string>>  $rows  values in ImportContactsJob::COLUMNS order
      */
     public function __construct(
         public string $importId,
@@ -32,7 +40,7 @@ class ImportContactChunkJob implements ShouldQueue
 
     public function handle(): void
     {
-        $now = now();
+        $now = now()->toDateTimeString();
         $toInsert = [];
         $seenPhone = [];
         $seenEmail = [];
@@ -40,8 +48,9 @@ class ImportContactChunkJob implements ShouldQueue
         $skipped = 0;
         $failed = 0;
 
-        foreach ($this->rows as $record) {
-            $phone = GhanaPhone::toMobile($this->scalarCell($record, 'phone_number'));
+        foreach ($this->rows as $values) {
+            $record = array_combine(ImportContactsJob::COLUMNS, $values);
+            $phone = GhanaPhone::toMobile($record['phone_number']);
 
             if (! $phone) {
                 $failed++;
@@ -49,8 +58,8 @@ class ImportContactChunkJob implements ShouldQueue
                 continue;
             }
 
-            $email = $this->blankToNull($this->cell($record, 'email'));
-            $dob = $this->normalizeDob($this->cell($record, 'date_of_birth'));
+            $email = $record['email'] !== null ? strtolower($this->limit($record['email'])) : null;
+            $dob = $this->normalizeDob($record['date_of_birth']);
 
             if (isset($seenPhone[$phone])
                 || ($email && isset($seenEmail[$email]))
@@ -71,123 +80,49 @@ class ImportContactChunkJob implements ShouldQueue
             $toInsert[] = [
                 'client_id' => $this->clientId,
                 'contact_group_id' => $this->groupId,
-                'first_name' => $this->blankToNull($this->cell($record, 'first_name')),
-                'last_name' => $this->blankToNull($this->cell($record, 'last_name')),
+                'first_name' => $this->limit($record['first_name']),
+                'last_name' => $this->limit($record['last_name']),
                 'email' => $email,
-                'gender' => $this->blankToNull($this->cell($record, 'gender')),
+                'gender' => $this->limit($record['gender']),
                 'phone_number' => $phone,
                 'date_of_birth' => $dob,
-                'region' => $this->blankToNull($this->cell($record, 'region')),
-                'city' => $this->blankToNull($this->cell($record, 'city')),
-                'gps_address' => $this->blankToNull($this->cell($record, 'gps_address')),
-                'address' => $this->blankToNull($this->cell($record, 'address')),
-                'dnd_status' => strtolower(trim((string) $this->cell($record, 'dnd_status'))) === 'active' ? 'active' : 'inactive',
+                'region' => $this->limit($record['region']),
+                'city' => $this->limit($record['city']),
+                'gps_address' => $this->limit($record['gps_address']),
+                'address' => $this->limit($record['address']),
+                'dnd_status' => strtolower((string) $record['dnd_status']) === 'active' ? 'active' : 'inactive',
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
         }
 
-        $toInsert = $this->rejectExisting($toInsert, $skipped);
+        $inserted = 0;
 
-        if ($toInsert !== []) {
-            foreach (array_chunk($toInsert, 250) as $batch) {
-                Contact::insert($batch);
-            }
+        foreach (array_chunk($toInsert, self::INSERT_SIZE) as $batch) {
+            // Retries on deadlock: several chunks of the same group insert in parallel.
+            $inserted += DB::transaction(fn () => DB::table('contacts')->insertOrIgnore($batch), 3);
         }
 
-        Cache::increment("contact-import:{$this->importId}:inserted", count($toInsert));
+        $skipped += count($toInsert) - $inserted;
+
+        Cache::increment("contact-import:{$this->importId}:inserted", $inserted);
         Cache::increment("contact-import:{$this->importId}:skipped", $skipped);
         Cache::increment("contact-import:{$this->importId}:failed", $failed);
-
         Cache::increment("contact-import:{$this->importId}:chunks_done");
-        ContactUploadFinalizer::maybeFinalize(
-            $this->importId,
-            $this->clientId,
-            $this->groupId,
-            $this->diskPath,
-        );
+
+        ContactUploadFinalizer::maybeFinalize($this->importId, $this->clientId, $this->groupId, $this->diskPath);
     }
 
     /**
-     * @param  list<array<string, mixed>>  $rows
-     * @return list<array<string, mixed>>
+     * INSERT IGNORE would silently truncate long text, so cut it ourselves.
      */
-    protected function rejectExisting(array $rows, int &$skipped): array
+    protected function limit(?string $value): ?string
     {
-        $phones = array_values(array_filter(array_column($rows, 'phone_number')));
-        $emails = array_values(array_filter(array_column($rows, 'email')));
-        $dobs = array_values(array_filter(array_column($rows, 'date_of_birth')));
-
-        $existing = Contact::query()
-            ->where('contact_group_id', $this->groupId)
-            ->where(function ($query) use ($phones, $emails, $dobs) {
-                if ($phones) {
-                    $query->orWhereIn('phone_number', $phones);
-                }
-                if ($emails) {
-                    $query->orWhereIn('email', $emails);
-                }
-                if ($dobs) {
-                    $query->orWhereIn('date_of_birth', $dobs);
-                }
-            })
-            ->get(['phone_number', 'email', 'date_of_birth']);
-
-        $phoneSet = $existing->pluck('phone_number')->filter()->flip()->all();
-        $emailSet = $existing->pluck('email')->filter()->flip()->all();
-        $dobSet = $existing->pluck('date_of_birth')->filter()->flip()->all();
-
-        $kept = [];
-
-        foreach ($rows as $row) {
-            if (isset($phoneSet[$row['phone_number']])
-                || ($row['email'] && isset($emailSet[$row['email']]))
-                || ($row['date_of_birth'] && isset($dobSet[$row['date_of_birth']]))) {
-                $skipped++;
-
-                continue;
-            }
-
-            $kept[] = $row;
-        }
-
-        return $kept;
+        return $value === null ? null : mb_substr($value, 0, 255);
     }
 
-    /**
-     * @param  array<string, mixed>  $record
-     */
-    protected function cell(array $record, string $key): mixed
+    protected function normalizeDob(?string $value): ?string
     {
-        return $record[$key] ?? null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $record
-     */
-    protected function scalarCell(array $record, string $key): ?string
-    {
-        $value = $this->cell($record, $key);
-
-        if ($value instanceof \DateTimeInterface) {
-            return null;
-        }
-
-        if (! is_scalar($value)) {
-            return null;
-        }
-
-        return (string) $value;
-    }
-
-    protected function normalizeDob(mixed $value): ?string
-    {
-        if ($value instanceof \DateTimeInterface) {
-            return $value->format('Y-m-d');
-        }
-
-        $value = $this->blankToNull(is_scalar($value) ? (string) $value : null);
-
         if ($value === null) {
             return null;
         }
@@ -198,13 +133,6 @@ class ImportContactChunkJob implements ShouldQueue
 
         $parsed = strtotime($value);
 
-        return $parsed ? date('Y-m-d', $parsed) : $value;
-    }
-
-    protected function blankToNull(mixed $value): ?string
-    {
-        $value = trim((string) $value);
-
-        return $value === '' ? null : $value;
+        return $parsed ? date('Y-m-d', $parsed) : $this->limit($value);
     }
 }
