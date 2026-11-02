@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\ContactGroup;
 use App\Support\ContactUploadFinalizer;
 use App\Support\LongQueue;
+use App\Support\XlsxStringCache;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -81,7 +82,7 @@ class ImportContactsJob implements ShouldQueue, ShouldBeUnique
         $importId = (string) Str::uuid();
         ContactUploadFinalizer::beginImport($importId, $this->diskPath);
 
-        $reader = new Reader;
+        $reader = new Reader(null, new XlsxStringCache);
         $reader->open(Storage::disk('local')->path($this->diskPath));
 
         $positions = [];
