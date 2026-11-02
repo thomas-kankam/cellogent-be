@@ -8,6 +8,7 @@ use App\Http\Requests\Contact\UpdateDndRequest;
 use App\Http\Requests\Contact\UploadContactsRequest;
 use App\Models\Contact;
 use App\Models\ContactGroup;
+use App\Models\ContactImport;
 use App\Services\ContactService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -61,7 +62,7 @@ class ContactController extends Controller
         return $this->respondFrom($this->contacts->queueUpload($request->user(), $group, $request->file('file')));
     }
 
-    public function latestUpload(Request $request, int $contactGroup): JsonResponse
+    public function uploads(Request $request, int $contactGroup): JsonResponse
     {
         $group = $this->ownedGroup($request, $contactGroup);
 
@@ -69,7 +70,17 @@ class ContactController extends Controller
             return $this->apiResponse(true, 'Contact group not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        return $this->respondFrom($this->contacts->latestUpload($group));
+        $query = ContactImport::query()
+            ->where('contact_group_id', $group->id)
+            ->latest('created_at');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status'));
+        }
+
+        $paginator = $this->paginateQuery($request, $query);
+
+        return $this->paginatedApiResponse('Uploads loaded.', ApiReason::SUCCESS, $paginator, fn (ContactImport $row) => $row->present());
     }
 
     public function uploadStatus(Request $request, int $contactGroup, string $import): JsonResponse

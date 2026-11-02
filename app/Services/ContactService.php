@@ -198,23 +198,6 @@ class ContactService
         return $this->result(false, 'Upload status loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $status);
     }
 
-    /**
-     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
-     */
-    public function latestUpload(ContactGroup $group): array
-    {
-        $row = ContactImport::query()
-            ->where('contact_group_id', $group->id)
-            ->latest('created_at')
-            ->first();
-
-        if (! $row) {
-            return $this->result(true, 'No upload found for this group.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        return $this->result(false, 'Latest upload loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $row->present());
-    }
-
     protected function clash(int $groupId, ?string $phone, ?string $email, ?string $dob, ?int $ignoreId = null): bool
     {
         return Contact::query()
