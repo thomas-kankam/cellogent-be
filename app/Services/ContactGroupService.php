@@ -42,9 +42,10 @@ class ContactGroupService
 
         return $this->result(false, 'Contact stats loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
             'total_groups' => ContactGroup::query()->where('client_id', $clientId)->count(),
-            'total_contacts' => Contact::query()->where('client_id', $clientId)->count(),
+            'total_contacts' => Contact::query()->where('client_id', $clientId)->visible()->count(),
             'new_this_month' => Contact::query()
                 ->where('client_id', $clientId)
+                ->visible()
                 ->where('created_at', '>=', $monthStart)
                 ->count(),
             'archived_groups' => ContactGroup::onlyTrashed()->where('client_id', $clientId)->count(),
@@ -54,7 +55,10 @@ class ContactGroupService
     public function refreshCount(ContactGroup $group): ContactGroup
     {
         $group->update([
-            'count_of_contacts' => Contact::query()->where('contact_group_id', $group->id)->count(),
+            'count_of_contacts' => Contact::query()
+                ->where('contact_group_id', $group->id)
+                ->visible()
+                ->count(),
         ]);
 
         return $group->fresh();

@@ -34,7 +34,10 @@ class FinalizeContactUploadJob implements ShouldQueue
         $group = ContactGroup::query()->find($this->groupId);
         $client = Client::query()->find($this->clientId);
 
-        $count = Contact::query()->where('contact_group_id', $this->groupId)->count();
+        $count = Contact::query()
+            ->where('contact_group_id', $this->groupId)
+            ->visible()
+            ->count();
 
         if ($group) {
             $group->update(['count_of_contacts' => $count]);

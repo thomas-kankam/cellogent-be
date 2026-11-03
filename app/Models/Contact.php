@@ -42,4 +42,19 @@ class Contact extends Model
     {
         return $this->dnd_status !== 'active';
     }
+
+    /**
+     * Hide contacts whose upload file is being deleted (status = deleting).
+     */
+    public function scopeVisible($query)
+    {
+        return $query->where(function ($outer) {
+            $outer->whereNull('contact_import_id')
+                ->orWhereNotIn('contact_import_id', function ($sub) {
+                    $sub->select('id')
+                        ->from('contact_imports')
+                        ->where('status', 'deleting');
+                });
+        });
+    }
 }

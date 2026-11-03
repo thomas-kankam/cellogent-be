@@ -73,6 +73,7 @@ Route::prefix('client')->group(function () {
         Route::get('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'uploads']);
         Route::get('contact-groups/{contactGroup}/contacts/upload/{import}/contacts', [ClientContactController::class, 'uploadContacts']);
         Route::get('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'uploadStatus']);
+        Route::delete('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'destroyUpload']);
         Route::get('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'show']);
         Route::put('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'update']);
         Route::patch('contact-groups/{contactGroup}/contacts/{contact}/dnd', [ClientContactController::class, 'dnd']);

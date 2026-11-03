@@ -11,6 +11,9 @@ class ContactImport extends Model
 
     protected $keyType = 'string';
 
+    /** Statuses that still appear in the upload list for the frontend. */
+    public const LISTABLE = ['queued', 'processing', 'completed', 'failed'];
+
     protected $fillable = [
         'id',
         'client_id',
@@ -27,6 +30,11 @@ class ContactImport extends Model
         'chunks_done',
         'message',
     ];
+
+    public function scopeListable($query)
+    {
+        return $query->whereIn('status', self::LISTABLE);
+    }
 
     /**
      * Saved row, with live cache counters while the import is still running.

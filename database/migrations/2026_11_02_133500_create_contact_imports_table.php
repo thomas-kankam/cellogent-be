@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('file_name');
             $table->unsignedBigInteger('file_size')->default(0);
             $table->string('mime_type')->nullable();
-            $table->string('status')->default('queued')->index(); // queued, processing, completed, failed
+            $table->string('status')->default('queued')->index(); // queued, processing, completed, failed, deleting
             $table->unsignedInteger('total')->default(0);
             $table->unsignedInteger('inserted')->default(0);
             $table->unsignedInteger('skipped')->default(0);

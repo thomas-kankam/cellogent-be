@@ -29,7 +29,7 @@ class ContactController extends Controller
             return $this->apiResponse(true, 'Contact group not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        $query = Contact::query()->where('contact_group_id', $group->id)->latest('id');
+        $query = Contact::query()->where('contact_group_id', $group->id)->visible()->latest('id');
 
         if ($request->filled('dnd_status')) {
             $query->where('dnd_status', $request->string('dnd_status'));
@@ -76,6 +76,7 @@ class ContactController extends Controller
 
         $query = ContactImport::query()
             ->where('contact_group_id', $group->id)
+            ->listable()
             ->latest('created_at');
 
         if ($request->filled('status')) {
@@ -98,11 +99,25 @@ class ContactController extends Controller
         return $this->respondFrom($this->contacts->uploadStatus($group, $import));
     }
 
-    public function uploadContacts(Request $request, int $contactGroup, string $import): JsonResponse
+    public function destroyUpload(Request $request, int $contactGroup, string $import): JsonResponse
     {
         $group = $this->ownedGroup($request, $contactGroup);
         $upload = $group
             ? ContactImport::query()->where('contact_group_id', $group->id)->whereKey($import)->first()
+            : null;
+
+        if (! $group || ! $upload || $upload->status === 'deleting') {
+            return $this->apiResponse(true, 'Upload not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->respondFrom($this->contacts->queueDeleteUpload($request->user(), $group, $upload));
+    }
+
+    public function uploadContacts(Request $request, int $contactGroup, string $import): JsonResponse
+    {
+        $group = $this->ownedGroup($request, $contactGroup);
+        $upload = $group
+            ? ContactImport::query()->where('contact_group_id', $group->id)->listable()->whereKey($import)->first()
             : null;
 
         if (! $group || ! $upload) {
@@ -112,6 +127,7 @@ class ContactController extends Controller
         $query = Contact::query()
             ->where('contact_group_id', $group->id)
             ->where('contact_import_id', $upload->id)
+            ->visible()
             ->latest('id');
 
         if ($request->filled('dnd_status')) {

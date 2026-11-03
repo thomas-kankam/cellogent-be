@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Concerns\LogsActivity;
 use App\Concerns\ReturnsServiceResult;
+use App\Jobs\DeleteContactImportJob;
 use App\Jobs\ImportContactsJob;
 use App\Models\Client;
 use App\Models\Contact;
@@ -203,13 +204,59 @@ class ContactService
      */
     public function uploadStatus(ContactGroup $group, string $importId): array
     {
-        $status = ContactUploadFinalizer::status($importId);
+        $row = ContactImport::query()
+            ->where('contact_group_id', $group->id)
+            ->listable()
+            ->whereKey($importId)
+            ->first();
 
-        if (! $status || (int) ($status['contact_group_id'] ?? 0) !== $group->id) {
+        if (! $row) {
             return $this->result(true, 'Upload not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        return $this->result(false, 'Upload status loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $status);
+        return $this->result(false, 'Upload status loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $row->present());
+    }
+
+    /**
+     * Mark the upload as deleting immediately (so the list hides it), then remove its contacts in a job.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function queueDeleteUpload(Client $client, ContactGroup $group, ContactImport $import): array
+    {
+        if ((int) $import->contact_group_id !== (int) $group->id) {
+            return $this->result(true, 'Upload not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if (in_array($import->status, ['queued', 'processing'], true)) {
+            return $this->result(true, 'Wait for this upload to finish before deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if ($import->status === 'deleting') {
+            return $this->result(true, 'Upload not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $import->update([
+            'status' => 'deleting',
+            'message' => 'Deletion queued.',
+        ]);
+
+        // Count drops now so the group total is correct while the job still runs.
+        $this->groups->refreshCount($group);
+
+        DeleteContactImportJob::dispatch($import->id, $group->id);
+
+        $this->activity()->record('Contact upload delete queued', 'contact_group', 'deleted', 'client', $client, $client, [
+            'group_id' => $group->id,
+            'import_id' => $import->id,
+            'file_name' => $import->file_name,
+        ]);
+
+        return $this->result(false, 'Upload deletion queued. It will disappear from the list now.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
+            'import_id' => $import->id,
+            'contact_group_id' => $group->id,
+            'status' => 'deleting',
+        ]);
     }
 
     protected function clash(int $groupId, ?string $phone, ?string $email, ?string $dob, ?int $ignoreId = null): bool
