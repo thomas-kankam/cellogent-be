@@ -9,6 +9,7 @@ class Contact extends Model
     protected $fillable = [
         'client_id',
         'contact_group_id',
+        'contact_import_id',
         'first_name',
         'last_name',
         'email',
@@ -30,6 +31,11 @@ class Contact extends Model
     public function group()
     {
         return $this->belongsTo(ContactGroup::class, 'contact_group_id');
+    }
+
+    public function import()
+    {
+        return $this->belongsTo(ContactImport::class, 'contact_import_id');
     }
 
     public function canReceiveSms(): bool

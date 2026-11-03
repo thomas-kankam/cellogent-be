@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('client_id')->index();
             $table->unsignedBigInteger('contact_group_id')->index();
+            $table->uuid('contact_import_id')->nullable()->index(); // set when the contact came from a file upload
             $table->string('first_name')->nullable();
             $table->string('last_name')->nullable();
             $table->string('email')->nullable();

@@ -71,6 +71,7 @@ Route::prefix('client')->group(function () {
         Route::post('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'store']);
         Route::post('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'upload']);
         Route::get('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'uploads']);
+        Route::get('contact-groups/{contactGroup}/contacts/upload/{import}/contacts', [ClientContactController::class, 'uploadContacts']);
         Route::get('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'uploadStatus']);
         Route::get('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'show']);
         Route::put('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'update']);

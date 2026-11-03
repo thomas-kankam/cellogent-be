@@ -36,6 +36,7 @@ class ContactService
             'id' => $contact->id,
             'client_id' => $contact->client_id,
             'contact_group_id' => $contact->contact_group_id,
+            'contact_import_id' => $contact->contact_import_id,
             'first_name' => $contact->first_name,
             'last_name' => $contact->last_name,
             'email' => $contact->email,

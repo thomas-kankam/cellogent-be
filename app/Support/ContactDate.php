@@ -3,9 +3,9 @@
 namespace App\Support;
 
 /**
- * Accepted date of birth values, for one contact or a spreadsheet row:
- * 1994-05-12, 12/05/1994, 12-05-1994 (day, then month, then year).
- * Stored and returned as Y-m-d. Blank stays blank. Anything else is rejected.
+ * Calendar dates for contacts (date_of_birth) and API keys (expires_at).
+ * Accepts 1994-05-12, 12/05/1994, 12-05-1994, 12.05.1994 (day, then month, then year).
+ * Stored as Y-m-d. Blank stays blank. Anything else is rejected.
  */
 final class ContactDate
 {
@@ -21,6 +21,11 @@ final class ContactDate
             return null;
         }
 
+        // Drop a time part if a client sends 1994-05-12 00:00:00
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})\b/', $value, $match)) {
+            $value = $match[1];
+        }
+
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $match)) {
             return self::make((int) $match[1], (int) $match[2], (int) $match[3]);
         }
@@ -30,6 +35,14 @@ final class ContactDate
         }
 
         return null;
+    }
+
+    /** End of that calendar day, for expiry timestamps. */
+    public static function endOfDay(mixed $value): ?string
+    {
+        $date = self::store($value);
+
+        return $date === null ? null : $date.' 23:59:59';
     }
 
     protected static function make(int $year, int $month, int $day): ?string

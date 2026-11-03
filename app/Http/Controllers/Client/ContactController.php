@@ -35,6 +35,10 @@ class ContactController extends Controller
             $query->where('dnd_status', $request->string('dnd_status'));
         }
 
+        if ($request->filled('import_id')) {
+            $query->where('contact_import_id', $request->string('import_id'));
+        }
+
         $paginator = $this->paginateQuery($request, $query);
 
         return $this->paginatedApiResponse('Contacts loaded.', ApiReason::SUCCESS, $paginator, fn (Contact $row) => $this->contacts->present($row));
@@ -92,6 +96,36 @@ class ContactController extends Controller
         }
 
         return $this->respondFrom($this->contacts->uploadStatus($group, $import));
+    }
+
+    public function uploadContacts(Request $request, int $contactGroup, string $import): JsonResponse
+    {
+        $group = $this->ownedGroup($request, $contactGroup);
+        $upload = $group
+            ? ContactImport::query()->where('contact_group_id', $group->id)->whereKey($import)->first()
+            : null;
+
+        if (! $group || ! $upload) {
+            return $this->apiResponse(true, 'Upload not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $query = Contact::query()
+            ->where('contact_group_id', $group->id)
+            ->where('contact_import_id', $upload->id)
+            ->latest('id');
+
+        if ($request->filled('dnd_status')) {
+            $query->where('dnd_status', $request->string('dnd_status'));
+        }
+
+        $paginator = $this->paginateQuery($request, $query);
+
+        return $this->paginatedApiResponse(
+            'Upload contacts loaded.',
+            ApiReason::SUCCESS,
+            $paginator,
+            fn (Contact $row) => $this->contacts->present($row),
+        );
     }
 
     public function show(Request $request, int $contactGroup, int $contact): JsonResponse

@@ -8,6 +8,7 @@ use App\Models\ApiKey;
 use App\Models\Client;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
+use App\Support\ContactDate;
 use Illuminate\Support\Str;
 
 class ApiKeyService
@@ -26,7 +27,7 @@ class ApiKeyService
             'name' => $key->name,
             'description' => $key->description,
             'prefix' => $key->prefix,
-            'expires_at' => optional($key->expires_at)->toDateTimeString(),
+            'expires_at' => optional($key->expires_at)->toDateString(),
             'status' => $key->status,
             'last_used_at' => optional($key->last_used_at)->toDateTimeString(),
             'created_at' => optional($key->created_at)->toDateTimeString(),
@@ -53,7 +54,7 @@ class ApiKeyService
             'description' => $input['description'] ?? null,
             'prefix' => $prefix,
             'token' => $hash,
-            'expires_at' => $input['expires_at'] ?? null,
+            'expires_at' => ContactDate::endOfDay($input['expires_at'] ?? null),
             'status' => 'active',
         ]);
 
@@ -74,7 +75,9 @@ class ApiKeyService
         $key->update([
             'name' => $input['name'] ?? $key->name,
             'description' => array_key_exists('description', $input) ? $input['description'] : $key->description,
-            'expires_at' => array_key_exists('expires_at', $input) ? $input['expires_at'] : $key->expires_at,
+            'expires_at' => array_key_exists('expires_at', $input)
+                ? ContactDate::endOfDay($input['expires_at'])
+                : $key->expires_at,
             'status' => $input['status'] ?? $key->status,
         ]);
 
@@ -92,7 +95,9 @@ class ApiKeyService
         $key->update([
             'prefix' => $prefix,
             'token' => $hash,
-            'expires_at' => array_key_exists('expires_at', $input) ? $input['expires_at'] : $key->expires_at,
+            'expires_at' => array_key_exists('expires_at', $input)
+                ? ContactDate::endOfDay($input['expires_at'])
+                : $key->expires_at,
             'status' => 'active',
         ]);
 

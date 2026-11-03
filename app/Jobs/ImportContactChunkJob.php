@@ -84,6 +84,7 @@ class ImportContactChunkJob implements ShouldQueue
             $toInsert[] = [
                 'client_id' => $this->clientId,
                 'contact_group_id' => $this->groupId,
+                'contact_import_id' => $this->importId,
                 'first_name' => $this->limit($record['first_name']),
                 'last_name' => $this->limit($record['last_name']),
                 'email' => $email,
