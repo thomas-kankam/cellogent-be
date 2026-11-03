@@ -81,10 +81,8 @@ Route::prefix('client')->group(function () {
 
         Route::get('api-keys', [ClientApiKeyController::class, 'index']);
         Route::post('api-keys', [ClientApiKeyController::class, 'store']);
+        Route::post('api-keys/regenerate', [ClientApiKeyController::class, 'regenerate']);
         Route::get('api-keys/{apiKey}', [ClientApiKeyController::class, 'show']);
-        Route::put('api-keys/{apiKey}', [ClientApiKeyController::class, 'update']);
-        Route::post('api-keys/{apiKey}/regenerate', [ClientApiKeyController::class, 'regenerate']);
-        Route::delete('api-keys/{apiKey}', [ClientApiKeyController::class, 'destroy']);
 
         Route::get('payments', [ClientPaymentController::class, 'index']);
         Route::get('payments/{payment}', [ClientPaymentController::class, 'show']);

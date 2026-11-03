@@ -8,7 +8,7 @@ use App\Models\ApiKey;
 use App\Models\Client;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
-use App\Support\ContactDate;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ApiKeyService
@@ -23,11 +23,11 @@ class ApiKeyService
     {
         $payload = [
             'id' => $key->id,
+            'resource' => 'api_key',
             'client_id' => $key->client_id,
             'name' => $key->name,
             'description' => $key->description,
             'prefix' => $key->prefix,
-            'expires_at' => optional($key->expires_at)->toDateString(),
             'status' => $key->status,
             'last_used_at' => optional($key->last_used_at)->toDateTimeString(),
             'created_at' => optional($key->created_at)->toDateTimeString(),
@@ -41,12 +41,30 @@ class ApiKeyService
         return $payload;
     }
 
+    public function activeFor(Client $client): ?ApiKey
+    {
+        return ApiKey::query()
+            ->where('client_id', $client->id)
+            ->where('status', 'active')
+            ->latest('id')
+            ->first();
+    }
+
     /**
      * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function create(Client $client, array $input): array
     {
+        if ($this->activeFor($client)) {
+            return $this->result(
+                true,
+                'You already have an active API key. Regenerate it to get a new token.',
+                ApiCode::BAD_REQUEST,
+                ApiReason::INVALID,
+            );
+        }
+
         [$plain, $prefix, $hash] = $this->makeToken();
 
         $key = ApiKey::create([
@@ -55,7 +73,6 @@ class ApiKeyService
             'description' => $input['description'] ?? null,
             'prefix' => $prefix,
             'token' => $hash,
-            'expires_at' => ContactDate::endOfDay($input['expires_at'] ?? null),
             'status' => 'active',
         ]);
 
@@ -64,64 +81,58 @@ class ApiKeyService
             'name' => $key->name,
         ]);
 
-        return $this->result(false, 'API key created. Copy the token now; it is not shown again.', ApiCode::CREATED, ApiReason::CREATED, $this->present($key, $plain));
+        return $this->result(
+            false,
+            'API key created. Copy the token now; it is not shown again.',
+            ApiCode::CREATED,
+            ApiReason::CREATED,
+            $this->present($key, $plain),
+        );
     }
 
     /**
-     * @param  array<string, mixed>  $input
+     * Deactivate every active key for the client, then create a new active key.
+     *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function update(Client $client, ApiKey $key, array $input): array
+    public function regenerate(Client $client): array
     {
-        $key->update([
-            'name' => $input['name'] ?? $key->name,
-            'description' => array_key_exists('description', $input) ? $input['description'] : $key->description,
-            'expires_at' => array_key_exists('expires_at', $input)
-                ? ContactDate::endOfDay($input['expires_at'])
-                : $key->expires_at,
-            'status' => $input['status'] ?? $key->status,
-        ]);
+        $current = $this->activeFor($client);
 
-        return $this->result(false, 'API key updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($key->fresh()));
-    }
+        if (! $current) {
+            return $this->result(true, 'No active API key to regenerate. Create one first.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
 
-    /**
-     * @param  array<string, mixed>  $input
-     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
-     */
-    public function regenerate(Client $client, ApiKey $key, array $input = []): array
-    {
         [$plain, $prefix, $hash] = $this->makeToken();
 
-        $key->update([
-            'prefix' => $prefix,
-            'token' => $hash,
-            'expires_at' => array_key_exists('expires_at', $input)
-                ? ContactDate::endOfDay($input['expires_at'])
-                : $key->expires_at,
-            'status' => 'active',
-        ]);
+        $key = DB::transaction(function () use ($client, $current, $prefix, $hash) {
+            ApiKey::query()
+                ->where('client_id', $client->id)
+                ->where('status', 'active')
+                ->update(['status' => 'inactive']);
+
+            return ApiKey::create([
+                'client_id' => $client->id,
+                'name' => $current->name,
+                'description' => $current->description,
+                'prefix' => $prefix,
+                'token' => $hash,
+                'status' => 'active',
+            ]);
+        });
 
         $this->activity()->record('API key regenerated', 'api_key', 'updated', 'client', $client, $client, [
             'api_key_id' => $key->id,
+            'replaced_api_key_id' => $current->id,
         ]);
 
-        return $this->result(false, 'API key regenerated. Copy the token now; it is not shown again.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($key->fresh(), $plain));
-    }
-
-    /**
-     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
-     */
-    public function delete(Client $client, ApiKey $key): array
-    {
-        $id = $key->id;
-        $key->delete();
-
-        $this->activity()->record('API key deleted', 'api_key', 'deleted', 'client', $client, $client, [
-            'api_key_id' => $id,
-        ]);
-
-        return $this->result(false, 'API key deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+        return $this->result(
+            false,
+            'API key regenerated. The previous key is inactive. Copy the token now; it is not shown again.',
+            ApiCode::SUCCESS,
+            ApiReason::SUCCESS,
+            $this->present($key, $plain),
+        );
     }
 
     /**

@@ -15,8 +15,8 @@ return new class extends Migration
             $table->string('description')->nullable();
             $table->string('prefix', 16)->index();
             $table->string('token'); // hashed. plaintext is returned only on create/regenerate
-            $table->timestamp('expires_at')->nullable();
-            $table->string('status')->default('active')->index();
+            $table->string('status')->default('active')->index(); // one active key per client; regenerate sets old ones inactive
+
             $table->timestamp('last_used_at')->nullable();
             $table->timestamps();
         });

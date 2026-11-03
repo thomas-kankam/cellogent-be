@@ -12,7 +12,6 @@ class ApiKey extends Model
         'description',
         'prefix',
         'token',
-        'expires_at',
         'status',
         'last_used_at',
     ];
@@ -24,7 +23,6 @@ class ApiKey extends Model
     protected function casts(): array
     {
         return [
-            'expires_at' => 'datetime',
             'last_used_at' => 'datetime',
         ];
     }

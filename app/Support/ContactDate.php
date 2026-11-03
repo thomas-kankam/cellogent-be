@@ -3,7 +3,7 @@
 namespace App\Support;
 
 /**
- * Calendar dates for contacts (date_of_birth) and API keys (expires_at).
+ * Calendar dates (e.g. contact date_of_birth).
  * Accepts 1994-05-12, 12/05/1994, 12-05-1994, 12.05.1994 (day, then month, then year).
  * Stored as Y-m-d. Blank stays blank. Anything else is rejected.
  */
@@ -35,14 +35,6 @@ final class ContactDate
         }
 
         return null;
-    }
-
-    /** End of that calendar day, for expiry timestamps. */
-    public static function endOfDay(mixed $value): ?string
-    {
-        $date = self::store($value);
-
-        return $date === null ? null : $date.' 23:59:59';
     }
 
     protected static function make(int $year, int $month, int $day): ?string

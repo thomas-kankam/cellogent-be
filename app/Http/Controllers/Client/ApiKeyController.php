@@ -3,9 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ApiKey\RegenerateApiKeyRequest;
 use App\Http\Requests\ApiKey\StoreApiKeyRequest;
-use App\Http\Requests\ApiKey\UpdateApiKeyRequest;
 use App\Models\ApiKey;
 use App\Services\ApiKeyService;
 use App\Support\ApiCode;
@@ -21,12 +19,13 @@ class ApiKeyController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $paginator = $this->paginateQuery(
-            $request,
-            ApiKey::query()->where('client_id', $request->user()->id)->latest('id'),
-        );
+        $key = $this->keys->activeFor($request->user());
 
-        return $this->paginatedApiResponse('API keys loaded.', ApiReason::SUCCESS, $paginator, fn (ApiKey $row) => $this->keys->present($row));
+        if (! $key) {
+            return $this->apiResponse(true, 'No active API key.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->apiResponse(false, 'Active API key loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->keys->present($key));
     }
 
     public function store(StoreApiKeyRequest $request): JsonResponse
@@ -36,37 +35,15 @@ class ApiKeyController extends Controller
 
     public function show(Request $request, ApiKey $apiKey): JsonResponse
     {
-        if ((int) $apiKey->client_id !== (int) $request->user()->id) {
+        if ((int) $apiKey->client_id !== (int) $request->user()->id || $apiKey->status !== 'active') {
             return $this->apiResponse(true, 'API key not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
         return $this->apiResponse(false, 'API key loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->keys->present($apiKey));
     }
 
-    public function update(UpdateApiKeyRequest $request, ApiKey $apiKey): JsonResponse
+    public function regenerate(Request $request): JsonResponse
     {
-        if ((int) $apiKey->client_id !== (int) $request->user()->id) {
-            return $this->apiResponse(true, 'API key not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        return $this->respondFrom($this->keys->update($request->user(), $apiKey, $request->validated()));
-    }
-
-    public function regenerate(RegenerateApiKeyRequest $request, ApiKey $apiKey): JsonResponse
-    {
-        if ((int) $apiKey->client_id !== (int) $request->user()->id) {
-            return $this->apiResponse(true, 'API key not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        return $this->respondFrom($this->keys->regenerate($request->user(), $apiKey, $request->validated()));
-    }
-
-    public function destroy(Request $request, ApiKey $apiKey): JsonResponse
-    {
-        if ((int) $apiKey->client_id !== (int) $request->user()->id) {
-            return $this->apiResponse(true, 'API key not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        return $this->respondFrom($this->keys->delete($request->user(), $apiKey));
+        return $this->respondFrom($this->keys->regenerate($request->user()));
     }
 }
