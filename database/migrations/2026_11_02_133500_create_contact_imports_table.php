@@ -22,6 +22,7 @@ return new class extends Migration
             $table->unsignedInteger('failed')->default(0);
             $table->unsignedInteger('chunks_expected')->default(0);
             $table->unsignedInteger('chunks_done')->default(0);
+            $table->json('skip_reasons')->nullable(); // why rows were skipped / failed
             $table->string('message')->nullable();
             $table->timestamps();
         });

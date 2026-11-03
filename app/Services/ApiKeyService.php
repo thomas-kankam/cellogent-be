@@ -23,6 +23,7 @@ class ApiKeyService
     {
         $payload = [
             'id' => $key->id,
+            'resource' => 'api_key',
             'client_id' => $key->client_id,
             'name' => $key->name,
             'description' => $key->description,
@@ -34,6 +35,7 @@ class ApiKeyService
         ];
 
         if ($plainToken) {
+            // Plaintext token is only present on create / regenerate.
             $payload['token'] = $plainToken;
         }
 

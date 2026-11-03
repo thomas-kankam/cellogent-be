@@ -2,9 +2,10 @@
 
 namespace App\Jobs;
 
-use App\Support\ContactUploadFinalizer;
 use App\Support\ContactDate;
 use App\Support\ContactGender;
+use App\Support\ContactImportReasons;
+use App\Support\ContactUploadFinalizer;
 use App\Support\GhanaPhone;
 use App\Support\LongQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -14,8 +15,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Cleans one chunk of rows and bulk-inserts them.
- * Duplicates against existing contacts are dropped by the group unique indexes (INSERT IGNORE),
- * so no lookup query is needed before inserting.
+ * Duplicates against existing contacts are dropped by the group unique indexes (INSERT IGNORE).
  */
 class ImportContactChunkJob implements ShouldQueue
 {
@@ -25,7 +25,6 @@ class ImportContactChunkJob implements ShouldQueue
 
     public int $timeout = 300;
 
-    /** Rows per INSERT statement (13 columns x 1000 stays well under MySQL's 65k placeholder limit). */
     protected const INSERT_SIZE = 1000;
 
     /**
@@ -51,6 +50,7 @@ class ImportContactChunkJob implements ShouldQueue
         $seenDob = [];
         $skipped = 0;
         $failed = 0;
+        $reasons = array_fill_keys(ContactImportReasons::keys(), 0);
 
         foreach ($this->rows as $values) {
             $record = array_combine(ImportContactsJob::COLUMNS, $values);
@@ -58,6 +58,7 @@ class ImportContactChunkJob implements ShouldQueue
 
             if (! $phone) {
                 $failed++;
+                $reasons[ContactImportReasons::INVALID_PHONE]++;
 
                 continue;
             }
@@ -65,10 +66,23 @@ class ImportContactChunkJob implements ShouldQueue
             $email = $record['email'] !== null ? strtolower($this->limit($record['email'])) : null;
             $dob = ContactDate::store($record['date_of_birth']);
 
-            if (isset($seenPhone[$phone])
-                || ($email && isset($seenEmail[$email]))
-                || ($dob && isset($seenDob[$dob]))) {
+            if (isset($seenPhone[$phone])) {
                 $skipped++;
+                $reasons[ContactImportReasons::DUPLICATE_PHONE_IN_FILE]++;
+
+                continue;
+            }
+
+            if ($email && isset($seenEmail[$email])) {
+                $skipped++;
+                $reasons[ContactImportReasons::DUPLICATE_EMAIL_IN_FILE]++;
+
+                continue;
+            }
+
+            if ($dob && isset($seenDob[$dob])) {
+                $skipped++;
+                $reasons[ContactImportReasons::DUPLICATE_DOB_IN_FILE]++;
 
                 continue;
             }
@@ -104,23 +118,27 @@ class ImportContactChunkJob implements ShouldQueue
         $inserted = 0;
 
         foreach (array_chunk($toInsert, self::INSERT_SIZE) as $batch) {
-            // Retries on deadlock: several chunks of the same group insert in parallel.
             $inserted += DB::transaction(fn () => DB::table('contacts')->insertOrIgnore($batch), 3);
         }
 
-        $skipped += count($toInsert) - $inserted;
+        $alreadyInGroup = count($toInsert) - $inserted;
+        $skipped += $alreadyInGroup;
+        $reasons[ContactImportReasons::ALREADY_IN_GROUP] += $alreadyInGroup;
 
         Cache::increment("contact-import:{$this->importId}:inserted", $inserted);
         Cache::increment("contact-import:{$this->importId}:skipped", $skipped);
         Cache::increment("contact-import:{$this->importId}:failed", $failed);
         Cache::increment("contact-import:{$this->importId}:chunks_done");
 
+        foreach ($reasons as $code => $count) {
+            if ($count > 0) {
+                Cache::increment("contact-import:{$this->importId}:reason:{$code}", $count);
+            }
+        }
+
         ContactUploadFinalizer::maybeFinalize($this->importId, $this->clientId, $this->groupId, $this->diskPath);
     }
 
-    /**
-     * INSERT IGNORE would silently truncate long text, so cut it ourselves.
-     */
     protected function limit(?string $value): ?string
     {
         return $value === null ? null : mb_substr($value, 0, 255);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ContactImportReasons;
 use App\Support\ContactUploadFinalizer;
 use Illuminate\Database\Eloquent\Model;
 
@@ -28,8 +29,16 @@ class ContactImport extends Model
         'failed',
         'chunks_expected',
         'chunks_done',
+        'skip_reasons',
         'message',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'skip_reasons' => 'array',
+        ];
+    }
 
     public function scopeListable($query)
     {
@@ -53,6 +62,9 @@ class ContactImport extends Model
         $failed = (int) ($live['failed'] ?? $this->failed);
         $expected = (int) ($live['chunks_expected'] ?? $this->chunks_expected);
         $done = (int) ($live['chunks_done'] ?? $this->chunks_done);
+        $reasonCounts = in_array($this->status, ['queued', 'processing'], true)
+            ? ContactUploadFinalizer::liveReasons($this->id)
+            : (is_array($this->skip_reasons) ? $this->skip_reasons : []);
 
         return [
             'import_id' => $this->id,
@@ -70,6 +82,7 @@ class ContactImport extends Model
             'progress' => $this->status === 'completed'
                 ? 100
                 : ($expected > 0 ? min(99, (int) floor($done / $expected * 100)) : 0),
+            'reasons' => ContactImportReasons::present($reasonCounts),
             'message' => $this->message,
             'created_at' => optional($this->created_at)->toDateTimeString(),
             'updated_at' => optional($this->updated_at)->toDateTimeString(),

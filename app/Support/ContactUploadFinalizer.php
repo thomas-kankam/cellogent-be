@@ -31,6 +31,7 @@ final class ContactUploadFinalizer
                 'failed' => 0,
                 'chunks_expected' => 0,
                 'chunks_done' => 0,
+                'skip_reasons' => [],
                 'message' => null,
             ],
         );
@@ -51,6 +52,20 @@ final class ContactUploadFinalizer
             'chunks_expected' => (int) Cache::get(self::key($importId, 'chunks_expected'), 0),
             'chunks_done' => (int) Cache::get(self::key($importId, 'chunks_done'), 0),
         ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public static function liveReasons(string $importId): array
+    {
+        $counts = [];
+
+        foreach (ContactImportReasons::keys() as $code) {
+            $counts[$code] = (int) Cache::get(self::key($importId, 'reason:'.$code), 0);
+        }
+
+        return $counts;
     }
 
     /**
@@ -76,6 +91,7 @@ final class ContactUploadFinalizer
             'failed' => (int) ($result['failed'] ?? 0),
             'chunks_expected' => (int) Cache::get(self::key($importId, 'chunks_expected'), 0),
             'chunks_done' => (int) Cache::get(self::key($importId, 'chunks_done'), 0),
+            'skip_reasons' => $result['skip_reasons'] ?? self::liveReasons($importId),
             'message' => $result['message'] ?? null,
         ]);
 
@@ -118,6 +134,10 @@ final class ContactUploadFinalizer
         Cache::put(self::key($importId, 'total'), 0, 86400);
         Cache::put(self::key($importId, 'reader_done'), false, 86400);
         Cache::forget(self::key($importId, 'finalized'));
+
+        foreach (ContactImportReasons::keys() as $code) {
+            Cache::put(self::key($importId, 'reason:'.$code), 0, 86400);
+        }
     }
 
     public static function markReaderComplete(string $importId, int $totalRows): void
@@ -167,6 +187,10 @@ final class ContactUploadFinalizer
             'reader_done', 'total', 'finalized', 'disk_path',
         ] as $key) {
             Cache::forget("contact-import:{$importId}:{$key}");
+        }
+
+        foreach (ContactImportReasons::keys() as $code) {
+            Cache::forget(self::key($importId, 'reason:'.$code));
         }
     }
 

@@ -21,10 +21,21 @@
                         <table width="100%" cellpadding="8" cellspacing="0" style="margin-top:16px;border:1px solid #e5e7eb;">
                             <tr><td>Rows read</td><td>{{ $stats['total'] }}</td></tr>
                             <tr><td>Added</td><td>{{ $stats['inserted'] }}</td></tr>
-                            <tr><td>Skipped (already in this group)</td><td>{{ $stats['skipped'] }}</td></tr>
-                            <tr><td>Failed (missing or invalid phone number)</td><td>{{ $stats['failed'] }}</td></tr>
+                            <tr><td>Skipped</td><td>{{ $stats['skipped'] }}</td></tr>
+                            <tr><td>Failed</td><td>{{ $stats['failed'] }}</td></tr>
                             <tr><td>Contacts in group now</td><td>{{ $stats['count_of_contacts'] }}</td></tr>
                         </table>
+                        @if (! empty($stats['reasons']))
+                            <p style="font-size:14px;color:#555;margin-top:20px;"><strong>Why some rows were not added</strong></p>
+                            <table width="100%" cellpadding="8" cellspacing="0" style="border:1px solid #e5e7eb;">
+                                @foreach ($stats['reasons'] as $reason)
+                                    <tr>
+                                        <td>{{ $reason['message'] }}</td>
+                                        <td>{{ $reason['count'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </table>
+                        @endif
                     </td>
                 </tr>
             </table>

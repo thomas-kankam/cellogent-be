@@ -22,6 +22,7 @@ class ContactGroupService
     {
         return [
             'id' => $group->id,
+            'resource' => 'contact_group',
             'client_id' => $group->client_id,
             'name' => $group->name,
             'description' => $group->description,
