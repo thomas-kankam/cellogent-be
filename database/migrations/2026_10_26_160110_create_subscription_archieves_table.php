@@ -18,6 +18,7 @@ return new class extends Migration
             $table->unsignedBigInteger('plan_id')->nullable()->index();
             $table->string('plan_name')->nullable();
             $table->decimal('plan_price', 12, 2)->nullable();
+            $table->unsignedInteger('units')->nullable();
             $table->string('plan_type')->nullable(); // custom, non_expiry, monthly
             $table->unsignedInteger('duration_in_months')->nullable();
             $table->timestamp('starts_at')->nullable();
@@ -26,6 +27,9 @@ return new class extends Migration
             $table->unsignedBigInteger('payment_id')->nullable()->index();
             $table->string('payment_reference')->nullable();
             $table->timestamps();
+
+            $table->index(['client_id', 'created_at']);
+            $table->index('created_at');
         });
     }
 

@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Passport;
 
@@ -22,6 +25,16 @@ class AppServiceProvider extends ServiceProvider
         Passport::personalAccessTokensExpireIn(now()->addDays(30));
         Passport::tokensExpireIn(now()->addDays(30));
         Passport::refreshTokensExpireIn(now()->addDays(60));
+
+        RateLimiter::for('sms-api', function (Request $request) {
+            return Limit::perMinute((int) config('sms.api_rate_per_minute', 300))
+                ->by('sms-api:'.($request->user()?->id ?? $request->ip()));
+        });
+
+        RateLimiter::for('checkout', function (Request $request) {
+            return Limit::perMinute((int) config('payments.checkout_per_minute', 10))
+                ->by('checkout:'.($request->user()?->id ?? $request->ip()));
+        });
     }
 
     protected function ensureWritableDirectories(): void

@@ -5,10 +5,14 @@ use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\OnboardingController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
+use App\Http\Controllers\Admin\PaymentGatewayController as AdminPaymentGatewayController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
+use App\Http\Controllers\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\SenderIdBlacklistController as AdminSenderIdBlacklistController;
 use App\Http\Controllers\Admin\SenderIdController as AdminSenderIdController;
+use App\Http\Controllers\Admin\SmsController as AdminSmsController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\WalletController as AdminWalletController;
 use App\Http\Controllers\Auth\AdminAuthController;
@@ -21,10 +25,22 @@ use App\Http\Controllers\Client\ContactGroupController as ClientContactGroupCont
 use App\Http\Controllers\Client\OrderController as ClientOrderController;
 use App\Http\Controllers\Client\PaymentController as ClientPaymentController;
 use App\Http\Controllers\Client\PlanController as ClientPlanController;
+use App\Http\Controllers\Client\ReportController as ClientReportController;
 use App\Http\Controllers\Client\SenderIdController as ClientSenderIdController;
+use App\Http\Controllers\Client\SmsController as ClientSmsController;
 use App\Http\Controllers\Client\SubscriptionController as ClientSubscriptionController;
 use App\Http\Controllers\Client\WalletController as ClientWalletController;
+use App\Http\Controllers\PaymentWebhookController;
 use Illuminate\Support\Facades\Route;
+
+/*
+| Payment gateway notifications (public, verified by signature/token, then re-checked with the gateway).
+*/
+Route::middleware('throttle:120,1')->group(function () {
+    Route::post('webhooks/paystack', [PaymentWebhookController::class, 'paystack']);
+    Route::get('callbacks/paystack', [PaymentWebhookController::class, 'paystackReturn']);
+    Route::post('webhooks/kairos-payment', [PaymentWebhookController::class, 'kairos']);
+});
 
 Route::prefix('client')->group(function () {
     Route::post('signup', [ClientAuthController::class, 'signup']);
@@ -45,11 +61,12 @@ Route::prefix('client')->group(function () {
 
         Route::get('wallet', [ClientWalletController::class, 'show']);
         Route::get('wallet/top-ups', [ClientWalletController::class, 'topUps']);
-        Route::post('wallet/top-ups', [ClientWalletController::class, 'storeTopUp']);
+        Route::post('wallet/top-ups', [ClientWalletController::class, 'storeTopUp'])->middleware('throttle:checkout');
+        Route::get('wallet/transactions', [ClientWalletController::class, 'transactions']);
 
         Route::get('subscription', [ClientSubscriptionController::class, 'show']);
         Route::get('subscription/archives', [ClientSubscriptionController::class, 'archives']);
-        Route::post('subscription', [ClientSubscriptionController::class, 'store']);
+        Route::post('subscription', [ClientSubscriptionController::class, 'store'])->middleware('throttle:checkout');
 
         Route::get('sender-ids', [ClientSenderIdController::class, 'index']);
         Route::post('sender-ids', [ClientSenderIdController::class, 'store']);
@@ -85,12 +102,52 @@ Route::prefix('client')->group(function () {
         Route::get('api-keys/{apiKey}', [ClientApiKeyController::class, 'show']);
 
         Route::get('payments', [ClientPaymentController::class, 'index']);
-        Route::get('payments/{payment}', [ClientPaymentController::class, 'show']);
+        Route::get('payments/quote', [ClientPaymentController::class, 'quote']);
+        Route::post('payments/checkout', [ClientPaymentController::class, 'checkout'])->middleware('throttle:checkout');
+        Route::get('payments/{payment}', [ClientPaymentController::class, 'show'])->whereNumber('payment');
+        Route::post('payments/{payment}/verify', [ClientPaymentController::class, 'verify'])->whereNumber('payment')->middleware('throttle:20,1');
+
+        Route::get('reports/{report}', [ClientReportController::class, 'show']);
+        Route::get('reports/{report}/export', [ClientReportController::class, 'export'])->middleware('throttle:20,1');
+        Route::get('exports/{dataset}', [ClientReportController::class, 'dataset'])->middleware('throttle:20,1');
 
         Route::get('orders', [ClientOrderController::class, 'index']);
-        Route::post('orders', [ClientOrderController::class, 'store']);
+        Route::post('orders', [ClientOrderController::class, 'store'])->middleware('throttle:checkout');
         Route::get('orders/{order}', [ClientOrderController::class, 'show']);
+
+        Route::get('sms/balance', [ClientSmsController::class, 'balance']);
+        Route::get('sms/units/history', [ClientSmsController::class, 'unitHistory']);
+        Route::post('sms/quick', [ClientSmsController::class, 'quick']);
+        Route::post('sms/bulk', [ClientSmsController::class, 'bulk']);
+        Route::get('sms', [ClientSmsController::class, 'index']);
+        Route::get('sms/{inbox}', [ClientSmsController::class, 'show'])->whereNumber('inbox');
+        Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
+        Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox');
+        Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox');
     });
+});
+
+/*
+| Public API for clients' own systems. Authenticate with the client's API key
+| (x-api-key header or Bearer). Same responses as the dashboard; request_type = api.
+*/
+Route::prefix('v1')->middleware(['auth.apikey', 'throttle:sms-api'])->group(function () {
+    Route::get('balance', [ClientSmsController::class, 'balance']);
+    Route::get('units/history', [ClientSmsController::class, 'unitHistory']);
+
+    Route::post('sms/quick', [ClientSmsController::class, 'quick']);
+    Route::post('sms/bulk', [ClientSmsController::class, 'bulk']);
+    Route::get('sms', [ClientSmsController::class, 'index']);
+    Route::get('sms/{inbox}', [ClientSmsController::class, 'show'])->whereNumber('inbox');
+    Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
+    Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox');
+    Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox');
+
+    Route::get('sender-ids', [ClientSenderIdController::class, 'index']);
+    Route::post('sender-ids', [ClientSenderIdController::class, 'store']);
+    Route::get('sender-ids/{senderId}', [ClientSenderIdController::class, 'show']);
+
+    Route::get('contact-groups', [ClientContactGroupController::class, 'index']);
 });
 
 Route::prefix('admin')->group(function () {
@@ -132,6 +189,17 @@ Route::prefix('admin')->group(function () {
 
         Route::get('wallets', [AdminWalletController::class, 'index']);
         Route::get('wallet-top-ups', [AdminWalletController::class, 'topUps']);
+        Route::get('wallet-transactions', [AdminWalletController::class, 'transactions']);
+
+        Route::get('payment-gateways', [AdminPaymentGatewayController::class, 'index']);
+        Route::put('payment-gateways/{code}', [AdminPaymentGatewayController::class, 'update']);
+        Route::post('payment-gateways/{code}/primary', [AdminPaymentGatewayController::class, 'primary']);
+        Route::get('settings/payments', [AdminPaymentGatewayController::class, 'settings']);
+        Route::put('settings/payments', [AdminPaymentGatewayController::class, 'updateSettings']);
+
+        Route::get('reports/{report}', [AdminReportController::class, 'show']);
+        Route::get('reports/{report}/export', [AdminReportController::class, 'export']);
+        Route::get('exports/{dataset}', [AdminReportController::class, 'dataset']);
         Route::get('clients/{client}/wallet', [AdminWalletController::class, 'forClient']);
 
         Route::get('sender-ids', [AdminSenderIdController::class, 'index']);
@@ -141,10 +209,25 @@ Route::prefix('admin')->group(function () {
 
         Route::get('payments', [AdminPaymentController::class, 'index']);
         Route::get('payments/{payment}', [AdminPaymentController::class, 'show']);
+        Route::post('payments/{payment}/verify', [AdminPaymentController::class, 'verify']);
         Route::post('payments/{payment}/complete', [AdminPaymentController::class, 'complete']);
         Route::post('payments/{payment}/fail', [AdminPaymentController::class, 'fail']);
 
         Route::get('orders', [AdminOrderController::class, 'index']);
         Route::get('orders/{order}', [AdminOrderController::class, 'show']);
+
+        Route::get('sender-id-blacklist', [AdminSenderIdBlacklistController::class, 'index']);
+        Route::post('sender-id-blacklist', [AdminSenderIdBlacklistController::class, 'store']);
+        Route::delete('sender-id-blacklist/{blacklist}', [AdminSenderIdBlacklistController::class, 'destroy']);
+
+        Route::get('sms/overview', [AdminSmsController::class, 'overview']);
+        Route::get('sms/aggregator/balance', [AdminSmsController::class, 'aggregatorBalance']);
+        Route::get('sms/aggregator/requests', [AdminSmsController::class, 'aggregatorRequests']);
+        Route::get('sms/aggregator/delivery-receipts/{sequenceNo}', [AdminSmsController::class, 'deliveryReceipt']);
+        Route::get('sms/system', [AdminSmsController::class, 'systemMessages']);
+        Route::post('sms/quick', [AdminSmsController::class, 'quick']);
+        Route::get('sms', [AdminSmsController::class, 'index']);
+        Route::get('sms/{inbox}', [AdminSmsController::class, 'show'])->whereNumber('inbox');
+        Route::get('sms/{inbox}/recipients', [AdminSmsController::class, 'recipients'])->whereNumber('inbox');
     });
 });

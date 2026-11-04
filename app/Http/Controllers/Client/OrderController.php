@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Order\StoreOrderRequest;
 use App\Models\Order;
 use App\Services\OrderService;
-use App\Services\PaymentService;
+use App\Services\Payments\CheckoutService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 use Illuminate\Http\JsonResponse;
@@ -16,9 +16,8 @@ class OrderController extends Controller
 {
     public function __construct(
         protected OrderService $orders,
-        protected PaymentService $payments,
-    ) {
-    }
+        protected CheckoutService $checkout,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -44,6 +43,6 @@ class OrderController extends Controller
 
     public function store(StoreOrderRequest $request): JsonResponse
     {
-        return $this->respondFrom($this->payments->initiate($request->user(), $request->validated()));
+        return $this->respondFrom($this->checkout->start($request->user(), $request->purpose(), $request->validated()));
     }
 }

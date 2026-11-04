@@ -7,6 +7,7 @@ use App\Concerns\ReturnsServiceResult;
 use App\Models\Admin;
 use App\Models\Client;
 use App\Models\SenderId;
+use App\Models\SenderIdBlacklist;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 
@@ -39,6 +40,10 @@ class SenderIdService
      */
     public function request(Client $client, string $name): array
     {
+        if ($blocked = $this->blocked($name)) {
+            return $blocked;
+        }
+
         $exists = SenderId::query()
             ->where('client_id', $client->id)
             ->whereRaw('LOWER(name) = ?', [strtolower($name)])
@@ -67,6 +72,10 @@ class SenderIdService
     {
         if ((int) $senderId->client_id !== (int) $client->id) {
             return $this->result(true, 'Sender ID not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if ($blocked = $this->blocked($name)) {
+            return $blocked;
         }
 
         $taken = SenderId::query()
@@ -114,6 +123,10 @@ class SenderIdService
     {
         if ($senderId->status !== 'pending') {
             return $this->result(true, 'This sender ID is not pending.', ApiCode::BAD_REQUEST, ApiReason::ALREADY_PROCESSED);
+        }
+
+        if ($entry = SenderIdBlacklist::match($senderId->name)) {
+            return $this->result(true, 'This sender ID matches the blacklist entry "'.$entry->name.'". Reject it instead.', ApiCode::BAD_REQUEST, ApiReason::SENDER_ID_NOT_ALLOWED);
         }
 
         $senderId->update([
@@ -174,5 +187,88 @@ class SenderIdService
         ]);
 
         return $this->result(false, 'Sender ID deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     */
+    protected function blocked(string $name): ?array
+    {
+        if (! SenderIdBlacklist::match($name)) {
+            return null;
+        }
+
+        return $this->result(
+            true,
+            'This sender ID is not allowed. It is reserved or blocked by the networks. Choose a different name.',
+            ApiCode::BAD_REQUEST,
+            ApiReason::SENDER_ID_NOT_ALLOWED,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentBlacklist(SenderIdBlacklist $entry): array
+    {
+        return [
+            'id' => $entry->id,
+            'resource' => 'sender_id_blacklist',
+            'name' => $entry->name,
+            'match_type' => $entry->match_type,
+            'source' => $entry->source,
+            'reason' => $entry->reason,
+            'created_by' => $entry->created_by,
+            'created_at' => optional($entry->created_at)->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * @param  array{name: string, match_type?: string, source?: ?string, reason?: ?string}  $input
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function blacklist(Admin $admin, array $input): array
+    {
+        $normalized = SenderIdBlacklist::normalize($input['name']);
+
+        if ($normalized === '') {
+            return $this->result(true, 'Enter a name with letters or digits.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
+        }
+
+        if (SenderIdBlacklist::query()->where('normalized', $normalized)->exists()) {
+            return $this->result(true, 'This name is already blacklisted.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $entry = SenderIdBlacklist::create([
+            'name' => $input['name'],
+            'normalized' => $normalized,
+            'match_type' => $input['match_type'] ?? 'exact',
+            'source' => $input['source'] ?? null,
+            'reason' => $input['reason'] ?? null,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->activity()->record('Sender ID blacklisted', 'sender_id', 'blacklisted', 'admin', $admin, null, [
+            'blacklist_id' => $entry->id,
+            'name' => $entry->name,
+            'match_type' => $entry->match_type,
+        ]);
+
+        return $this->result(false, 'Sender ID blacklisted.', ApiCode::CREATED, ApiReason::CREATED, $this->presentBlacklist($entry));
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function unblacklist(Admin $admin, SenderIdBlacklist $entry): array
+    {
+        $name = $entry->name;
+        $entry->delete();
+
+        $this->activity()->record('Sender ID removed from blacklist', 'sender_id', 'unblacklisted', 'admin', $admin, null, [
+            'name' => $name,
+        ]);
+
+        return $this->result(false, 'Sender ID removed from the blacklist.', ApiCode::SUCCESS, ApiReason::SUCCESS);
     }
 }

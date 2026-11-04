@@ -3,22 +3,30 @@
 namespace App\Http\Requests\Order;
 
 use App\Http\Requests\ApiFormRequest;
-use App\Models\Payment;
+use App\Services\Payments\CheckoutService;
 use App\Support\GhanaPhone;
 
+/**
+ * Generic checkout. Prices are always looked up on the server.
+ */
 class StoreOrderRequest extends ApiFormRequest
 {
     public function rules(): array
     {
         return [
-            'type' => ['required', 'in:'.implode(',', Payment::PURPOSES)],
-            'name' => ['nullable', 'string', 'max:150'],
-            'unit_price' => ['required', 'numeric', 'min:0'],
-            'quantity' => ['nullable', 'integer', 'min:1'],
+            'purpose' => ['required_without:type', 'nullable', 'in:'.implode(',', CheckoutService::PURPOSES)],
+            'type' => ['nullable', 'in:'.implode(',', CheckoutService::PURPOSES)],
+            'amount' => ['required_if:purpose,wallet_top_up', 'nullable', 'numeric', 'min:1'],
+            'plan_id' => ['required_if:purpose,sms_units', 'nullable', 'integer'],
+            'months' => ['required_if:purpose,sms_units', 'nullable', 'integer', 'min:1'],
+            'method' => ['required', 'string', 'in:'.implode(',', CheckoutService::METHODS)],
+            'phone_number' => ['nullable', 'string', GhanaPhone::rule()],
             'network' => ['nullable', 'string', 'max:50'],
-            'method' => ['nullable', 'string', 'in:momo,card,bank,wallet'],
-            'meta_data' => ['nullable', 'array'],
-            'meta_data.phone' => ['nullable', 'string', GhanaPhone::rule()],
         ];
+    }
+
+    public function purpose(): string
+    {
+        return (string) ($this->input('purpose') ?? $this->input('type'));
     }
 }

@@ -13,6 +13,7 @@ class SubscriptionArchive extends Model
         'plan_id',
         'plan_name',
         'plan_price',
+        'units',
         'plan_type',
         'duration_in_months',
         'starts_at',

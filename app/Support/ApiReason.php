@@ -41,4 +41,10 @@ final class ApiReason
     public const ALREADY_PROCESSED = 'already_processed';
 
     public const INSUFFICIENT_BALANCE = 'insufficient_balance';
+
+    public const GATEWAY_UNAVAILABLE = 'gateway_unavailable';
+
+    public const SENDER_ID_NOT_ALLOWED = 'sender_id_not_allowed';
+
+    public const SENDER_ID_NOT_APPROVED = 'sender_id_not_approved';
 }

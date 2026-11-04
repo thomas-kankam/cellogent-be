@@ -4,9 +4,8 @@ namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Subscription\SubscribeRequest;
-use App\Models\Plan;
 use App\Models\SubscriptionArchive;
-use App\Services\PaymentService;
+use App\Services\Payments\CheckoutService;
 use App\Services\SubscriptionService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -17,9 +16,8 @@ class SubscriptionController extends Controller
 {
     public function __construct(
         protected SubscriptionService $subscriptions,
-        protected PaymentService $payments,
-    ) {
-    }
+        protected CheckoutService $checkout,
+    ) {}
 
     public function show(Request $request): JsonResponse
     {
@@ -49,33 +47,6 @@ class SubscriptionController extends Controller
 
     public function store(SubscribeRequest $request): JsonResponse
     {
-        $plan = Plan::query()->find($request->integer('plan_id'));
-
-        if (! $plan || $plan->status !== 'active') {
-            return $this->apiResponse(true, 'Plan not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        $months = $request->integer('months');
-        $option = $plan->optionForMonths($months);
-
-        if (! $option) {
-            return $this->apiResponse(true, 'This plan has no option for that duration.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
-        }
-
-        $type = $request->input('type', 'monthly');
-
-        return $this->respondFrom($this->payments->initiate($request->user(), [
-            'type' => 'sms_units',
-            'name' => $plan->name.' '.$months.' month plan',
-            'unit_price' => $option['price'],
-            'quantity' => 1,
-            'network' => $request->input('network'),
-            'method' => $request->input('method', 'momo'),
-            'meta_data' => [
-                'plan_id' => $plan->id,
-                'months' => $months,
-                'type' => $type,
-            ],
-        ]));
+        return $this->respondFrom($this->checkout->start($request->user(), 'sms_units', $request->validated()));
     }
 }

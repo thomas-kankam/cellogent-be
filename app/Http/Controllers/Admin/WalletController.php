@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Wallet;
 use App\Models\WalletTopUp;
+use App\Models\WalletTransaction;
 use App\Services\WalletService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -14,9 +15,7 @@ use Illuminate\Http\Request;
 
 class WalletController extends Controller
 {
-    public function __construct(protected WalletService $wallets)
-    {
-    }
+    public function __construct(protected WalletService $wallets) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -49,5 +48,26 @@ class WalletController extends Controller
         $paginator = $this->paginateQuery($request, $query);
 
         return $this->paginatedApiResponse('Wallet top-ups loaded.', ApiReason::SUCCESS, $paginator, fn (WalletTopUp $topUp) => $this->wallets->presentTopUp($topUp));
+    }
+
+    public function transactions(Request $request): JsonResponse
+    {
+        $query = WalletTransaction::query()->latest('id');
+
+        if ($request->filled('client_id')) {
+            $query->where('client_id', $request->integer('client_id'));
+        }
+        foreach (['type', 'purpose'] as $field) {
+            if ($request->filled($field)) {
+                $query->where($field, $request->string($field));
+            }
+        }
+        if ($request->filled('payment_id')) {
+            $query->where('payment_id', $request->integer('payment_id'));
+        }
+
+        $paginator = $this->paginateQuery($request, $query);
+
+        return $this->paginatedApiResponse('Wallet transactions loaded.', ApiReason::SUCCESS, $paginator, fn (WalletTransaction $t) => $this->wallets->presentTransaction($t) + ['client_id' => $t->client_id]);
     }
 }

@@ -10,7 +10,10 @@ class WalletTopUp extends Model
         'wallet_id',
         'client_id',
         'amount',
+        'charge',
+        'amount_paid',
         'previous_balance',
+        'balance_after',
         'payment_id',
     ];
 
@@ -18,7 +21,10 @@ class WalletTopUp extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'charge' => 'decimal:2',
+            'amount_paid' => 'decimal:2',
             'previous_balance' => 'decimal:2',
+            'balance_after' => 'decimal:2',
         ];
     }
 

@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Wallet\StoreTopUpRequest;
 use App\Models\WalletTopUp;
-use App\Services\PaymentService;
+use App\Models\WalletTransaction;
+use App\Services\Payments\CheckoutService;
 use App\Services\WalletService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -16,9 +17,8 @@ class WalletController extends Controller
 {
     public function __construct(
         protected WalletService $wallets,
-        protected PaymentService $payments,
-    ) {
-    }
+        protected CheckoutService $checkout,
+    ) {}
 
     public function show(Request $request): JsonResponse
     {
@@ -42,20 +42,29 @@ class WalletController extends Controller
         );
     }
 
-    public function storeTopUp(StoreTopUpRequest $request): JsonResponse
+    public function transactions(Request $request): JsonResponse
     {
-        if ($request->input('method') === 'wallet') {
-            return $this->apiResponse(true, 'Cannot top up a wallet with wallet balance.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        $query = WalletTransaction::query()->where('client_id', $request->user()->id)->latest('id');
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->string('type'));
+        }
+        if ($request->filled('purpose')) {
+            $query->where('purpose', $request->string('purpose'));
         }
 
-        return $this->respondFrom($this->payments->initiate($request->user(), [
-            'type' => 'wallet_top_up',
-            'name' => 'Wallet top up',
-            'unit_price' => $request->input('amount'),
-            'quantity' => 1,
-            'network' => $request->input('network'),
-            'method' => $request->input('method', 'momo'),
-            'meta_data' => ['amount' => $request->input('amount')],
-        ]));
+        $paginator = $this->paginateQuery($request, $query);
+
+        return $this->paginatedApiResponse(
+            'Wallet transactions loaded.',
+            ApiReason::SUCCESS,
+            $paginator,
+            fn (WalletTransaction $transaction) => $this->wallets->presentTransaction($transaction),
+        );
+    }
+
+    public function storeTopUp(StoreTopUpRequest $request): JsonResponse
+    {
+        return $this->respondFrom($this->checkout->start($request->user(), 'wallet_top_up', $request->validated()));
     }
 }

@@ -25,4 +25,6 @@ final class ApiCode
     public const TOO_MANY = 429;
 
     public const SERVER = 500;
+
+    public const UNAVAILABLE = 503;
 }

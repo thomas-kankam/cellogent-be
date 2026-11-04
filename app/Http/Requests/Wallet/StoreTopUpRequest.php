@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Wallet;
 
 use App\Http\Requests\ApiFormRequest;
+use App\Support\GhanaPhone;
 
 class StoreTopUpRequest extends ApiFormRequest
 {
@@ -10,8 +11,9 @@ class StoreTopUpRequest extends ApiFormRequest
     {
         return [
             'amount' => ['required', 'numeric', 'min:1'],
+            'method' => ['required', 'string', 'in:momo,card'],
+            'phone_number' => ['nullable', 'string', GhanaPhone::rule()],
             'network' => ['nullable', 'string', 'max:50'],
-            'method' => ['nullable', 'string', 'in:momo,card,bank,wallet'],
         ];
     }
 }
