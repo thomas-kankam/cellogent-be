@@ -13,10 +13,6 @@ class ApiKey extends Model
         'last_used_at',
     ];
 
-    protected $hidden = [
-        'token',
-    ];
-
     protected function casts(): array
     {
         return [

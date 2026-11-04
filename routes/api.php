@@ -99,7 +99,6 @@ Route::prefix('client')->group(function () {
         Route::get('api-keys', [ClientApiKeyController::class, 'index']);
         Route::post('api-keys', [ClientApiKeyController::class, 'store']);
         Route::post('api-keys/regenerate', [ClientApiKeyController::class, 'regenerate']);
-        Route::get('api-keys/{apiKey}', [ClientApiKeyController::class, 'show']);
 
         Route::get('payments', [ClientPaymentController::class, 'index']);
         Route::get('payments/quote', [ClientPaymentController::class, 'quote']);

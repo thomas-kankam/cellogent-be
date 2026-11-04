@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
-use App\Models\ApiKey;
 use App\Services\ApiKeyService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -28,15 +27,6 @@ class ApiKeyController extends Controller
     public function store(Request $request): JsonResponse
     {
         return $this->respondFrom($this->keys->create($request->user()));
-    }
-
-    public function show(Request $request, ApiKey $apiKey): JsonResponse
-    {
-        if ((int) $apiKey->client_id !== (int) $request->user()->id || $apiKey->status !== 'active') {
-            return $this->apiResponse(true, 'API key not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        return $this->apiResponse(false, 'API key loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->keys->present($apiKey));
     }
 
     public function regenerate(Request $request): JsonResponse

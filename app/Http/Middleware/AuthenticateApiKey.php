@@ -26,10 +26,8 @@ class AuthenticateApiKey
             return $this->deny('A valid API key is required.');
         }
 
-        $hash = hash('sha256', $token);
-
         $apiKey = ApiKey::query()
-            ->where('token', $hash)
+            ->where('token', $token)
             ->where('status', 'active')
             ->first();
 

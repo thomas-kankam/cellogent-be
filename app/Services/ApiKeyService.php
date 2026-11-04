@@ -19,23 +19,17 @@ class ApiKeyService
     /**
      * @return array<string, mixed>
      */
-    public function present(ApiKey $apiKey, ?string $plainToken = null): array
+    public function present(ApiKey $apiKey): array
     {
-        $payload = [
+        return [
             'id' => $apiKey->id,
             'resource' => 'api_key',
             'client_id' => $apiKey->client_id,
+            'token' => $apiKey->token,
             'status' => $apiKey->status,
             'last_used_at' => optional($apiKey->last_used_at)->toDateTimeString(),
             'created_at' => optional($apiKey->created_at)->toDateTimeString(),
         ];
-
-        if ($plainToken) {
-            // Plaintext token is only present on create / regenerate.
-            $payload['token'] = $plainToken;
-        }
-
-        return $payload;
     }
 
     public function activeFor(Client $client): ?ApiKey
@@ -61,11 +55,9 @@ class ApiKeyService
             );
         }
 
-        [$plain, $hash] = $this->makeToken();
-
         $apiKey = ApiKey::create([
             'client_id' => $client->id,
-            'token' => $hash,
+            'token' => $this->makeToken(),
             'status' => 'active',
         ]);
 
@@ -75,10 +67,10 @@ class ApiKeyService
 
         return $this->result(
             false,
-            'API key created. Copy the token now; it is not shown again.',
+            'API key created.',
             ApiCode::CREATED,
             ApiReason::CREATED,
-            $this->present($apiKey, $plain),
+            $this->present($apiKey),
         );
     }
 
@@ -95,9 +87,7 @@ class ApiKeyService
             return $this->result(true, 'No active API key to regenerate. Create one first.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        [$plain, $hash] = $this->makeToken();
-
-        $apiKey = DB::transaction(function () use ($client, $hash) {
+        $apiKey = DB::transaction(function () use ($client) {
             ApiKey::query()
                 ->where('client_id', $client->id)
                 ->where('status', 'active')
@@ -105,7 +95,7 @@ class ApiKeyService
 
             return ApiKey::create([
                 'client_id' => $client->id,
-                'token' => $hash,
+                'token' => $this->makeToken(),
                 'status' => 'active',
             ]);
         });
@@ -117,20 +107,15 @@ class ApiKeyService
 
         return $this->result(
             false,
-            'API key regenerated. The previous key is inactive. Copy the token now; it is not shown again.',
+            'API key regenerated. The previous key is inactive.',
             ApiCode::SUCCESS,
             ApiReason::SUCCESS,
-            $this->present($apiKey, $plain),
+            $this->present($apiKey),
         );
     }
 
-    /**
-     * @return array{0: string, 1: string}
-     */
-    protected function makeToken(): array
+    protected function makeToken(): string
     {
-        $plain = 'cgk_'.Str::random(48);
-
-        return [$plain, hash('sha256', $plain)];
+        return 'cgk_'.Str::random(48);
     }
 }
