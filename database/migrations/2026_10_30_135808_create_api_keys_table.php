@@ -11,12 +11,8 @@ return new class extends Migration
         Schema::create('api_keys', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('client_id')->index();
-            $table->string('name');
-            $table->string('description')->nullable();
-            $table->string('prefix', 16)->index();
-            $table->string('token'); // hashed. plaintext is returned only on create/regenerate
+            $table->string('token')->unique(); // hashed. plaintext is returned only on create/regenerate
             $table->string('status')->default('active')->index(); // one active key per client; regenerate sets old ones inactive
-
             $table->timestamp('last_used_at')->nullable();
             $table->timestamps();
         });

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ApiKey\StoreApiKeyRequest;
 use App\Models\ApiKey;
 use App\Services\ApiKeyService;
 use App\Support\ApiCode;
@@ -13,9 +12,7 @@ use Illuminate\Http\Request;
 
 class ApiKeyController extends Controller
 {
-    public function __construct(protected ApiKeyService $keys)
-    {
-    }
+    public function __construct(protected ApiKeyService $keys) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -28,9 +25,9 @@ class ApiKeyController extends Controller
         return $this->apiResponse(false, 'Active API key loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->keys->present($key));
     }
 
-    public function store(StoreApiKeyRequest $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        return $this->respondFrom($this->keys->create($request->user(), $request->validated()));
+        return $this->respondFrom($this->keys->create($request->user()));
     }
 
     public function show(Request $request, ApiKey $apiKey): JsonResponse

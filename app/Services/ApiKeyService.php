@@ -19,18 +19,15 @@ class ApiKeyService
     /**
      * @return array<string, mixed>
      */
-    public function present(ApiKey $key, ?string $plainToken = null): array
+    public function present(ApiKey $apiKey, ?string $plainToken = null): array
     {
         $payload = [
-            'id' => $key->id,
+            'id' => $apiKey->id,
             'resource' => 'api_key',
-            'client_id' => $key->client_id,
-            'name' => $key->name,
-            'description' => $key->description,
-            'prefix' => $key->prefix,
-            'status' => $key->status,
-            'last_used_at' => optional($key->last_used_at)->toDateTimeString(),
-            'created_at' => optional($key->created_at)->toDateTimeString(),
+            'client_id' => $apiKey->client_id,
+            'status' => $apiKey->status,
+            'last_used_at' => optional($apiKey->last_used_at)->toDateTimeString(),
+            'created_at' => optional($apiKey->created_at)->toDateTimeString(),
         ];
 
         if ($plainToken) {
@@ -51,10 +48,9 @@ class ApiKeyService
     }
 
     /**
-     * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function create(Client $client, array $input): array
+    public function create(Client $client): array
     {
         if ($this->activeFor($client)) {
             return $this->result(
@@ -65,20 +61,16 @@ class ApiKeyService
             );
         }
 
-        [$plain, $prefix, $hash] = $this->makeToken();
+        [$plain, $hash] = $this->makeToken();
 
-        $key = ApiKey::create([
+        $apiKey = ApiKey::create([
             'client_id' => $client->id,
-            'name' => $input['name'],
-            'description' => $input['description'] ?? null,
-            'prefix' => $prefix,
             'token' => $hash,
             'status' => 'active',
         ]);
 
         $this->activity()->record('API key created', 'api_key', 'created', 'client', $client, $client, [
-            'api_key_id' => $key->id,
-            'name' => $key->name,
+            'api_key_id' => $apiKey->id,
         ]);
 
         return $this->result(
@@ -86,7 +78,7 @@ class ApiKeyService
             'API key created. Copy the token now; it is not shown again.',
             ApiCode::CREATED,
             ApiReason::CREATED,
-            $this->present($key, $plain),
+            $this->present($apiKey, $plain),
         );
     }
 
@@ -103,9 +95,9 @@ class ApiKeyService
             return $this->result(true, 'No active API key to regenerate. Create one first.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        [$plain, $prefix, $hash] = $this->makeToken();
+        [$plain, $hash] = $this->makeToken();
 
-        $key = DB::transaction(function () use ($client, $current, $prefix, $hash) {
+        $apiKey = DB::transaction(function () use ($client, $hash) {
             ApiKey::query()
                 ->where('client_id', $client->id)
                 ->where('status', 'active')
@@ -113,16 +105,13 @@ class ApiKeyService
 
             return ApiKey::create([
                 'client_id' => $client->id,
-                'name' => $current->name,
-                'description' => $current->description,
-                'prefix' => $prefix,
                 'token' => $hash,
                 'status' => 'active',
             ]);
         });
 
         $this->activity()->record('API key regenerated', 'api_key', 'updated', 'client', $client, $client, [
-            'api_key_id' => $key->id,
+            'api_key_id' => $apiKey->id,
             'replaced_api_key_id' => $current->id,
         ]);
 
@@ -131,18 +120,17 @@ class ApiKeyService
             'API key regenerated. The previous key is inactive. Copy the token now; it is not shown again.',
             ApiCode::SUCCESS,
             ApiReason::SUCCESS,
-            $this->present($key, $plain),
+            $this->present($apiKey, $plain),
         );
     }
 
     /**
-     * @return array{0: string, 1: string, 2: string}
+     * @return array{0: string, 1: string}
      */
     protected function makeToken(): array
     {
         $plain = 'cgk_'.Str::random(48);
-        $prefix = substr($plain, 0, 12);
 
-        return [$plain, $prefix, hash('sha256', $plain)];
+        return [$plain, hash('sha256', $plain)];
     }
 }

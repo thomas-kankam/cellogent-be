@@ -8,9 +8,6 @@ class ApiKey extends Model
 {
     protected $fillable = [
         'client_id',
-        'name',
-        'description',
-        'prefix',
         'token',
         'status',
         'last_used_at',
