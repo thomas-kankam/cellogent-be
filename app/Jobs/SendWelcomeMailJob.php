@@ -13,10 +13,14 @@ class SendWelcomeMailJob implements ShouldQueue
 
     public int $tries = 3;
 
+    /**
+     * @param  array<string, mixed>  $meta
+     */
     public function __construct(
         public string $email,
         public string $purpose,
         public ?string $displayName = null,
+        public array $meta = [],
     ) {
         $this->onQueue('email-triggers');
     }
@@ -27,6 +31,7 @@ class SendWelcomeMailJob implements ShouldQueue
             $this->email,
             $this->purpose,
             $this->displayName,
+            $this->meta,
         ));
     }
 }

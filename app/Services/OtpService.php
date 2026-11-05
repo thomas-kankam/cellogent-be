@@ -26,8 +26,7 @@ class OtpService
     public function __construct(
         protected OtpRepository $otps,
         protected ActorRepository $actors,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
@@ -184,7 +183,7 @@ class OtpService
         if ($actor instanceof Client && ! $actor->is_verified && $type !== 'registration') {
             return $this->result(
                 true,
-                'Verify the registration OTP sent to your email first.',
+                'Request and verify a registration OTP first to activate your account.',
                 ApiCode::FORBIDDEN,
                 ApiReason::UNVERIFIED,
             );

@@ -17,9 +17,12 @@ trait AppNotifications
         SendOtpMailJob::dispatch($email, $otp, $purpose, $displayName);
     }
 
-    protected function notifyWelcome(string $email, string $purpose, ?string $displayName = null): void
+    /**
+     * @param  array<string, mixed>  $meta  Optional: login_url, account_type, business_name
+     */
+    protected function notifyWelcome(string $email, string $purpose, ?string $displayName = null, array $meta = []): void
     {
-        SendWelcomeMailJob::dispatch($email, $purpose, $displayName);
+        SendWelcomeMailJob::dispatch($email, $purpose, $displayName, $meta);
     }
 
     /**

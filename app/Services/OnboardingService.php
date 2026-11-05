@@ -31,8 +31,7 @@ class OnboardingService
         protected AdminRepository $admins,
         protected OtpService $otp,
         protected ProfilePresenter $profiles,
-    ) {
-    }
+    ) {}
 
     /**
      * Client creates their own account, then receives a registration OTP.
@@ -147,15 +146,23 @@ class OnboardingService
             ['type' => 'admin'],
         );
 
-        $this->notifyWelcome($client->email, 'client_onboarded', trim($client->first_name.' '.$client->last_name) ?: null);
-        $otp = $this->otp->issue($client, 'registration');
+        // Welcome only — client requests their own registration OTP when they are ready to log in.
+        $displayName = $client->account_type === 'business'
+            ? ($client->business_name ?: trim($client->first_name.' '.$client->last_name))
+            : (trim($client->first_name.' '.$client->last_name) ?: null);
+
+        $this->notifyWelcome($client->email, 'client_onboarded', $displayName ?: null, [
+            'account_type' => $client->account_type,
+            'business_name' => $client->business_name,
+            'login_url' => rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/').'/login',
+        ]);
 
         return [
             'in_error' => false,
-            'message' => 'Client onboarded. OTP sent to their email.',
+            'message' => 'Client onboarded. A welcome email was sent; they can request an OTP when ready to log in.',
             'status_code' => ApiCode::CREATED,
             'reason' => ApiReason::CREATED,
-            'data' => $this->onboardPayload($client->fresh(), $otp),
+            'data' => $this->profiles->present($client->fresh()),
         ];
     }
 
@@ -212,7 +219,9 @@ class OnboardingService
             ['role_id' => $input['role_id']],
         );
 
-        $this->notifyWelcome($newAdmin->email, 'admin_onboarded', trim($newAdmin->first_name.' '.$newAdmin->last_name) ?: null);
+        $this->notifyWelcome($newAdmin->email, 'admin_onboarded', trim($newAdmin->first_name.' '.$newAdmin->last_name) ?: null, [
+            'login_url' => rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/').'/admin/login',
+        ]);
         $otp = $this->otp->issue($newAdmin, 'registration');
 
         return [

@@ -12,20 +12,33 @@ class WelcomeMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * @param  array<string, mixed>  $meta
+     */
     public function __construct(
         public string $email,
         public string $purpose,
         public ?string $displayName = null,
-    ) {
-    }
+        public array $meta = [],
+    ) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Welcome to '.config('app.name'));
+        $brand = config('app.name');
+
+        $subject = match ($this->purpose) {
+            'client_onboarded' => "Your {$brand} account is ready",
+            'admin_onboarded' => "Your {$brand} admin account is ready",
+            default => "Welcome to {$brand}",
+        };
+
+        return new Envelope(subject: $subject);
     }
 
     public function content(): Content
     {
+        $frontend = rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/');
+
         return new Content(
             view: 'emails.welcome',
             with: [
@@ -33,6 +46,9 @@ class WelcomeMail extends Mailable
                 'purpose' => $this->purpose,
                 'displayName' => $this->displayName,
                 'brand' => config('app.name'),
+                'loginUrl' => $this->meta['login_url'] ?? ($frontend.'/login'),
+                'accountType' => $this->meta['account_type'] ?? null,
+                'businessName' => $this->meta['business_name'] ?? null,
             ],
         );
     }
