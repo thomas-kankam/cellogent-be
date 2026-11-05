@@ -96,17 +96,20 @@ class SubscriptionService
         }
 
         $starts = now();
-        $ends = $type === 'non_expiry' ? null : $starts->copy()->addMonths($option['months']);
 
-        $subscription = DB::transaction(function () use ($client, $plan, $option, $starts, $ends, $type) {
+        $subscription = DB::transaction(function () use ($client, $plan, $option, $starts, $type) {
             $current = Subscription::query()->where('client_id', $client->id)->lockForUpdate()->first();
 
-            // Unused units carry over while the current subscription is still running.
             $stillActive = $current
                 && $current->status === 'active'
                 && ($current->ends_at === null || $current->ends_at->isFuture());
+
+            // Leftover units always roll over while the pack is still usable.
             $before = $stillActive ? (int) $current->units : 0;
             $after = $before + (int) $option['units'];
+
+            // non_expiry = SMS top-up style (no end date). Dated packs add remaining days onto the new term.
+            $ends = $this->endsAtFor($type, (int) $option['months'], $starts, $stillActive ? $current : null);
 
             $subscription = Subscription::query()->updateOrCreate(
                 ['client_id' => $client->id],
@@ -119,7 +122,7 @@ class SubscriptionService
                     'starts_at' => $starts,
                     'ends_at' => $ends,
                     'type' => $type,
-                    'duration_in_months' => $option['months'],
+                    'duration_in_months' => $type === 'non_expiry' ? null : $option['months'],
                 ],
             );
 
@@ -129,7 +132,9 @@ class SubscriptionService
                 'units' => (int) $option['units'],
                 'balance_before' => $before,
                 'balance_after' => $after,
-                'description' => $plan->name.' plan ('.$option['months'].' month)',
+                'description' => $type === 'non_expiry'
+                    ? $plan->name.' top-up'
+                    : $plan->name.' plan ('.$option['months'].' month)',
             ]);
 
             return $subscription;
@@ -142,9 +147,9 @@ class SubscriptionService
             'plan_price' => $option['price'],
             'units' => $option['units'],
             'plan_type' => $type,
-            'duration_in_months' => $option['months'],
-            'starts_at' => $starts,
-            'ends_at' => $ends,
+            'duration_in_months' => $type === 'non_expiry' ? null : $option['months'],
+            'starts_at' => $subscription->starts_at,
+            'ends_at' => $subscription->ends_at,
             'payment_status' => $paymentStatus,
             'payment_id' => $paymentId,
             'payment_reference' => $paymentReference,
@@ -157,11 +162,37 @@ class SubscriptionService
             $actor ? 'admin' : 'client',
             $actor ?? $client,
             $client,
-            ['plan_id' => $plan->id, 'plan_name' => $plan->name],
+            [
+                'plan_id' => $plan->id,
+                'plan_name' => $plan->name,
+                'type' => $type,
+                'units' => $subscription->units,
+                'ends_at' => optional($subscription->ends_at)->toDateTimeString(),
+            ],
         );
 
         CheckAggregatorBalanceJob::dispatch();
 
         return $this->result(false, 'Subscription activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($subscription));
+    }
+
+    /**
+     * non_expiry → no end date (SMS top-up).
+     * Dated pack while an old dated pack is still running → remaining time is added onto the new term.
+     */
+    protected function endsAtFor(string $type, int $months, $starts, ?Subscription $current): mixed
+    {
+        if ($type === 'non_expiry') {
+            return null;
+        }
+
+        $ends = $starts->copy()->addMonths($months);
+
+        if ($current && $current->ends_at && $current->ends_at->isFuture()) {
+            // remaining days on the old pack are stacked onto the new pack's length
+            $ends = $ends->addSeconds($starts->diffInSeconds($current->ends_at));
+        }
+
+        return $ends;
     }
 }

@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 class Subscription extends Model
 {
     /**
-     * One live pack per client. Replaced packs go to subscription_archieves.
+     * One live pack per client. History goes to subscription_archieves.
+     *
+     * type = monthly|custom → ends_at is set; renewing early stacks leftover units and remaining days.
+     * type = non_expiry → ends_at is null (SMS top-up); renewing only stacks units.
      */
     protected $fillable = [
         'client_id',
