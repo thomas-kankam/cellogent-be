@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminProfileController;
+use App\Http\Controllers\Admin\ClientController as AdminClientController;
 use App\Http\Controllers\Admin\OnboardingController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
@@ -166,6 +167,14 @@ Route::prefix('admin')->group(function () {
 
         Route::post('onboard/client', [OnboardingController::class, 'client'])->middleware('permission:onboarding.client');
         Route::post('onboard/admin', [OnboardingController::class, 'admin'])->middleware('permission:onboarding.admin');
+
+        Route::middleware('permission:client.manage')->group(function () {
+            Route::get('clients', [AdminClientController::class, 'index']);
+            Route::get('clients/{client}', [AdminClientController::class, 'show'])->whereNumber('client');
+            Route::put('clients/{client}', [AdminClientController::class, 'update'])->whereNumber('client');
+            Route::post('clients/{client}', [AdminClientController::class, 'update'])->whereNumber('client'); // multipart profile image
+            Route::put('clients/{client}/status', [AdminClientController::class, 'updateStatus'])->whereNumber('client');
+        });
 
         Route::middleware('permission:admin.manage')->group(function () {
             Route::get('admins', [AdminController::class, 'index']);
