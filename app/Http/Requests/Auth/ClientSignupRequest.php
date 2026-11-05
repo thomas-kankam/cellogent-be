@@ -25,7 +25,7 @@ class ClientSignupRequest extends ApiFormRequest
             // Individual: identity is required. Business: optional.
             'first_name' => [$person, 'string', 'max:100'],
             'last_name' => [$person, 'string', 'max:100'],
-            'date_of_birth' => [$person, 'date'],
+            'date_of_birth' => ['nullable', 'date'],
 
             // Business: company + location + logo are required. Individual: optional.
             'business_name' => [$business, 'string', 'max:150'],
