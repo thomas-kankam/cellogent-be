@@ -19,9 +19,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ActivityLogService
 {
-    public function __construct(protected ActivityLogRepository $logs)
-    {
-    }
+    public function __construct(protected ActivityLogRepository $logs) {}
 
     /**
      * @param  array<string, mixed>  $metadata
@@ -114,6 +112,25 @@ class ActivityLogService
     public function query(array $filters = [])
     {
         return $this->logs->query($filters);
+    }
+
+    /**
+     * Catalogue + values already seen in the DB (for frontend filter dropdowns).
+     *
+     * @return array<string, mixed>
+     */
+    public function filters(): array
+    {
+        return [
+            'actors' => ActivityLog::ACTORS,
+            'modules' => ActivityLog::MODULES,
+            'actions' => ActivityLog::ACTIONS,
+            'used' => [
+                'actors' => ActivityLog::query()->distinct()->orderBy('actor')->pluck('actor')->values()->all(),
+                'modules' => ActivityLog::query()->distinct()->orderBy('module')->pluck('module')->values()->all(),
+                'actions' => ActivityLog::query()->distinct()->orderBy('action')->pluck('action')->values()->all(),
+            ],
+        ];
     }
 
     /**

@@ -6,6 +6,49 @@ use Illuminate\Database\Eloquent\Model;
 
 class ActivityLog extends Model
 {
+    /**
+     * Stable catalogue for frontend filter dropdowns (even when no rows exist yet).
+     */
+    public const ACTORS = ['admin', 'client', 'system'];
+
+    public const MODULES = [
+        'onboarding',
+        'otp',
+        'profile',
+        'account_status',
+        'admin',
+        'client',
+        'role',
+        'permission',
+        'api_key',
+        'sender_id',
+        'plan',
+        'subscription',
+        'wallet',
+        'payment',
+        'payment_gateway',
+        'settings',
+        'order',
+        'sms',
+        'contact_group',
+        'activity_log',
+    ];
+
+    public const ACTIONS = [
+        'created',
+        'updated',
+        'deleted',
+        'assigned',
+        'requested',
+        'verified',
+        'invalid',
+        'expired',
+        'approved',
+        'rejected',
+        'blacklisted',
+        'unblacklisted',
+    ];
+
     protected $fillable = [
         'title',
         'module',

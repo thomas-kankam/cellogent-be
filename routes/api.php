@@ -197,6 +197,7 @@ Route::prefix('admin')->group(function () {
         Route::get('permissions', [PermissionController::class, 'index'])->middleware('permission:permission.manage');
 
         Route::middleware('permission:activity_log.view')->group(function () {
+            Route::get('activity-logs/filters', [ActivityLogController::class, 'filters']);
             Route::get('activity-logs', [ActivityLogController::class, 'index']);
             Route::get('clients/{client}/activity-logs', [ActivityLogController::class, 'forClient']);
         });
