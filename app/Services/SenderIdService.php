@@ -164,9 +164,9 @@ class SenderIdService
      */
     public function reject(Admin $admin, SenderId $senderId, string $reason): array
     {
-        if ($senderId->status !== 'pending') {
-            return $this->result(true, 'This sender ID is not pending.', ApiCode::BAD_REQUEST, ApiReason::ALREADY_PROCESSED);
-        }
+        // if ($senderId->status !== 'pending') {
+        //     return $this->result(true, 'This sender ID is not pending.', ApiCode::BAD_REQUEST, ApiReason::ALREADY_PROCESSED);
+        // }
 
         $senderId->update([
             'status' => 'rejected',
