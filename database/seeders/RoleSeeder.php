@@ -15,11 +15,12 @@ class RoleSeeder extends Seeder
             ['description' => 'Full access. Used to onboard other admins.'],
         );
 
+        // Always attach every current permission (including newly seeded ones).
         $super->permissions()->sync(Permission::query()->pluck('id'));
 
         $support = Role::query()->updateOrCreate(
             ['name' => 'Support'],
-            ['description' => 'Client support without role or admin onboarding.'],
+            ['description' => 'Client support without role, gateway, or admin onboarding access.'],
         );
 
         $support->permissions()->sync(
@@ -28,7 +29,14 @@ class RoleSeeder extends Seeder
                     'client.manage',
                     'profile.manage',
                     'activity_log.view',
+                    'sender_id.view',
                     'sender_id.approve',
+                    'subscription.view',
+                    'wallet.view',
+                    'payment.view',
+                    'order.view',
+                    'sms.view',
+                    'report.view',
                 ])
                 ->pluck('id')
         );

@@ -55,6 +55,25 @@ class Admin extends Actor
 
     public function hasPermission(string $name): bool
     {
+        $this->loadMissing('role.permissions');
+
         return in_array($name, $this->permissionNames(), true);
+    }
+
+    /**
+     * @param  list<string>  $names
+     */
+    public function hasAnyPermission(array $names): bool
+    {
+        $this->loadMissing('role.permissions');
+        $owned = $this->permissionNames();
+
+        foreach ($names as $name) {
+            if (in_array($name, $owned, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

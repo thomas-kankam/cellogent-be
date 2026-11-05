@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureAdminPermission;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 use App\Support\ApiResponse;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,
             'auth.apikey' => AuthenticateApiKey::class,
+            'permission' => EnsureAdminPermission::class,
         ]);
 
         // API guests get 401 JSON. Do not send Horizon / web to a named "login" route.

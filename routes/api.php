@@ -157,76 +157,106 @@ Route::prefix('admin')->group(function () {
     });
 
     Route::middleware(['auth:admin', 'account.active'])->group(function () {
+        // Any logged-in admin
         Route::get('profile', [AdminProfileController::class, 'profile']);
-        Route::post('profile', [AdminProfileController::class, 'updateProfile']);
-        Route::put('profile', [AdminProfileController::class, 'updateProfile']);
+        Route::post('profile', [AdminProfileController::class, 'updateProfile'])->middleware('permission:profile.manage');
+        Route::put('profile', [AdminProfileController::class, 'updateProfile'])->middleware('permission:profile.manage');
         Route::post('logout', [AdminAuthController::class, 'logout']);
 
-        Route::post('onboard/client', [OnboardingController::class, 'client']);
-        Route::post('onboard/admin', [OnboardingController::class, 'admin']);
+        Route::post('onboard/client', [OnboardingController::class, 'client'])->middleware('permission:onboarding.client');
+        Route::post('onboard/admin', [OnboardingController::class, 'admin'])->middleware('permission:onboarding.admin');
 
-        Route::get('roles', [RoleController::class, 'index']);
-        Route::post('roles', [RoleController::class, 'store']);
-        Route::get('roles/{role}', [RoleController::class, 'show']);
-        Route::put('roles/{role}', [RoleController::class, 'update']);
-        Route::post('roles/assign', [RoleController::class, 'assign']);
+        Route::middleware('permission:role.manage')->group(function () {
+            Route::get('roles', [RoleController::class, 'index']);
+            Route::post('roles', [RoleController::class, 'store']);
+            Route::get('roles/{role}', [RoleController::class, 'show']);
+            Route::put('roles/{role}', [RoleController::class, 'update']);
+            Route::post('roles/assign', [RoleController::class, 'assign']);
+        });
 
-        Route::get('permissions', [PermissionController::class, 'index']);
+        Route::get('permissions', [PermissionController::class, 'index'])->middleware('permission:permission.manage');
 
-        Route::get('activity-logs', [ActivityLogController::class, 'index']);
-        Route::get('clients/{client}/activity-logs', [ActivityLogController::class, 'forClient']);
+        Route::middleware('permission:activity_log.view')->group(function () {
+            Route::get('activity-logs', [ActivityLogController::class, 'index']);
+            Route::get('clients/{client}/activity-logs', [ActivityLogController::class, 'forClient']);
+        });
 
-        Route::get('plans', [AdminPlanController::class, 'index']);
-        Route::post('plans', [AdminPlanController::class, 'store']);
-        Route::get('plans/{plan}', [AdminPlanController::class, 'show']);
-        Route::put('plans/{plan}', [AdminPlanController::class, 'update']);
+        Route::middleware('permission:plan.manage')->group(function () {
+            Route::get('plans', [AdminPlanController::class, 'index']);
+            Route::post('plans', [AdminPlanController::class, 'store']);
+            Route::get('plans/{plan}', [AdminPlanController::class, 'show']);
+            Route::put('plans/{plan}', [AdminPlanController::class, 'update']);
+        });
 
-        Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);
-        Route::get('subscription-archives', [AdminSubscriptionController::class, 'archives']);
-        Route::get('clients/{client}/subscription', [AdminSubscriptionController::class, 'forClient']);
-        Route::post('clients/{client}/subscription', [AdminSubscriptionController::class, 'assign']);
+        Route::middleware('permission:subscription.view')->group(function () {
+            Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);
+            Route::get('subscription-archives', [AdminSubscriptionController::class, 'archives']);
+            Route::get('clients/{client}/subscription', [AdminSubscriptionController::class, 'forClient']);
+        });
+        Route::post('clients/{client}/subscription', [AdminSubscriptionController::class, 'assign'])->middleware('permission:subscription.assign');
 
-        Route::get('wallets', [AdminWalletController::class, 'index']);
-        Route::get('wallet-top-ups', [AdminWalletController::class, 'topUps']);
-        Route::get('wallet-transactions', [AdminWalletController::class, 'transactions']);
+        Route::middleware('permission:wallet.view')->group(function () {
+            Route::get('wallets', [AdminWalletController::class, 'index']);
+            Route::get('wallet-top-ups', [AdminWalletController::class, 'topUps']);
+            Route::get('wallet-transactions', [AdminWalletController::class, 'transactions']);
+            Route::get('clients/{client}/wallet', [AdminWalletController::class, 'forClient']);
+        });
 
-        Route::get('payment-gateways', [AdminPaymentGatewayController::class, 'index']);
-        Route::put('payment-gateways/{code}', [AdminPaymentGatewayController::class, 'update']);
-        Route::post('payment-gateways/{code}/primary', [AdminPaymentGatewayController::class, 'primary']);
-        Route::get('settings/payments', [AdminPaymentGatewayController::class, 'settings']);
-        Route::put('settings/payments', [AdminPaymentGatewayController::class, 'updateSettings']);
+        Route::middleware('permission:payment_gateway.manage')->group(function () {
+            Route::get('payment-gateways', [AdminPaymentGatewayController::class, 'index']);
+            Route::put('payment-gateways/{code}', [AdminPaymentGatewayController::class, 'update']);
+            Route::post('payment-gateways/{code}/primary', [AdminPaymentGatewayController::class, 'primary']);
+        });
 
-        Route::get('reports/{report}', [AdminReportController::class, 'show']);
-        Route::get('reports/{report}/export', [AdminReportController::class, 'export']);
-        Route::get('exports/{dataset}', [AdminReportController::class, 'dataset']);
-        Route::get('clients/{client}/wallet', [AdminWalletController::class, 'forClient']);
+        Route::middleware('permission:payment_settings.manage')->group(function () {
+            Route::get('settings/payments', [AdminPaymentGatewayController::class, 'settings']);
+            Route::put('settings/payments', [AdminPaymentGatewayController::class, 'updateSettings']);
+        });
 
-        Route::get('sender-ids', [AdminSenderIdController::class, 'index']);
-        Route::get('sender-ids/{senderId}', [AdminSenderIdController::class, 'show']);
-        Route::post('sender-ids/{senderId}/approve', [AdminSenderIdController::class, 'approve']);
-        Route::post('sender-ids/{senderId}/reject', [AdminSenderIdController::class, 'reject']);
+        Route::get('reports/{report}', [AdminReportController::class, 'show'])->middleware('permission:report.view');
+        Route::get('reports/{report}/export', [AdminReportController::class, 'export'])->middleware('permission:report.export');
+        Route::get('exports/{dataset}', [AdminReportController::class, 'dataset'])->middleware('permission:report.export');
 
-        Route::get('payments', [AdminPaymentController::class, 'index']);
-        Route::get('payments/{payment}', [AdminPaymentController::class, 'show']);
-        Route::post('payments/{payment}/verify', [AdminPaymentController::class, 'verify']);
-        Route::post('payments/{payment}/complete', [AdminPaymentController::class, 'complete']);
-        Route::post('payments/{payment}/fail', [AdminPaymentController::class, 'fail']);
+        Route::middleware('permission:sender_id.view,sender_id.approve')->group(function () {
+            Route::get('sender-ids', [AdminSenderIdController::class, 'index']);
+            Route::get('sender-ids/{senderId}', [AdminSenderIdController::class, 'show']);
+        });
+        Route::post('sender-ids/{senderId}/approve', [AdminSenderIdController::class, 'approve'])->middleware('permission:sender_id.approve');
+        Route::post('sender-ids/{senderId}/reject', [AdminSenderIdController::class, 'reject'])->middleware('permission:sender_id.approve');
 
-        Route::get('orders', [AdminOrderController::class, 'index']);
-        Route::get('orders/{order}', [AdminOrderController::class, 'show']);
+        Route::middleware('permission:payment.view,payment.manage')->group(function () {
+            Route::get('payments', [AdminPaymentController::class, 'index']);
+            Route::get('payments/{payment}', [AdminPaymentController::class, 'show']);
+        });
+        Route::middleware('permission:payment.manage')->group(function () {
+            Route::post('payments/{payment}/verify', [AdminPaymentController::class, 'verify']);
+            Route::post('payments/{payment}/complete', [AdminPaymentController::class, 'complete']);
+            Route::post('payments/{payment}/fail', [AdminPaymentController::class, 'fail']);
+        });
 
-        Route::get('sender-id-blacklist', [AdminSenderIdBlacklistController::class, 'index']);
-        Route::post('sender-id-blacklist', [AdminSenderIdBlacklistController::class, 'store']);
-        Route::delete('sender-id-blacklist/{blacklist}', [AdminSenderIdBlacklistController::class, 'destroy']);
+        Route::middleware('permission:order.view')->group(function () {
+            Route::get('orders', [AdminOrderController::class, 'index']);
+            Route::get('orders/{order}', [AdminOrderController::class, 'show']);
+        });
 
-        Route::get('sms/overview', [AdminSmsController::class, 'overview']);
-        Route::get('sms/aggregator/balance', [AdminSmsController::class, 'aggregatorBalance']);
-        Route::get('sms/aggregator/requests', [AdminSmsController::class, 'aggregatorRequests']);
-        Route::get('sms/aggregator/delivery-receipts/{sequenceNo}', [AdminSmsController::class, 'deliveryReceipt']);
-        Route::get('sms/system', [AdminSmsController::class, 'systemMessages']);
-        Route::post('sms/quick', [AdminSmsController::class, 'quick']);
-        Route::get('sms', [AdminSmsController::class, 'index']);
-        Route::get('sms/{inbox}', [AdminSmsController::class, 'show'])->whereNumber('inbox');
-        Route::get('sms/{inbox}/recipients', [AdminSmsController::class, 'recipients'])->whereNumber('inbox');
+        Route::middleware('permission:sender_id.blacklist')->group(function () {
+            Route::get('sender-id-blacklist', [AdminSenderIdBlacklistController::class, 'index']);
+            Route::post('sender-id-blacklist', [AdminSenderIdBlacklistController::class, 'store']);
+            Route::delete('sender-id-blacklist/{blacklist}', [AdminSenderIdBlacklistController::class, 'destroy']);
+        });
+
+        Route::middleware('permission:sms.view')->group(function () {
+            Route::get('sms/overview', [AdminSmsController::class, 'overview']);
+            Route::get('sms/system', [AdminSmsController::class, 'systemMessages']);
+            Route::get('sms', [AdminSmsController::class, 'index']);
+            Route::get('sms/{inbox}', [AdminSmsController::class, 'show'])->whereNumber('inbox');
+            Route::get('sms/{inbox}/recipients', [AdminSmsController::class, 'recipients'])->whereNumber('inbox');
+        });
+        Route::post('sms/quick', [AdminSmsController::class, 'quick'])->middleware('permission:sms.send');
+        Route::middleware('permission:sms.aggregator')->group(function () {
+            Route::get('sms/aggregator/balance', [AdminSmsController::class, 'aggregatorBalance']);
+            Route::get('sms/aggregator/requests', [AdminSmsController::class, 'aggregatorRequests']);
+            Route::get('sms/aggregator/delivery-receipts/{sequenceNo}', [AdminSmsController::class, 'deliveryReceipt']);
+        });
     });
 });
