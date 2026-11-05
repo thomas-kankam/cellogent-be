@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\OnboardingController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
@@ -165,6 +166,16 @@ Route::prefix('admin')->group(function () {
 
         Route::post('onboard/client', [OnboardingController::class, 'client'])->middleware('permission:onboarding.client');
         Route::post('onboard/admin', [OnboardingController::class, 'admin'])->middleware('permission:onboarding.admin');
+
+        Route::middleware('permission:admin.manage')->group(function () {
+            Route::get('admins', [AdminController::class, 'index']);
+            Route::get('admins/{admin}', [AdminController::class, 'show']);
+            Route::put('admins/{admin}', [AdminController::class, 'update']);
+            Route::post('admins/{admin}', [AdminController::class, 'update']); // multipart profile image
+            Route::put('admins/{admin}/status', [AdminController::class, 'updateStatus']);
+            Route::put('admins/{admin}/role', [AdminController::class, 'assignRole']);
+            Route::delete('admins/{admin}', [AdminController::class, 'destroy']);
+        });
 
         Route::middleware('permission:role.manage')->group(function () {
             Route::get('roles', [RoleController::class, 'index']);
