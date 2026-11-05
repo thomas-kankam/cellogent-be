@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Actor;
 use App\Models\Admin;
 use App\Models\Client;
+use App\Models\Permission;
 
 /**
  * The account payload returned after login and on GET /profile.
@@ -33,11 +34,7 @@ class ProfilePresenter
                     'id' => $actor->role->id,
                     'name' => $actor->role->name,
                     'description' => $actor->role->description,
-                    'permissions' => $actor->role->permissions->map(fn ($p) => [
-                        'id' => $p->id,
-                        'module' => $p->module,
-                        'name' => $p->name,
-                    ])->values()->all(),
+                    'permissions' => Permission::groupByModule($actor->role->permissions),
                 ] : null,
             ];
         }

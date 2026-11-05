@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Concerns\LogsActivity;
 use App\Models\Admin;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Repositories\RoleRepository;
 use App\Support\ApiCode;
@@ -13,9 +14,7 @@ class RoleService
 {
     use LogsActivity;
 
-    public function __construct(protected RoleRepository $roles)
-    {
-    }
+    public function __construct(protected RoleRepository $roles) {}
 
     /**
      * @return array<string, mixed>
@@ -28,11 +27,7 @@ class RoleService
             'id' => $role->id,
             'name' => $role->name,
             'description' => $role->description,
-            'permissions' => $role->permissions->map(fn ($p) => [
-                'id' => $p->id,
-                'module' => $p->module,
-                'name' => $p->name,
-            ])->values()->all(),
+            'permissions' => Permission::groupByModule($role->permissions),
         ];
     }
 
