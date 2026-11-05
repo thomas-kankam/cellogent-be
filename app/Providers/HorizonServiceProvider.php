@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Horizon\Horizon;
 
 /**
  * Horizon is optional. Windows PHP has no pcntl, and WSL may not have
@@ -13,17 +14,17 @@ class HorizonServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        if (! class_exists(\Laravel\Horizon\Horizon::class)) {
+        if (! class_exists(Horizon::class)) {
             return;
         }
 
         $this->gate();
 
-        \Laravel\Horizon\Horizon::auth(function ($request) {
+        Horizon::auth(function ($request) {
             return $this->canViewHorizon($request);
         });
 
-        \Laravel\Horizon\Horizon::night();
+        Horizon::night();
     }
 
     protected function gate(): void

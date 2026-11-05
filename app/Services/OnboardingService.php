@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Concerns\LogsActivity;
+use App\Http\Requests\Concerns\ValidatesClientAccount;
 use App\Models\Actor;
 use App\Models\Admin;
 use App\Models\Client;
@@ -42,6 +43,7 @@ class OnboardingService
      */
     public function selfOnboardClient(array $input, ?UploadedFile $image = null): array
     {
+        $input = ValidatesClientAccount::normalizeClientAccountPayload($input);
         $email = strtolower(trim($input['email']));
 
         if ($this->actors->emailTaken('client', $email)) {
@@ -103,6 +105,7 @@ class OnboardingService
      */
     public function adminOnboardClient(Admin $admin, array $input, ?UploadedFile $image = null): array
     {
+        $input = ValidatesClientAccount::normalizeClientAccountPayload($input);
         $email = strtolower(trim($input['email']));
 
         if ($this->actors->emailTaken('client', $email)) {

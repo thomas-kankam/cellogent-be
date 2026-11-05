@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Concerns\LogsActivity;
 use App\Concerns\ReturnsServiceResult;
+use App\Http\Requests\Concerns\ValidatesClientAccount;
 use App\Jobs\ProcessProfileImageJob;
 use App\Models\Admin;
 use App\Models\ApiKey;
@@ -60,6 +61,12 @@ class ClientService
 
         if (array_key_exists('phone_number', $input)) {
             $input['phone_number'] = GhanaPhone::normalize($input['phone_number']);
+        }
+
+        if (isset($input['account_type'])) {
+            $input = ValidatesClientAccount::normalizeClientAccountPayload($input);
+        } elseif (($client->account_type ?? null) === 'individual') {
+            $input = ValidatesClientAccount::normalizeClientAccountPayload($input + ['account_type' => 'individual']);
         }
 
         $fields = [

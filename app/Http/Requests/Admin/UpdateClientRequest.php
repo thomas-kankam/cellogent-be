@@ -3,25 +3,36 @@
 namespace App\Http\Requests\Admin;
 
 use App\Http\Requests\ApiFormRequest;
-use App\Support\GhanaPhone;
+use App\Http\Requests\Concerns\ValidatesClientAccount;
+use Illuminate\Validation\Validator;
 
 class UpdateClientRequest extends ApiFormRequest
 {
+    use ValidatesClientAccount;
+
     public function rules(): array
     {
-        return [
-            'first_name' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'last_name' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'email' => ['sometimes', 'email', 'max:255'],
-            'phone_number' => ['sometimes', 'nullable', 'string', GhanaPhone::rule()],
-            'date_of_birth' => ['sometimes', 'nullable', 'date'],
-            'gender' => ['sometimes', 'nullable', 'string', 'max:20'],
-            'account_type' => ['sometimes', 'in:individual,business'],
-            'business_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'region' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'city' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'address' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'profile_image' => ['sometimes', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-        ];
+        return $this->clientAccountRules(creating: false);
+    }
+
+    public function messages(): array
+    {
+        return $this->clientAccountMessages();
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $this->validateClientAccountCompleteness($validator, creating: false);
+    }
+
+    protected function prepareForValidation(): void
+    {
+        parent::prepareForValidation();
+
+        if ($this->filled('account_type')) {
+            $this->merge([
+                'account_type' => strtolower(trim((string) $this->input('account_type'))),
+            ]);
+        }
     }
 }
