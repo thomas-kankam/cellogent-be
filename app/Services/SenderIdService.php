@@ -21,17 +21,30 @@ class SenderIdService
      */
     public function present(SenderId $senderId): array
     {
+        $senderId->loadMissing('client');
+        $client = $senderId->client;
+
         return [
             'id' => $senderId->id,
             'name' => $senderId->name,
             'client_id' => $senderId->client_id,
             'status' => $senderId->status,
-            // 'approved_by' => $senderId->approved_by,
             'approved_at' => optional($senderId->approved_at)->toDateTimeString(),
-            // 'rejected_by' => $senderId->rejected_by,
             'rejected_at' => optional($senderId->rejected_at)->toDateTimeString(),
             'rejection_reason' => $senderId->rejection_reason,
             'created_at' => optional($senderId->created_at)->toDateTimeString(),
+            'client' => $client ? [
+                'id' => $client->id,
+                'first_name' => $client->first_name,
+                'last_name' => $client->last_name,
+                'email' => $client->email,
+                'phone_number' => $client->phone_number,
+                'account_type' => $client->account_type,
+                'business_name' => $client->business_name,
+                'status' => $client->status,
+                'is_verified' => (bool) $client->is_verified,
+                'profile_image' => $client->profileImageUrl(),
+            ] : null,
         ];
     }
 

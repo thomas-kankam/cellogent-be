@@ -19,7 +19,7 @@ class SenderIdController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = SenderId::query()->latest('id');
+        $query = SenderId::query()->with('client')->latest('id');
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
@@ -35,6 +35,8 @@ class SenderIdController extends Controller
 
     public function show(SenderId $senderId): JsonResponse
     {
+        $senderId->loadMissing('client');
+
         return $this->apiResponse(false, 'Sender ID loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->senderIds->present($senderId));
     }
 
