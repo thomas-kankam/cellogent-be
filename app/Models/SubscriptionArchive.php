@@ -31,4 +31,9 @@ class SubscriptionArchive extends Model
             'ends_at' => 'datetime',
         ];
     }
+
+    public function client()
+    {
+        return $this->belongsTo(Client::class, 'client_id');
+    }
 }

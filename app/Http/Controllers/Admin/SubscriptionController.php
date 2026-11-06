@@ -16,13 +16,11 @@ use Illuminate\Http\Request;
 
 class SubscriptionController extends Controller
 {
-    public function __construct(protected SubscriptionService $subscriptions)
-    {
-    }
+    public function __construct(protected SubscriptionService $subscriptions) {}
 
     public function index(Request $request): JsonResponse
     {
-        $query = Subscription::query()->latest('id');
+        $query = Subscription::query()->with('client')->latest('id');
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->integer('client_id'));
@@ -43,6 +41,8 @@ class SubscriptionController extends Controller
         if (! $subscription) {
             return $this->apiResponse(true, 'No active subscription.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
+
+        $subscription->loadMissing('client');
 
         return $this->apiResponse(false, 'Subscription loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->subscriptions->present($subscription));
     }
@@ -69,7 +69,7 @@ class SubscriptionController extends Controller
 
     public function archives(Request $request): JsonResponse
     {
-        $query = SubscriptionArchive::query()->latest('id');
+        $query = SubscriptionArchive::query()->with('client')->latest('id');
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->integer('client_id'));

@@ -25,6 +25,8 @@ class SubscriptionService
      */
     public function present(Subscription $subscription): array
     {
+        $subscription->loadMissing('client');
+
         return [
             'id' => $subscription->id,
             'client_id' => $subscription->client_id,
@@ -37,6 +39,7 @@ class SubscriptionService
             'duration_in_months' => $subscription->duration_in_months,
             'starts_at' => optional($subscription->starts_at)->toDateTimeString(),
             'ends_at' => optional($subscription->ends_at)->toDateTimeString(),
+            'client' => $this->presentClient($subscription->client),
         ];
     }
 
@@ -45,6 +48,8 @@ class SubscriptionService
      */
     public function presentArchive(SubscriptionArchive $archive): array
     {
+        $archive->loadMissing('client');
+
         return [
             'id' => $archive->id,
             'client_id' => $archive->client_id,
@@ -59,6 +64,30 @@ class SubscriptionService
             'payment_status' => $archive->payment_status,
             'payment_id' => $archive->payment_id,
             'payment_reference' => $archive->payment_reference,
+            'client' => $this->presentClient($archive->client),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function presentClient(?Client $client): ?array
+    {
+        if (! $client) {
+            return null;
+        }
+
+        return [
+            'id' => $client->id,
+            'first_name' => $client->first_name,
+            'last_name' => $client->last_name,
+            'email' => $client->email,
+            'phone_number' => $client->phone_number,
+            'account_type' => $client->account_type,
+            'business_name' => $client->business_name,
+            'status' => $client->status,
+            'is_verified' => (bool) $client->is_verified,
+            'profile_image' => $client->profileImageUrl(),
         ];
     }
 
