@@ -65,7 +65,7 @@
                                 <p style="font-size: 15px; color: #555; line-height: 1.7;">
                                     An administrator created a {{ $brand }} admin account for you
                                     (<strong style="color: #0F766E;">{{ $email }}</strong>).
-                                    Use the OTP sent in a separate email to complete sign-in.
+                                    Sign-in is passwordless — when you are ready, open the admin login page and request a one-time code to your email.
                                 </p>
 
                                 <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 28px 0;">
@@ -78,6 +78,10 @@
                                         </td>
                                     </tr>
                                 </table>
+
+                                <p style="font-size: 13px; color: #777; line-height: 1.6; margin-bottom: 0;">
+                                    We will not email a login code until you request one on the admin login page.
+                                </p>
                             @else
                                 <p style="font-size: 15px; color: #555; line-height: 1.6;">
                                     Welcome to {{ $brand }}. Your account is ready.

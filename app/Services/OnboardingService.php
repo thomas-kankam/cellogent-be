@@ -222,17 +222,17 @@ class OnboardingService
             ['role_id' => $input['role_id']],
         );
 
+        // Welcome only — new admin requests their own OTP when they are ready to log in.
         $this->notifyWelcome($newAdmin->email, 'admin_onboarded', trim($newAdmin->first_name.' '.$newAdmin->last_name) ?: null, [
             'login_url' => rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/').'/admin/login',
         ]);
-        $otp = $this->otp->issue($newAdmin, 'registration');
 
         return [
             'in_error' => false,
-            'message' => 'Admin onboarded. OTP sent to their email.',
+            'message' => 'Admin onboarded. A welcome email was sent; they can request an OTP when ready to log in.',
             'status_code' => ApiCode::CREATED,
             'reason' => ApiReason::CREATED,
-            'data' => $this->onboardPayload($newAdmin->fresh('role.permissions'), $otp),
+            'data' => $this->profiles->present($newAdmin->fresh('role.permissions')),
         ];
     }
 
