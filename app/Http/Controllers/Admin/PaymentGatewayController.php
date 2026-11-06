@@ -58,19 +58,32 @@ class PaymentGatewayController extends Controller
         }
 
         $before = $gateway->only(['is_enabled', 'priority']);
-        $gateway->update($data + ['updated_by' => $request->user()->id]);
+
+        if (array_key_exists('is_enabled', $data)) {
+            $gateway->update([
+                'is_enabled' => (bool) $data['is_enabled'],
+                'updated_by' => $request->user()->id,
+            ]);
+        }
+
+        // Priority is always rewritten uniquely as 1..n (1 = primary). Never allow duplicates.
+        if (array_key_exists('priority', $data)) {
+            $this->gateways->setPriority($gateway->code, (int) $data['priority'], $request->user());
+        }
+
+        $fresh = $this->find($code);
 
         $this->activity()->record('Payment gateway updated', 'payment_gateway', 'updated', 'admin', $request->user(), null, [
-            'gateway' => $gateway->code,
+            'gateway' => $code,
             'before' => $before,
-            'after' => $gateway->only(['is_enabled', 'priority']),
+            'after' => $fresh?->only(['is_enabled', 'priority']),
         ]);
 
-        return $this->apiResponse(false, 'Payment gateway updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->gateways->present($gateway->fresh()));
+        return $this->apiResponse(false, 'Payment gateway updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->gateways->present($fresh));
     }
 
     /**
-     * Make this gateway the one tried first; the others become fallbacks in their current order.
+     * Make this gateway priority 1 (primary). Enables it and renumbers the others as fallbacks.
      */
     public function primary(Request $request, string $code): JsonResponse
     {

@@ -8,11 +8,15 @@ use App\Services\Payments\Gateways\KairosPayGateway;
 use App\Services\Payments\Gateways\PaymentGatewayDriver;
 use App\Services\Payments\Gateways\PaystackGateway;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Picks which gateway to use. The admin sets the order (priority) and can disable a gateway;
- * a gateway that keeps failing to connect is moved behind the others until its cooldown ends.
+ * Picks which gateway to use.
+ *
+ * priority 1 = primary (tried first). Priorities are always unique 1..n.
+ * Disabled gateways keep their priority but are skipped at checkout.
+ * A gateway that keeps failing to connect is tried after healthy ones until its cooldown ends.
  */
 class GatewayManager
 {
@@ -45,7 +49,14 @@ class GatewayManager
             ]);
         }
 
-        return PaymentGateway::query()->orderBy('priority')->orderBy('id')->get();
+        $gateways = PaymentGateway::query()->orderBy('priority')->orderBy('id')->get();
+
+        if ($this->prioritiesNeedRepair($gateways)) {
+            $this->renumber($gateways);
+            $gateways = PaymentGateway::query()->orderBy('priority')->orderBy('id')->get();
+        }
+
+        return $gateways;
     }
 
     /**
@@ -88,15 +99,72 @@ class GatewayManager
     }
 
     /**
-     * Move a gateway to the front; the others keep their relative order as fallbacks.
+     * Make this gateway priority 1; others shift down keeping relative order.
      */
     public function makePrimary(string $code, Admin $admin): void
     {
-        $ordered = $this->all()->sortBy(fn (PaymentGateway $g) => $g->code === $code ? 0 : $g->priority)->values();
+        $this->setPriority($code, 1, $admin);
+    }
 
-        foreach ($ordered as $index => $gateway) {
-            $gateway->update(['priority' => $index + 1, 'updated_by' => $admin->id]);
+    /**
+     * Place a gateway at the given rank (1 = primary). All priorities are rewritten uniquely as 1..n.
+     *
+     * @return Collection<int, PaymentGateway>
+     */
+    public function setPriority(string $code, int $rank, Admin $admin): Collection
+    {
+        return DB::transaction(function () use ($code, $rank, $admin) {
+            $gateways = $this->all()->values();
+            $target = $gateways->firstWhere('code', $code);
+
+            if (! $target) {
+                throw new InvalidArgumentException("Unknown payment gateway [{$code}].");
+            }
+
+            $rank = max(1, min($rank, $gateways->count()));
+            $rest = $gateways->reject(fn (PaymentGateway $g) => $g->code === $code)->values();
+
+            $ordered = $rest->take($rank - 1)
+                ->concat(collect([$target]))
+                ->concat($rest->slice($rank - 1))
+                ->values();
+
+            $this->renumber($ordered, $admin->id);
+
+            return $this->all();
+        });
+    }
+
+    /**
+     * @param  Collection<int, PaymentGateway>  $ordered
+     */
+    protected function renumber(Collection $ordered, ?int $updatedBy = null): void
+    {
+        foreach ($ordered->values() as $index => $gateway) {
+            $payload = ['priority' => $index + 1];
+
+            if ($updatedBy !== null) {
+                $payload['updated_by'] = $updatedBy;
+            }
+
+            if ((int) $gateway->priority !== $payload['priority'] || $updatedBy !== null) {
+                $gateway->update($payload);
+            }
         }
+    }
+
+    /**
+     * @param  Collection<int, PaymentGateway>  $gateways
+     */
+    protected function prioritiesNeedRepair(Collection $gateways): bool
+    {
+        if ($gateways->isEmpty()) {
+            return false;
+        }
+
+        $priorities = $gateways->pluck('priority')->map(fn ($p) => (int) $p)->all();
+
+        return $priorities !== range(1, $gateways->count());
     }
 
     /**
@@ -108,8 +176,8 @@ class GatewayManager
             'code' => $gateway->code,
             'name' => $gateway->name,
             'is_enabled' => $gateway->is_enabled,
-            'is_primary' => $this->all()->firstWhere('is_enabled', true)?->code === $gateway->code,
-            'priority' => $gateway->priority,
+            'is_primary' => (int) $gateway->priority === 1,
+            'priority' => (int) $gateway->priority,
             'methods' => $gateway->methods,
             'configured' => $this->driver($gateway->code)->configured(),
             'health' => $this->isTripped($gateway) ? 'down' : 'up',
