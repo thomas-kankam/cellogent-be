@@ -28,6 +28,7 @@ class PlanSeeder extends Seeder
             ],
             [
                 'name' => 'Gold',
+                'is_featured' => true,
                 'details' => [
                     ['months' => 1, 'units' => 8000, 'price' => 200],
                     ['months' => 2, 'units' => 16000, 'price' => 380],
@@ -50,8 +51,15 @@ class PlanSeeder extends Seeder
                 [
                     'details' => $plan['details'],
                     'status' => 'active',
+                    'is_featured' => (bool) ($plan['is_featured'] ?? false),
                 ],
             );
+        }
+
+        // Guarantee a single featured plan even if seed data drifts.
+        $featured = Plan::query()->where('is_featured', true)->orderBy('id')->first();
+        if ($featured) {
+            Plan::query()->whereKeyNot($featured->id)->update(['is_featured' => false]);
         }
     }
 }

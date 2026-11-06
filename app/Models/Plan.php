@@ -10,6 +10,7 @@ class Plan extends Model
         'name',
         'details',
         'status',
+        'is_featured',
         'created_by',
         'updated_by',
     ];
@@ -18,6 +19,7 @@ class Plan extends Model
     {
         return [
             'details' => 'array',
+            'is_featured' => 'boolean',
         ];
     }
 

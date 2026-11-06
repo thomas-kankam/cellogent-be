@@ -11,6 +11,7 @@ class StorePlanRequest extends ApiFormRequest
         return [
             'name' => ['required', 'string', 'max:50'],
             'status' => ['nullable', 'in:active,inactive'],
+            'is_featured' => ['nullable', 'boolean'],
             'details' => ['required', 'array', 'min:1'],
             'details.*.months' => ['required', 'integer', 'min:1'],
             'details.*.units' => ['required', 'integer', 'min:0'],

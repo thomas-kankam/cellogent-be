@@ -13,6 +13,7 @@ return new class extends Migration
             $table->string('name')->index(); // Gold, Silver, Bronze, Platinum
             $table->json('details')->nullable(); // [{ months, units, price }, ...]
             $table->string('status')->default('active')->index();
+            $table->boolean('is_featured')->default(false)->index();
             $table->unsignedBigInteger('created_by')->nullable();
             $table->unsignedBigInteger('updated_by')->nullable();
             $table->timestamps();
