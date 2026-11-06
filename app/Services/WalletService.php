@@ -94,19 +94,35 @@ class WalletService
     /**
      * @return array<string, mixed>
      */
-    public function presentTransaction(WalletTransaction $row): array
+    public function presentTransaction(WalletTransaction $transaction): array
     {
+        $transaction->loadMissing('client');
+        $client = $transaction->client;
+
         return [
-            'id' => $row->id,
-            'type' => $row->type,
-            'purpose' => $row->purpose,
-            'amount' => $row->amount,
-            'balance_before' => $row->balance_before,
-            'balance_after' => $row->balance_after,
-            'payment_id' => $row->payment_id,
-            'order_id' => $row->order_id,
-            'description' => $row->description,
-            'created_at' => optional($row->created_at)->toDateTimeString(),
+            'id' => $transaction->id,
+            'client_id' => $transaction->client_id,
+            'type' => $transaction->type,
+            'purpose' => $transaction->purpose,
+            'amount' => $transaction->amount,
+            'balance_before' => $transaction->balance_before,
+            'balance_after' => $transaction->balance_after,
+            'payment_id' => $transaction->payment_id,
+            'order_id' => $transaction->order_id,
+            'description' => $transaction->description,
+            'created_at' => optional($transaction->created_at)->toDateTimeString(),
+            'client' => $client ? [
+                'id' => $client->id,
+                'first_name' => $client->first_name,
+                'last_name' => $client->last_name,
+                'email' => $client->email,
+                'phone_number' => $client->phone_number,
+                'account_type' => $client->account_type,
+                'business_name' => $client->business_name,
+                'status' => $client->status,
+                'is_verified' => (bool) $client->is_verified,
+                'profile_image' => $client->profileImageUrl(),
+            ] : null,
         ];
     }
 

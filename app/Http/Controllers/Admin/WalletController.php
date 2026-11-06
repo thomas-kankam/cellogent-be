@@ -52,7 +52,7 @@ class WalletController extends Controller
 
     public function transactions(Request $request): JsonResponse
     {
-        $query = WalletTransaction::query()->latest('id');
+        $query = WalletTransaction::query()->with('client')->latest('id');
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->integer('client_id'));
@@ -68,6 +68,6 @@ class WalletController extends Controller
 
         $paginator = $this->paginateQuery($request, $query);
 
-        return $this->paginatedApiResponse('Wallet transactions loaded.', ApiReason::SUCCESS, $paginator, fn (WalletTransaction $t) => $this->wallets->presentTransaction($t) + ['client_id' => $t->client_id]);
+        return $this->paginatedApiResponse('Wallet transactions loaded.', ApiReason::SUCCESS, $paginator, fn (WalletTransaction $t) => $this->wallets->presentTransaction($t));
     }
 }
