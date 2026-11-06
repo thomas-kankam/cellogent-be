@@ -35,15 +35,27 @@ class PlanService
      */
     public function create(Admin $admin, array $input): array
     {
-        $featured = (bool) ($input['is_featured'] ?? false);
+        $name = trim((string) $input['name']);
 
-        $plan = DB::transaction(function () use ($admin, $input, $featured) {
+        if ($this->nameTaken($name)) {
+            return $this->result(true, 'A plan with this name already exists.', ApiCode::BAD_REQUEST, ApiReason::INVALID, [
+                'name' => ['A plan with this name already exists.'],
+            ]);
+        }
+
+        // At least one plan must always be featured. First plan, or create when none are featured, becomes featured.
+        $featured = (bool) ($input['is_featured'] ?? false);
+        if (! $featured && ! Plan::query()->where('is_featured', true)->exists()) {
+            $featured = true;
+        }
+
+        $plan = DB::transaction(function () use ($admin, $input, $name, $featured) {
             if ($featured) {
                 $this->clearFeatured();
             }
 
             return Plan::create([
-                'name' => $input['name'],
+                'name' => $name,
                 'details' => $this->normalizeDetails($input['details'] ?? []),
                 'status' => $input['status'] ?? 'active',
                 'is_featured' => $featured,
@@ -65,9 +77,34 @@ class PlanService
      */
     public function update(Admin $admin, Plan $plan, array $input): array
     {
-        $plan = DB::transaction(function () use ($admin, $plan, $input) {
+        $name = array_key_exists('name', $input) ? trim((string) $input['name']) : $plan->name;
+
+        if ($this->nameTaken($name, $plan->id)) {
+            return $this->result(true, 'A plan with this name already exists.', ApiCode::BAD_REQUEST, ApiReason::INVALID, [
+                'name' => ['A plan with this name already exists.'],
+            ]);
+        }
+
+        if (array_key_exists('is_featured', $input) && ! (bool) $input['is_featured'] && $plan->is_featured) {
+            $otherFeatured = Plan::query()
+                ->where('is_featured', true)
+                ->whereKeyNot($plan->id)
+                ->exists();
+
+            if (! $otherFeatured) {
+                return $this->result(
+                    true,
+                    'At least one plan must be featured. Feature another plan first.',
+                    ApiCode::BAD_REQUEST,
+                    ApiReason::INVALID,
+                    ['is_featured' => ['At least one plan must be featured. Feature another plan first.']],
+                );
+            }
+        }
+
+        $plan = DB::transaction(function () use ($admin, $plan, $input, $name) {
             $payload = [
-                'name' => $input['name'] ?? $plan->name,
+                'name' => $name,
                 'details' => isset($input['details']) ? $this->normalizeDetails($input['details']) : $plan->options(),
                 'status' => $input['status'] ?? $plan->status,
                 'updated_by' => $admin->id,
@@ -94,6 +131,17 @@ class PlanService
         ]);
 
         return $this->result(false, 'Plan updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($plan));
+    }
+
+    protected function nameTaken(string $name, ?int $exceptId = null): bool
+    {
+        $query = Plan::query()->whereRaw('LOWER(name) = ?', [strtolower($name)]);
+
+        if ($exceptId !== null) {
+            $query->whereKeyNot($exceptId);
+        }
+
+        return $query->exists();
     }
 
     /**

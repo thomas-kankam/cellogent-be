@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('plans', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->index(); // Gold, Silver, Bronze, Platinum
+            $table->string('name')->unique(); // Gold, Silver, Bronze, Platinum
             $table->json('details')->nullable(); // [{ months, units, price }, ...]
             $table->string('status')->default('active')->index();
             $table->boolean('is_featured')->default(false)->index();
