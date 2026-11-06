@@ -62,11 +62,26 @@ class WalletService
      */
     public function presentTopUp(WalletTopUp $topUp): array
     {
+        $topUp->loadMissing('client');
+        $client = $topUp->client;
+
         return [
             'id' => $topUp->id,
             'wallet_id' => $topUp->wallet_id,
             'client_id' => $topUp->client_id,
             'amount' => $topUp->amount,
+            'client' => $client ? [
+                'id' => $client->id,
+                'first_name' => $client->first_name,
+                'last_name' => $client->last_name,
+                'email' => $client->email,
+                'phone_number' => $client->phone_number,
+                'account_type' => $client->account_type,
+                'business_name' => $client->business_name,
+                'status' => $client->status,
+                'is_verified' => (bool) $client->is_verified,
+                'profile_image' => $client->profileImageUrl(),
+            ] : null,
             'charge' => $topUp->charge,
             'amount_paid' => $topUp->amount_paid,
             'previous_balance' => $topUp->previous_balance,

@@ -39,7 +39,7 @@ class WalletController extends Controller
 
     public function topUps(Request $request): JsonResponse
     {
-        $query = WalletTopUp::query()->latest('id');
+        $query = WalletTopUp::query()->with('client')->latest('id');
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->integer('client_id'));
