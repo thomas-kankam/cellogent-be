@@ -15,7 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Admin-only: which gateway is primary, which are enabled (fallbacks), and the charge rates.
+ * Two separate admin concerns:
+ * 1) payment-gateways → which processor (Kairos/Paystack) is tried first / enabled
+ * 2) settings/payments → platform fee % charged on top of wallet top-ups and SMS plans
  */
 class PaymentGatewayController extends Controller
 {
@@ -25,9 +27,7 @@ class PaymentGatewayController extends Controller
 
     public function index(): JsonResponse
     {
-        $list = $this->gateways->all()->map(fn (PaymentGateway $g) => $this->gateways->present($g))->values();
-
-        return $this->apiResponse(false, 'Payment gateways loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $list->all());
+        return $this->apiResponse(false, 'Payment gateways loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presentGateways());
     }
 
     public function update(Request $request, string $code): JsonResponse
@@ -79,7 +79,8 @@ class PaymentGatewayController extends Controller
             'after' => $fresh?->only(['is_enabled', 'priority']),
         ]);
 
-        return $this->apiResponse(false, 'Payment gateway updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->gateways->present($fresh));
+        // Always return the full list — changing priority/enabled updates every row's relative state.
+        return $this->apiResponse(false, 'Payment gateway updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presentGateways());
     }
 
     /**
@@ -100,7 +101,7 @@ class PaymentGatewayController extends Controller
             'gateway' => $gateway->code,
         ]);
 
-        return $this->index();
+        return $this->apiResponse(false, 'Primary payment gateway changed.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presentGateways());
     }
 
     public function settings(): JsonResponse
@@ -112,8 +113,8 @@ class PaymentGatewayController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'charges' => ['required', 'array'],
-            'charges.wallet_top_up' => ['nullable', 'numeric', 'min:0', 'max:50'],
-            'charges.sms_units' => ['nullable', 'numeric', 'min:0', 'max:50'],
+            'charges.wallet_top_up' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:50'],
+            'charges.sms_units' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:50'],
         ]);
 
         if ($validator->fails()) {
@@ -140,6 +141,17 @@ class PaymentGatewayController extends Controller
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    protected function presentGateways(): array
+    {
+        return $this->gateways->all()
+            ->map(fn (PaymentGateway $g) => $this->gateways->present($g))
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     protected function presentSettings(): array
@@ -154,7 +166,13 @@ class PaymentGatewayController extends Controller
             'charges' => $charges,
             'charge_type' => 'percent',
             'currency' => config('payments.currency', 'GHS'),
-            'wallet_top_up' => config('payments.wallet_top_up'),
+            // Read-only limits from env/config — not changed by PUT settings/payments.
+            'wallet_top_up' => [
+                'min' => (float) config('payments.wallet_top_up.min', 1),
+                'max' => (float) config('payments.wallet_top_up.max', 50000),
+                'editable' => false,
+            ],
+            'editable' => ['charges.wallet_top_up', 'charges.sms_units'],
         ];
     }
 
