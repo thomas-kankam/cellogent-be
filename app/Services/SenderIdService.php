@@ -57,14 +57,8 @@ class SenderIdService
             return $blocked;
         }
 
-        $exists = SenderId::query()
-            ->where('client_id', $client->id)
-            ->whereRaw('LOWER(name) = ?', [strtolower($name)])
-            ->whereIn('status', ['pending', 'approved'])
-            ->exists();
-
-        if ($exists) {
-            return $this->result(true, 'You already have this sender ID pending or approved.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if ($taken = $this->takenMessage($name)) {
+            return $taken;
         }
 
         $senderId = SenderId::create([
@@ -91,15 +85,8 @@ class SenderIdService
             return $blocked;
         }
 
-        $taken = SenderId::query()
-            ->where('client_id', $client->id)
-            ->where('id', '!=', $senderId->id)
-            ->whereRaw('LOWER(name) = ?', [strtolower($name)])
-            ->whereIn('status', ['pending', 'approved'])
-            ->exists();
-
-        if ($taken) {
-            return $this->result(true, 'You already have this sender ID pending or approved.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if ($taken = $this->takenMessage($name, $senderId->id)) {
+            return $taken;
         }
 
         $nameChanged = strcasecmp($senderId->name, $name) !== 0;
@@ -140,6 +127,16 @@ class SenderIdService
 
         if ($entry = SenderIdBlacklist::match($senderId->name)) {
             return $this->result(true, 'This sender ID matches the blacklist entry "'.$entry->name.'". Reject it instead.', ApiCode::BAD_REQUEST, ApiReason::SENDER_ID_NOT_ALLOWED);
+        }
+
+        // Another client may already hold this name (legacy duplicates or race).
+        if ($this->takenByOther($senderId->name, $senderId->id)) {
+            return $this->result(
+                true,
+                'This sender ID is already approved or pending for another account. Reject this request.',
+                ApiCode::BAD_REQUEST,
+                ApiReason::SENDER_ID_TAKEN,
+            );
         }
 
         $senderId->update([
@@ -217,6 +214,42 @@ class SenderIdService
             ApiCode::BAD_REQUEST,
             ApiReason::SENDER_ID_NOT_ALLOWED,
         );
+    }
+
+    /**
+     * Sender names that are pending or approved are unique across the whole platform.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     */
+    protected function takenMessage(string $name, ?int $exceptId = null): ?array
+    {
+        if (! $this->takenByOther($name, $exceptId)) {
+            return null;
+        }
+
+        return $this->result(
+            true,
+            'This sender ID is already in use on the platform. Choose a different name.',
+            ApiCode::BAD_REQUEST,
+            ApiReason::SENDER_ID_TAKEN,
+            ['name' => ['This sender ID is already in use on the platform.']],
+        );
+    }
+
+    /**
+     * True when another pending/approved sender row already owns this name (case-insensitive).
+     */
+    protected function takenByOther(string $name, ?int $exceptId = null): bool
+    {
+        $query = SenderId::query()
+            ->whereRaw('LOWER(name) = ?', [strtolower(trim($name))])
+            ->whereIn('status', ['pending', 'approved']);
+
+        if ($exceptId !== null) {
+            $query->whereKeyNot($exceptId);
+        }
+
+        return $query->exists();
     }
 
     /**

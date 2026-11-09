@@ -47,4 +47,6 @@ final class ApiReason
     public const SENDER_ID_NOT_ALLOWED = 'sender_id_not_allowed';
 
     public const SENDER_ID_NOT_APPROVED = 'sender_id_not_approved';
+
+    public const SENDER_ID_TAKEN = 'sender_id_taken';
 }
