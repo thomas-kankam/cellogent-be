@@ -62,6 +62,7 @@ class SmsPresenter
             'contact_group_ids' => $inbox->contact_group_ids,
             'contact_groups' => $this->presentGroups($inbox->contact_group_ids),
             'message' => $inbox->message,
+            'message_id' => $inbox->message_id,
             'parts' => (int) $inbox->parts,
             'recipients' => (int) $inbox->recipients_count,
             'units_used' => (int) $inbox->units_used,
@@ -88,7 +89,6 @@ class SmsPresenter
             'client_id' => $inbox->client_id,
             'admin_id' => $inbox->admin_id,
             'aggregator' => $inbox->aggregator,
-            'message_id' => $inbox->message_id,
             'is_global' => (bool) $inbox->is_global,
             'batches' => [
                 'total' => (int) $inbox->batches_total,
@@ -155,6 +155,7 @@ class SmsPresenter
             'request_type' => $sent->request_type,
             'mode' => $inbox?->mode,
             'parent_id' => $inbox?->parent_id,
+            'message_id' => $sent->message_id,
             'status' => $sent->status,
             'failure_reason' => $this->failureReason($sent),
             'units_used' => (int) $sent->units_used,
@@ -175,7 +176,6 @@ class SmsPresenter
         return $this->recipientForClient($sent, $inbox, $contactGroups) + [
             'client_id' => $sent->client_id,
             'aggregator' => $sent->aggregator,
-            'message_id' => $sent->message_id,
             'sequence_no' => $sent->sequence_no,
             'job_id' => $sent->job_id,
             'dlr_status' => $sent->dlr_status,
