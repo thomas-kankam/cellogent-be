@@ -62,6 +62,7 @@ class PrepareBulkSmsJob implements ShouldQueue
             'request_type' => $inbox->request_type,
             'type' => $inbox->type,
             'from' => $inbox->from,
+            'message' => $inbox->message,
             'units_used' => $inbox->parts,
             'aggregator' => $inbox->aggregator,
             'is_global' => $inbox->is_global,

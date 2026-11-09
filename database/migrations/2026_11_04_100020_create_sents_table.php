@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * One row per recipient. Bulk messages keep the text on the inbox only
-     * (message stays null here) so a 1M-recipient blast does not copy it 1M times.
+     * One row per recipient. Message text is copied from the inbox onto each
+     * sent row so recipient history is self-contained for quick and bulk.
      */
     public function up(): void
     {
