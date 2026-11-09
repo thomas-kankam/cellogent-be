@@ -49,9 +49,13 @@ Artisan::command('sms:sync-delivery', function () {
         return;
     }
 
-    // Lease the rows so the next run does not pick them up while jobs are queued.
+    // Short lease so a stuck/slow worker does not block re-poll for long.
+    $leaseSeconds = (int) config('sms.dlr.lease_seconds', 90);
+
     foreach (array_chunk($ids, 1000) as $chunk) {
-        Sent::query()->whereIn('id', $chunk)->update(['next_dlr_at' => now()->addMinutes(10)]);
+        Sent::query()->whereIn('id', $chunk)->update([
+            'next_dlr_at' => now()->addSeconds($leaseSeconds),
+        ]);
     }
 
     foreach (array_chunk($ids, (int) config('sms.dlr.job_size', 100)) as $chunk) {
@@ -89,5 +93,5 @@ Artisan::command('payments:verify-pending', function () {
 
 Schedule::command('payments:verify-pending')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:dispatch-pending')->everyMinute()->withoutOverlapping();
-Schedule::command('sms:sync-delivery')->everyMinute()->withoutOverlapping();
+Schedule::command('sms:sync-delivery')->everyThirtySeconds()->withoutOverlapping();
 Schedule::command('sms:check-aggregator-balance')->everyFifteenMinutes()->withoutOverlapping();

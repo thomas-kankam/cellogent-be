@@ -48,7 +48,16 @@ class SmsPresenter
      */
     public function forClient(Inbox $inbox): array
     {
-        $pending = max(0, $inbox->recipients_count - $inbox->delivered_count - $inbox->failed_count);
+        $recipients = (int) $inbox->recipients_count;
+        $sent = (int) $inbox->submitted_count;
+        $delivered = (int) $inbox->delivered_count;
+        $failed = (int) $inbox->failed_count;
+        // Not in a final state yet (still sending, or submitted and waiting on DLR).
+        $pending = max(0, $recipients - $delivered - $failed);
+        // Submitted but not yet delivered/failed via DLR (excludes submit-time failures).
+        $submitFailures = max(0, $recipients - $sent);
+        $dlrFailures = max(0, $failed - $submitFailures);
+        $awaitingDlr = max(0, $sent - $delivered - $dlrFailures);
 
         return [
             'id' => $inbox->id,
@@ -64,16 +73,17 @@ class SmsPresenter
             'message' => $inbox->message,
             'message_id' => $inbox->message_id,
             'parts' => (int) $inbox->parts,
-            'recipients' => (int) $inbox->recipients_count,
+            'recipients' => $recipients,
             'units_used' => (int) $inbox->units_used,
             'units_refunded' => (int) $inbox->units_refunded,
             'units_before' => $inbox->previous_units !== null ? (int) $inbox->previous_units : null,
             'status' => $inbox->status,
             'delivery' => [
-                'sent' => (int) $inbox->submitted_count,
-                'delivered' => (int) $inbox->delivered_count,
-                'failed' => (int) $inbox->failed_count,
-                'pending' => $pending,
+                'sent' => $sent,                 // accepted by aggregator / network
+                'delivered' => $delivered,       // handset confirmed
+                'failed' => $failed,             // submit rejected or DLR undelivered/expired
+                'pending' => $pending,           // not final yet (includes awaiting DLR)
+                'awaiting_dlr' => $awaitingDlr,  // submitted, waiting for delivery report
             ],
             'created_at' => optional($inbox->created_at)->toDateTimeString(),
             'completed_at' => optional($inbox->completed_at)->toDateTimeString(),

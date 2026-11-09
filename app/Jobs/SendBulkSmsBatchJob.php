@@ -56,6 +56,18 @@ class SendBulkSmsBatchJob implements ShouldQueue
 
             [$submitted, $failed] = $writer->apply($inbox->id, $chunk, $response);
             $progress->recordSubmission($inbox, $submitted, $failed);
+
+            // Surface a reference message_id on the inbox as soon as the first batch succeeds.
+            if ($submitted > 0 && ! $inbox->message_id) {
+                $messageId = Sent::query()
+                    ->where('inbox_id', $inbox->id)
+                    ->whereNotNull('message_id')
+                    ->value('message_id');
+
+                if ($messageId) {
+                    $inbox->update(['message_id' => $messageId]);
+                }
+            }
         }
 
         $progress->batchDone($inbox->id);

@@ -70,8 +70,11 @@ return [
     'dlr' => [
         'per_minute' => (int) env('SMS_DLR_PER_MINUTE', 1000),
         'job_size' => 100,
-        'first_check_after' => 60, // seconds after submission
-        'backoff' => [60, 300, 900, 3600, 10800, 21600, 43200], // seconds between attempts
+        // First poll soon after submit, then back off if still pending.
+        'first_check_after' => (int) env('SMS_DLR_FIRST_CHECK_AFTER', 15),
+        'backoff' => [15, 30, 60, 120, 300, 900, 1800, 3600],
+        // How long sms:sync-delivery holds a row before it can be picked again if the job never finishes.
+        'lease_seconds' => (int) env('SMS_DLR_LEASE_SECONDS', 90),
     ],
 
     /*

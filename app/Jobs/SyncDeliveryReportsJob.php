@@ -80,12 +80,13 @@ class SyncDeliveryReportsJob implements ShouldQueue
                 continue;
             }
 
-            $attempt = (int) $row->dlr_attempts + 1;
+            // dlr_attempts is how many polls already ran; next wait uses backoff[attempts].
+            $attempts = (int) $row->dlr_attempts;
 
-            if ($attempt >= count($backoff)) {
+            if ($attempts >= count($backoff)) {
                 $stop[] = $row->id;
             } else {
-                $retry[$attempt][] = $row->id;
+                $retry[$attempts][] = $row->id;
             }
         }
 
@@ -110,10 +111,10 @@ class SyncDeliveryReportsJob implements ShouldQueue
                 ]);
             }
 
-            foreach ($retry as $attempt => $ids) {
+            foreach ($retry as $attempts => $ids) {
                 Sent::query()->whereIn('id', $ids)->update([
-                    'dlr_attempts' => $attempt,
-                    'next_dlr_at' => $now->copy()->addSeconds((int) $backoff[$attempt]),
+                    'dlr_attempts' => $attempts + 1,
+                    'next_dlr_at' => $now->copy()->addSeconds((int) $backoff[$attempts]),
                 ]);
             }
 
