@@ -40,15 +40,44 @@ class ContactGroupService
         $clientId = $client->id;
         $monthStart = now()->startOfMonth();
 
+        $activeGroupIds = ContactGroup::query()->where('client_id', $clientId)->pluck('id');
+        $archivedGroupIds = ContactGroup::onlyTrashed()->where('client_id', $clientId)->pluck('id');
+        $knownGroupIds = $activeGroupIds->merge($archivedGroupIds)->unique()->values();
+
+        $activeContacts = Contact::query()
+            ->where('client_id', $clientId)
+            ->visible()
+            ->whereIn('contact_group_id', $activeGroupIds);
+
+        $archivedContacts = Contact::query()
+            ->where('client_id', $clientId)
+            ->visible()
+            ->whereIn('contact_group_id', $archivedGroupIds);
+
+        // Group force-deleted (or null) but contact row still around.
+        $orphanedContacts = Contact::query()
+            ->where('client_id', $clientId)
+            ->visible();
+
+        if ($knownGroupIds->isEmpty()) {
+            // No groups left → every remaining contact is orphaned.
+        } else {
+            $orphanedContacts->where(function ($query) use ($knownGroupIds) {
+                $query->whereNull('contact_group_id')
+                    ->orWhereNotIn('contact_group_id', $knownGroupIds);
+            });
+        }
+
         return $this->result(false, 'Contact stats loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
-            'total_groups' => ContactGroup::query()->where('client_id', $clientId)->count(),
-            'total_contacts' => Contact::query()->where('client_id', $clientId)->visible()->count(),
-            'new_this_month' => Contact::query()
-                ->where('client_id', $clientId)
-                ->visible()
+            'total_groups' => $activeGroupIds->count(),
+            'archived_groups' => $archivedGroupIds->count(),
+            // Active contacts only (in non-archived groups) — what the dashboard should show.
+            'total_contacts' => (clone $activeContacts)->count(),
+            'archived_contacts' => (clone $archivedContacts)->count(),
+            'orphaned_contacts' => (clone $orphanedContacts)->count(),
+            'new_this_month' => (clone $activeContacts)
                 ->where('created_at', '>=', $monthStart)
                 ->count(),
-            'archived_groups' => ContactGroup::onlyTrashed()->where('client_id', $clientId)->count(),
         ]);
     }
 
@@ -103,20 +132,29 @@ class ContactGroupService
     }
 
     /**
-     * Soft delete. Contacts stay.
+     * Soft delete (archive). Contacts stay on the group so restore brings them back,
+     * but they no longer count toward total_contacts until the group is restored.
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function softDelete(Client $client, ContactGroup $group): array
     {
+        $contactCount = (int) $group->count_of_contacts;
         $group->delete();
         $archived = ContactGroup::withTrashed()->find($group->id);
 
         $this->activity()->record('Contact group archived', 'contact_group', 'deleted', 'client', $client, $client, [
             'group_id' => $group->id,
+            'contacts_kept' => $contactCount,
         ]);
 
-        return $this->result(false, 'Contact group archived. Contacts were not removed.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($archived));
+        return $this->result(
+            false,
+            'Contact group archived. Its contacts are hidden from active stats until you restore the group.',
+            ApiCode::SUCCESS,
+            ApiReason::SUCCESS,
+            $this->present($archived),
+        );
     }
 
     /**
@@ -135,19 +173,28 @@ class ContactGroupService
     }
 
     /**
-     * Permanently remove the group row. Contacts stay, still owned by the client.
+     * Permanently remove the group and all contacts in it.
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function forceDelete(Client $client, ContactGroup $group): array
     {
         $id = $group->id;
+        $removed = Contact::query()->where('contact_group_id', $id)->delete();
         $group->forceDelete();
 
         $this->activity()->record('Contact group permanently removed', 'contact_group', 'deleted', 'client', $client, $client, [
             'group_id' => $id,
+            'contacts_removed' => $removed,
         ]);
 
-        return $this->result(false, 'Contact group permanently removed.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+        return $this->result(
+            false,
+            $removed > 0
+                ? "Contact group permanently removed along with {$removed} contact(s)."
+                : 'Contact group permanently removed.',
+            ApiCode::SUCCESS,
+            ApiReason::SUCCESS,
+        );
     }
 }
