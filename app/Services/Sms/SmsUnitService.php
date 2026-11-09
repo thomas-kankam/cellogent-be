@@ -4,6 +4,7 @@ namespace App\Services\Sms;
 
 use App\Models\SmsUnitLedger;
 use App\Models\Subscription;
+use App\Support\SmsParts;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,6 +27,8 @@ class SmsUnitService
                 'status' => 'none',
                 'expires_at' => null,
                 'can_send' => false,
+                'chars_per_unit' => SmsParts::charsPerUnit(),
+                'message_max_length' => (int) config('sms.message_max_length', 1600),
             ];
         }
 
@@ -37,6 +40,8 @@ class SmsUnitService
             'status' => $expired ? 'expired' : $subscription->status,
             'expires_at' => optional($subscription->ends_at)->toDateTimeString(),
             'can_send' => ! $expired && $subscription->status === 'active' && $subscription->units > 0,
+            'chars_per_unit' => SmsParts::charsPerUnit(),
+            'message_max_length' => (int) config('sms.message_max_length', 1600),
         ];
     }
 

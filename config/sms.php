@@ -50,7 +50,16 @@ return [
         'job_size' => (int) env('SMS_BULK_JOB_SIZE', 2000),         // recipients per queued batch job
     ],
 
-    'message_max_length' => 1600,
+    /*
+    |--------------------------------------------------------------------------
+    | Unit billing
+    |--------------------------------------------------------------------------
+    | Every chars_per_unit characters of the message costs 1 SMS unit per recipient.
+    | message_max_length caps the body (1600 ≈ 10 units at the default of 160).
+    */
+
+    'chars_per_unit' => (int) env('SMS_CHARS_PER_UNIT', 160),
+    'message_max_length' => (int) env('SMS_MESSAGE_MAX_LENGTH', 1600),
 
     /*
     |--------------------------------------------------------------------------

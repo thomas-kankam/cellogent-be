@@ -12,7 +12,9 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 /**
  * Every API form request returns the same envelope on validation failure.
- * Any phone_number in the payload is converted to 233XXXXXXXXX before rules run.
+ * Phone fields are normalized to 233XXXXXXXXX before rules run:
+ * - phone_number (profiles, contacts, payments)
+ * - to (SMS recipients — string, CSV, or array; never phone_number for SMS)
  */
 abstract class ApiFormRequest extends FormRequest
 {
@@ -29,6 +31,10 @@ abstract class ApiFormRequest extends FormRequest
             $payload['phone_number'] = GhanaPhone::normalize($this->input('phone_number'));
         }
 
+        if ($this->exists('to')) {
+            $payload['to'] = $this->normalizeToField($this->input('to'));
+        }
+
         if (is_array($this->input('meta_data')) && array_key_exists('phone', $this->input('meta_data'))) {
             $meta = $this->input('meta_data');
             $meta['phone'] = GhanaPhone::normalize($meta['phone'] ?? null);
@@ -38,6 +44,37 @@ abstract class ApiFormRequest extends FormRequest
         if ($payload !== []) {
             $this->merge($payload);
         }
+    }
+
+    /**
+     * SMS recipient field: one number, CSV/space list, or array → list of normalized strings.
+     *
+     * @return list<string>|mixed
+     */
+    protected function normalizeToField(mixed $to): mixed
+    {
+        if (is_string($to) || is_numeric($to)) {
+            $parts = preg_split('/[\s,;]+/', trim((string) $to), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+            return array_values(array_map(
+                fn (string $n) => GhanaPhone::normalize($n) ?? $n,
+                $parts,
+            ));
+        }
+
+        if (! is_array($to)) {
+            return $to;
+        }
+
+        return array_values(array_map(function ($n) {
+            if (! is_scalar($n)) {
+                return $n;
+            }
+
+            $normalized = GhanaPhone::normalize((string) $n);
+
+            return $normalized ?? (string) $n;
+        }, $to));
     }
 
     protected function failedValidation(Validator $validator): void
