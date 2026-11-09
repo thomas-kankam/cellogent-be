@@ -103,7 +103,10 @@ class SmsController extends Controller
             $query->where('created_at', '<=', $request->date('to_date')->endOfDay());
         }
 
-        return $this->paginatedApiResponse('Messages loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (Inbox $row) => $this->presenter->forAdmin($row));
+        $paginator = $this->paginateQuery($request, $query);
+        $this->presenter->warmGroups($paginator->getCollection());
+
+        return $this->paginatedApiResponse('Messages loaded.', ApiReason::SUCCESS, $paginator, fn (Inbox $row) => $this->presenter->forAdmin($row));
     }
 
     public function show(int $inbox): JsonResponse
@@ -114,11 +117,19 @@ class SmsController extends Controller
             return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
+        $this->presenter->warmGroups([$row]);
+
         return $this->apiResponse(false, 'Message loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presenter->forAdmin($row));
     }
 
     public function recipients(Request $request, int $inbox): JsonResponse
     {
+        $row = Inbox::query()->find($inbox);
+
+        if (! $row) {
+            return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
         $query = Sent::query()->where('inbox_id', $inbox)->orderBy('id');
 
         foreach (['status', 'to', 'sequence_no'] as $filter) {
@@ -127,7 +138,19 @@ class SmsController extends Controller
             }
         }
 
-        return $this->paginatedApiResponse('Recipients loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query, 50), fn (Sent $sent) => $this->presenter->recipientForAdmin($sent));
+        $paginator = $this->paginateQuery($request, $query, 50);
+        $groupMap = $this->presenter->recipientGroupsForInbox($row, $paginator->getCollection());
+
+        return $this->paginatedApiResponse(
+            'Recipients loaded.',
+            ApiReason::SUCCESS,
+            $paginator,
+            fn (Sent $sent) => $this->presenter->recipientForAdmin(
+                $sent,
+                $row,
+                $groupMap[(string) $sent->to] ?? [],
+            ),
+        );
     }
 
     /**

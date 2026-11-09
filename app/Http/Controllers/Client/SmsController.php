@@ -7,6 +7,7 @@ use App\Http\Requests\Sms\ReblastSmsRequest;
 use App\Http\Requests\Sms\ResendSmsRequest;
 use App\Http\Requests\Sms\SendBulkSmsRequest;
 use App\Http\Requests\Sms\SendQuickSmsRequest;
+use App\Models\Contact;
 use App\Models\Inbox;
 use App\Models\Sent;
 use App\Models\SmsUnitLedger;
@@ -69,10 +70,15 @@ class SmsController extends Controller
     {
         $query = Inbox::query()->where('client_id', $request->user()->id)->latest('id');
 
-        foreach (['type', 'status', 'request_type'] as $filter) {
+        foreach (['type', 'status', 'request_type', 'mode'] as $filter) {
             if ($request->filled($filter)) {
                 $query->where($filter, $request->string($filter));
             }
+        }
+
+        if ($request->filled('contact_group_id')) {
+            $groupId = $request->integer('contact_group_id');
+            $query->whereJsonContains('contact_group_ids', $groupId);
         }
 
         if ($request->filled('from_date')) {
@@ -83,7 +89,15 @@ class SmsController extends Controller
             $query->where('created_at', '<=', $request->date('to_date')->endOfDay());
         }
 
-        return $this->paginatedApiResponse('Messages loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (Inbox $row) => $this->presenter->forClient($row));
+        $paginator = $this->paginateQuery($request, $query);
+        $this->presenter->warmGroups($paginator->getCollection());
+
+        return $this->paginatedApiResponse(
+            'Messages loaded.',
+            ApiReason::SUCCESS,
+            $paginator,
+            fn (Inbox $row) => $this->presenter->forClient($row),
+        );
     }
 
     public function show(Request $request, int $inbox): JsonResponse
@@ -93,6 +107,8 @@ class SmsController extends Controller
         if (! $row) {
             return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
+
+        $this->presenter->warmGroups([$row]);
 
         return $this->apiResponse(false, 'Message loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presenter->forClient($row));
     }
@@ -115,7 +131,35 @@ class SmsController extends Controller
             $query->where('to', $request->string('to'));
         }
 
-        return $this->paginatedApiResponse('Recipients loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query, 50), fn (Sent $sent) => $this->presenter->recipientForClient($sent));
+        // Limit recipients to those who belong to one of the blast's groups.
+        if ($request->filled('contact_group_id') && ($row->contact_group_ids ?? []) !== []) {
+            $groupId = $request->integer('contact_group_id');
+
+            if (in_array($groupId, array_map('intval', $row->contact_group_ids), true)) {
+                $phones = Contact::query()
+                    ->where('client_id', $row->client_id)
+                    ->where('contact_group_id', $groupId)
+                    ->pluck('phone_number');
+
+                $query->whereIn('to', $phones);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
+        $paginator = $this->paginateQuery($request, $query, 50);
+        $groupMap = $this->presenter->recipientGroupsForInbox($row, $paginator->getCollection());
+
+        return $this->paginatedApiResponse(
+            'Recipients loaded.',
+            ApiReason::SUCCESS,
+            $paginator,
+            fn (Sent $sent) => $this->presenter->recipientForClient(
+                $sent,
+                $row,
+                $groupMap[(string) $sent->to] ?? [],
+            ),
+        );
     }
 
     public function reblast(ReblastSmsRequest $request, int $inbox): JsonResponse
