@@ -43,14 +43,27 @@ class SmsInboxProgress
 
     public function finish(int $inboxId): void
     {
+        // Bulk (and any path that skipped it) never set inbox.message_id during send;
+        // copy the first aggregator id from sents so list/show/resend have a reference.
+        $messageId = Sent::query()
+            ->where('inbox_id', $inboxId)
+            ->whereNotNull('message_id')
+            ->value('message_id');
+
+        $updates = [
+            'status' => DB::raw("CASE WHEN submitted_count > 0 THEN 'completed' ELSE 'failed' END"),
+            'completed_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        if ($messageId) {
+            $updates['message_id'] = $messageId;
+        }
+
         Inbox::query()
             ->whereKey($inboxId)
             ->whereIn('status', [Inbox::STATUS_QUEUED, Inbox::STATUS_PROCESSING])
-            ->update([
-                'status' => DB::raw("CASE WHEN submitted_count > 0 THEN 'completed' ELSE 'failed' END"),
-                'completed_at' => now(),
-                'updated_at' => now(),
-            ]);
+            ->update($updates);
 
         Outbox::query()->where('inbox_id', $inboxId)->delete();
     }
