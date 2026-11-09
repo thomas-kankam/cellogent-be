@@ -294,6 +294,7 @@ class SmsService
                 $inbox = Inbox::create($attributes + [
                     'client_id' => $client?->id,
                     'admin_id' => $admin?->id,
+                    'mode' => $attributes['mode'] ?? 'send',
                     'parts' => $parts,
                     'aggregator' => config('sms.aggregator'),
                     'is_global' => false,
