@@ -21,6 +21,8 @@ return [
         'version' => env('KAIROS_API_VERSION', '2025-08-01'),
         'timeout' => (int) env('KAIROS_TIMEOUT', 30),
         'connect_timeout' => (int) env('KAIROS_CONNECT_TIMEOUT', 5),
+        // Full JSON bodies go to storage/logs/kairos-*.log; DB keeps keys (+ body on errors only).
+        'log_bodies' => filter_var(env('KAIROS_LOG_BODIES', true), FILTER_VALIDATE_BOOL),
     ],
 
     // Sender used for platform messages (OTP, alerts) sent by SendSmsJob.

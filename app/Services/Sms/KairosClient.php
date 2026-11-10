@@ -93,8 +93,14 @@ class KairosClient
 
             $body = $http->json();
             $body = is_array($body) ? $body : ['raw' => mb_substr($http->body(), 0, 1000)];
-            $bodyStatus = (int) ($body['statusCode'] ?? $http->status());
-            $ok = $http->successful() && $bodyStatus >= 200 && $bodyStatus < 300;
+            // Some error payloads omit statusCode or return HTTP 200 with a failure message.
+            $bodyStatus = array_key_exists('statusCode', $body)
+                ? (int) $body['statusCode']
+                : (int) $http->status();
+            $ok = $http->successful()
+                && $bodyStatus >= 200
+                && $bodyStatus < 300
+                && ! isset($body['error']);
 
             $response = new KairosResponse(
                 $ok,
@@ -110,14 +116,52 @@ class KairosClient
             $response = new KairosResponse(false, 0, [], $e->getMessage(), $this->elapsed($started));
         }
 
+        // Full bodies → file. Compact keys → DB (response JSON only when the call failed).
+        $this->logToFile($endpoint, $path, $inboxId, $messageCount, $response);
+
         if ($log || ! $response->ok) {
-            $this->log($endpoint, $inboxId, $messageCount, $response);
+            $this->logToDatabase($endpoint, $inboxId, $messageCount, $response);
         }
 
         return $response;
     }
 
-    protected function log(string $endpoint, ?int $inboxId, int $messageCount, KairosResponse $response): void
+    protected function logToFile(
+        string $endpoint,
+        string $path,
+        ?int $inboxId,
+        int $messageCount,
+        KairosResponse $response,
+    ): void {
+        if (! config('sms.kairos.log_bodies', true)) {
+            return;
+        }
+
+        try {
+            Log::channel('kairos')->log(
+                $response->ok ? 'info' : 'warning',
+                'Kairos '.$endpoint,
+                [
+                    'endpoint' => $endpoint,
+                    'path' => $path,
+                    'inbox_id' => $inboxId,
+                    'message_count' => $messageCount,
+                    'ok' => $response->ok,
+                    'http_status' => $response->httpStatus,
+                    'duration_ms' => $response->durationMs,
+                    'transaction_id' => $response->transactionId(),
+                    'sequence_no' => $response->sequenceNo(),
+                    'status_message' => $response->statusMessage(),
+                    'error' => $response->error,
+                    'response' => $response->body !== [] ? $response->body : null,
+                ],
+            );
+        } catch (Throwable $e) {
+            Log::warning('Could not write Kairos file log', ['error' => $e->getMessage()]);
+        }
+    }
+
+    protected function logToDatabase(string $endpoint, ?int $inboxId, int $messageCount, KairosResponse $response): void
     {
         try {
             AggregatorRequest::create([
@@ -131,6 +175,7 @@ class KairosClient
                 'transaction_id' => $response->transactionId(),
                 'sequence_no' => $response->sequenceNo(),
                 'duration_ms' => $response->durationMs,
+                // Keep the DB lean: full body only for failures.
                 'response' => $response->ok ? null : ($response->body ?: ['error' => $response->error]),
             ]);
         } catch (Throwable $e) {

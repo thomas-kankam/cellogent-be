@@ -73,6 +73,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Full Kairos SMS API request/response bodies (quick, bulk, resend, dlr, balance).
+        'kairos' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/kairos.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('KAIROS_LOG_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

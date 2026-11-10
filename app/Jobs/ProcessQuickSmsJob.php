@@ -98,7 +98,9 @@ class ProcessQuickSmsJob implements ShouldQueue
     }
 
     /**
-     * Uses the aggregator resend endpoint with each original message id.
+     * Prefer Kairos's resend endpoint (same recipients, new text). Their API currently
+     * 404s with "Delivery receipt…doesn't exist" even for fresh transactionIds, so we
+     * fall back to a normal quick send when that happens.
      *
      * @return array{0: int, 1: int}
      */
@@ -115,11 +117,15 @@ class ProcessQuickSmsJob implements ShouldQueue
         foreach ($sources as $source) {
             SmsThrottle::await('quick', 1);
 
-            [$ok, $bad] = $writer->apply(
-                $inbox->id,
-                [(string) $source->to],
-                $kairos->resend($source->message_id, $inbox->message, $inbox->id),
-            );
+            $to = (string) $source->to;
+            $response = $kairos->resend((string) $source->message_id, $inbox->message, $inbox->id);
+
+            // Kairos docs say transactionId; live API often 404s. Retry once as a new quick send.
+            if (! $response->ok) {
+                $response = $kairos->quick($to, $inbox->from, $inbox->message, $inbox->id);
+            }
+
+            [$ok, $bad] = $writer->apply($inbox->id, [$to], $response);
 
             $submitted += $ok;
             $failed += $bad;
