@@ -15,6 +15,7 @@ return new class extends Migration
             $table->unsignedInteger('quantity')->default(1);
             $table->decimal('total_price', 12, 2)->default(0);
             $table->string('status')->default('pending')->index();
+            $table->string('type', 32)->nullable()->index();
             $table->string('order_code')->nullable()->index();
             $table->timestamps();
         });

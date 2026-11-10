@@ -12,9 +12,7 @@ use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
-    public function __construct(protected OrderService $orders)
-    {
-    }
+    public function __construct(protected OrderService $orders) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -22,6 +20,9 @@ class OrderController extends Controller
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
+        }
+        if ($request->filled('type')) {
+            $query->where('type', $request->string('type'));
         }
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->integer('client_id'));

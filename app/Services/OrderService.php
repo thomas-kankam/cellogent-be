@@ -22,10 +22,15 @@ class OrderService
     {
         $order->loadMissing('items');
 
+        $type = $order->type ?: $order->items->first()?->type;
+
         return [
             'id' => $order->id,
+            'resource' => 'order',
             'client_id' => $order->client_id,
             'admin_id' => $order->admin_id,
+            'type' => $type,
+            'type_label' => Order::typeLabel($type),
             'quantity' => $order->quantity,
             'total_price' => $order->total_price,
             'status' => $order->status,
@@ -47,6 +52,7 @@ class OrderService
             'order_id' => $item->order_id,
             'order_code' => $item->order_code,
             'type' => $item->type,
+            'type_label' => Order::typeLabel($item->type),
             'meta_data' => $item->meta_data ?? [],
         ];
     }
@@ -69,11 +75,12 @@ class OrderService
             'quantity' => $quantity,
             'total_price' => $total,
             'status' => 'pending',
+            'type' => $type,
             'order_code' => $code,
         ]);
 
         OrderItem::create([
-            'name' => $input['name'] ?? $type,
+            'name' => $input['name'] ?? Order::typeLabel($type) ?? $type,
             'unit_price' => $unitPrice,
             'order_id' => $order->id,
             'order_code' => $code,

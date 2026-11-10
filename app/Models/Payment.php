@@ -6,20 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Payment extends Model
 {
-    public const PURPOSES = [
-        'sms_units',
-        'wallet_top_up',
-        'data_bundle',
-        'airtime',
-        'water',
-        'ecg',
-        'nedco',
-        'gotv',
-        'dstv',
-        'starttimes',
-        'kwesetv',
-        'gbctv',
-    ];
+    /** @see Order::TYPES */
+    public const PURPOSES = Order::TYPES;
 
     public const PENDING = 'pending';
 

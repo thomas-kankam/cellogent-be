@@ -26,6 +26,9 @@ class OrderController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
         }
+        if ($request->filled('type')) {
+            $query->where('type', $request->string('type'));
+        }
 
         $paginator = $this->paginateQuery($request, $query);
 
