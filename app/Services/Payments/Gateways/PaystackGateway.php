@@ -29,7 +29,12 @@ class PaystackGateway implements PaymentGatewayDriver
             'amount' => (int) round((float) $payment->total_amount * 100),
             'currency' => $payment->currency ?: 'GHS',
             'reference' => $payment->reference_id,
-            'channels' => $payment->method === 'card' ? ['card'] : ['mobile_money'],
+            // Null method → let the payer choose card or mobile money on Paystack.
+            'channels' => match ($payment->method) {
+                'card' => ['card'],
+                'momo' => ['mobile_money'],
+                default => ['card', 'mobile_money'],
+            },
             'metadata' => [
                 'payment_id' => $payment->id,
                 'purpose' => $payment->purpose,
@@ -94,6 +99,7 @@ class PaystackGateway implements PaymentGatewayDriver
             gatewayCharge: isset($data['fees']) ? ((int) $data['fees']) / 100 : null,
             message: $state === GatewayStatus::FAILED ? (string) ($data['gateway_response'] ?? 'Payment failed.') : null,
             raw: $body,
+            method: $this->methodFromChannel($data['channel'] ?? null),
         );
     }
 
@@ -112,5 +118,14 @@ class PaystackGateway implements PaymentGatewayDriver
             ->asJson()
             ->connectTimeout(5)
             ->timeout((int) config('payments.gateways.paystack.timeout', 30));
+    }
+
+    protected function methodFromChannel(mixed $channel): ?string
+    {
+        return match ((string) $channel) {
+            'card' => 'card',
+            'mobile_money' => 'momo',
+            default => null,
+        };
     }
 }

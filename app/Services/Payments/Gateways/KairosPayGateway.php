@@ -101,6 +101,7 @@ class KairosPayGateway implements PaymentGatewayDriver
             gatewayCharge: isset($data['charge']) ? (float) $data['charge'] : null,
             message: $state === GatewayStatus::FAILED ? 'Mobile money payment '.strtolower((string) $data['status']).'.' : null,
             raw: $body,
+            method: 'momo',
         );
     }
 

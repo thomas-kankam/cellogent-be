@@ -19,5 +19,7 @@ final class GatewayStatus
         public ?float $gatewayCharge = null,
         public ?string $message = null,
         public array $raw = [],
+        /** Our method code when the gateway reports how the payer paid (card / momo). */
+        public ?string $method = null,
     ) {}
 }

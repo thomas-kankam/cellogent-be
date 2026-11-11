@@ -61,14 +61,29 @@ class GatewayManager
 
     /**
      * Gateways to try for a method, in order: healthy ones by priority, then tripped ones.
+     * Null method = open hosted checkout (payer picks card/momo on the gateway page).
      *
      * @return list<PaymentGateway>
      */
-    public function candidates(string $method): array
+    public function candidates(?string $method = null): array
     {
-        $usable = $this->all()->filter(fn (PaymentGateway $g) => $g->is_enabled
-            && $g->supports($method)
-            && $this->driver($g->code)->configured());
+        $usable = $this->all()->filter(function (PaymentGateway $g) use ($method) {
+            if (! $g->is_enabled || ! $this->driver($g->code)->configured()) {
+                return false;
+            }
+
+            // Open checkout: gateways that can collect card and/or momo on their own page (e.g. Paystack).
+            if ($method === null || $method === '') {
+                return $g->supports('card') || $g->supports('momo');
+            }
+
+            return $g->supports($method);
+        });
+
+        // Kairos needs an MSISDN prompt — skip it when the method is still undecided.
+        if ($method === null || $method === '') {
+            $usable = $usable->reject(fn (PaymentGateway $g) => $g->code === 'kairos');
+        }
 
         [$tripped, $healthy] = $usable->partition(fn (PaymentGateway $g) => $this->isTripped($g));
 

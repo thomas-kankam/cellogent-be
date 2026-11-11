@@ -60,7 +60,7 @@ class CheckoutService
      * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function quote(string $purpose, array $input, string $method = 'momo'): array
+    public function quote(string $purpose, array $input, ?string $method = null): array
     {
         $item = match (true) {
             $purpose === 'wallet_top_up' => $this->topUpItem($input),
@@ -93,12 +93,13 @@ class CheckoutService
     }
 
     /**
-     * @param  array<string, mixed>  $input  purpose-specific fields + method, phone_number, network
+     * @param  array<string, mixed>  $input  purpose-specific fields + optional method, phone_number, network
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function start(Client $client, string $purpose, array $input): array
     {
-        $method = $input['method'] ?? 'momo';
+        // Null method = hosted checkout (Paystack) where the payer picks card/momo; we set method after verify.
+        $method = $this->normalizeMethod($input['method'] ?? null);
 
         if ($purpose === 'wallet_top_up' && $method === 'wallet') {
             return $this->result(true, 'Cannot top up a wallet with wallet balance.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
@@ -171,7 +172,7 @@ class CheckoutService
      * @param  array<string, mixed>  $input
      * @param  array<string, mixed>  $q
      */
-    protected function open(Client $client, string $purpose, array $input, string $method, array $q, ?string $msisdn): Payment
+    protected function open(Client $client, string $purpose, array $input, ?string $method, array $q, ?string $msisdn): Payment
     {
         return DB::transaction(function () use ($client, $purpose, $input, $method, $q, $msisdn) {
             $opened = $this->orders->open($client, [
@@ -201,6 +202,17 @@ class CheckoutService
 
             return $payment;
         });
+    }
+
+    protected function normalizeMethod(mixed $method): ?string
+    {
+        if ($method === null) {
+            return null;
+        }
+
+        $method = trim((string) $method);
+
+        return $method === '' ? null : $method;
     }
 
     /**

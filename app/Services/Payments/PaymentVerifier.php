@@ -45,6 +45,7 @@ class PaymentVerifier
             $this->payments->complete($payment, null, [
                 'gateway_charge' => $status->gatewayCharge,
                 'raw' => $status->raw,
+                'method' => $status->method,
             ]);
 
             return Payment::PAID;

@@ -51,6 +51,10 @@
             "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
+        "deploy": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php -r \"echo 'Use: bash deploy/deploy.sh'.PHP_EOL;\""
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

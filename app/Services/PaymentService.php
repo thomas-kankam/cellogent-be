@@ -118,6 +118,11 @@ class PaymentService
                 $changes['gateway_response'] = $gatewayData['raw'];
             }
 
+            // Backfill how the payer paid when checkout left method open (Paystack card/momo picker).
+            if (! empty($gatewayData['method']) && blank($locked->method)) {
+                $changes['method'] = $gatewayData['method'];
+            }
+
             $locked->update($changes);
 
             if ($locked->order_id && $order = Order::query()->find($locked->order_id)) {
