@@ -42,6 +42,6 @@ fi
 echo "==> Server packages ready."
 echo "Next:"
 echo "  1. Create MySQL database/user"
-echo "  2. Clone app into APP_DIR (default /var/www/cellogent/backend)"
+echo "  2. cd /var/www/cellogent && git clone <repo>  → /var/www/cellogent/cellogent-be"
 echo "  3. Copy .env.example → .env and fill production values"
-echo "  4. cd /var/www/cellogent/backend && bash deploy/install-app.sh"
+echo "  4. cd /var/www/cellogent/cellogent-be && bash deploy/install-app.sh"

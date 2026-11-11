@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # First-time app install on a server (run from the repo root as a user that can sudo).
 # Usage:
-#   cd /var/www/cellogent/backend && bash deploy/install-app.sh
-#   APP_DIR=/var/www/cellogent/backend APP_USER=www-data bash deploy/install-app.sh
+#   cd /var/www/cellogent/cellogent-be && bash deploy/install-app.sh
+#   APP_DIR=/var/www/cellogent/cellogent-be APP_USER=www-data bash deploy/install-app.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,7 +10,7 @@ APP_DIR="${APP_DIR:-$ROOT}"
 APP_USER="${APP_USER:-www-data}"
 PHP_BIN="${PHP_BIN:-php}"
 # Path baked into deploy/*.conf templates (rewritten to $APP_DIR below).
-TEMPLATE_APP_DIR="/var/www/cellogent/backend"
+TEMPLATE_APP_DIR="/var/www/cellogent/cellogent-be"
 
 cd "$APP_DIR"
 

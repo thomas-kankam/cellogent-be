@@ -3,7 +3,7 @@
 Canonical app path on the server:
 
 ```text
-APP_DIR=/var/www/cellogent/backend
+APP_DIR=/var/www/cellogent/cellogent-be
 APP_USER=www-data
 ```
 
@@ -50,8 +50,9 @@ FLUSH PRIVILEGES;
 ```bash
 sudo mkdir -p /var/www/cellogent
 sudo chown -R $USER:www-data /var/www/cellogent
-git clone <your-repo-url> /var/www/cellogent/backend
-cd /var/www/cellogent/backend
+cd /var/www/cellogent
+git clone <your-repo-url>   # creates /var/www/cellogent/cellogent-be
+cd cellogent-be
 cp .env.example .env
 nano .env   # fill production values — see checklist below
 ```
@@ -59,7 +60,7 @@ nano .env   # fill production values — see checklist below
 ### A4. Install PHP deps + Laravel bootstrap
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 composer install --no-dev --optimize-autoloader --no-interaction
 php artisan key:generate --force
 php artisan migrate --force
@@ -77,7 +78,7 @@ php artisan event:cache
 ### A5. Supervisor (Horizon workers)
 
 ```bash
-sudo cp /var/www/cellogent/backend/deploy/supervisor-horizon.conf \
+sudo cp /var/www/cellogent/cellogent-be/deploy/supervisor-horizon.conf \
   /etc/supervisor/conf.d/cellogent-horizon.conf
 # If your path differs, edit the three paths inside that file first.
 sudo supervisorctl reread
@@ -89,15 +90,15 @@ sudo supervisorctl status cellogent-horizon:*
 ### A6. Cron (scheduler — every minute)
 
 ```bash
-sudo cp /var/www/cellogent/backend/deploy/crontab-scheduler.conf \
+sudo cp /var/www/cellogent/cellogent-be/deploy/crontab-scheduler.conf \
   /etc/cron.d/cellogent-scheduler
 sudo chmod 644 /etc/cron.d/cellogent-scheduler
-sudo -u www-data php /var/www/cellogent/backend/artisan schedule:list
+sudo -u www-data php /var/www/cellogent/cellogent-be/artisan schedule:list
 ```
 
 ### A7. Nginx
 
-Point `root` at `/var/www/cellogent/backend/public`, PHP to your `php*-fpm` socket.  
+Point `root` at `/var/www/cellogent/cellogent-be/public`, PHP to your `php*-fpm` socket.  
 Allow contact uploads: `client_max_body_size 25M;`.
 
 Horizon UI: `https://api.yourdomain.com/horizon?token=YOUR_HORIZON_TOKEN`
@@ -105,7 +106,7 @@ Horizon UI: `https://api.yourdomain.com/horizon?token=YOUR_HORIZON_TOKEN`
 ### A8. After every `git pull` (manual)
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 git pull
 composer install --no-dev --optimize-autoloader --no-interaction
 php artisan migrate --force
@@ -130,7 +131,7 @@ Same outcome as section A, with less typing.
 
 ```bash
 # From anywhere — copy repo first, or run after clone:
-cd /var/www/cellogent/backend   # after clone in B2, or run from a checkout
+cd /var/www/cellogent/cellogent-be   # after clone in B2, or run from a checkout
 sudo bash deploy/setup-server.sh
 ```
 
@@ -141,8 +142,9 @@ Creates/enables: PHP + extensions, Redis, Nginx, Supervisor, Composer.
 ```bash
 sudo mkdir -p /var/www/cellogent
 sudo chown -R $USER:www-data /var/www/cellogent
-git clone <your-repo-url> /var/www/cellogent/backend
-cd /var/www/cellogent/backend
+cd /var/www/cellogent
+git clone <your-repo-url>   # creates /var/www/cellogent/cellogent-be
+cd cellogent-be
 cp .env.example .env
 nano .env   # production checklist below
 ```
@@ -150,18 +152,18 @@ nano .env   # production checklist below
 ### B3. First install (once)
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 bash deploy/install-app.sh
 ```
 
-This runs Composer, migrate, Passport keys/client, storage link, caches, installs Supervisor + cron for `/var/www/cellogent/backend`, starts Horizon, and installs a **git post-merge hook** so later pulls auto-deploy.
+This runs Composer, migrate, Passport keys/client, storage link, caches, installs Supervisor + cron for `/var/www/cellogent/cellogent-be`, starts Horizon, and installs a **git post-merge hook** so later pulls auto-deploy.
 
 ### B4. Every update
 
 **Option 1 — hook (easiest):**
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 git pull
 # post-merge → deploy.sh automatically
 ```
@@ -169,7 +171,7 @@ git pull
 **Option 2 — run deploy yourself:**
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 git pull
 bash deploy/deploy.sh
 ```
@@ -186,7 +188,7 @@ SKIP_COMPOSER=1 bash deploy/deploy.sh
 ### B5. Re-install the auto-deploy hook (if missing)
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 cp deploy/hooks/post-merge .git/hooks/post-merge
 chmod +x .git/hooks/post-merge
 ```
@@ -253,7 +255,7 @@ php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"   # HORIZON_TOKEN / webhook to
 Useful checks:
 
 ```bash
-cd /var/www/cellogent/backend
+cd /var/www/cellogent/cellogent-be
 php artisan about
 php artisan horizon:status
 redis-cli ping
