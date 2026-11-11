@@ -53,8 +53,35 @@ class OrderService
             'order_code' => $item->order_code,
             'type' => $item->type,
             'type_label' => Order::typeLabel($item->type),
-            'meta_data' => $item->meta_data ?? [],
+            'meta_data' => $this->publicMeta($item->meta_data ?? []),
         ];
+    }
+
+    /**
+     * Utility purchases keep the provider cost and our profit in meta_data for fulfilment;
+     * order responses (client and admin lists alike) never repeat them.
+     *
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>
+     */
+    protected function publicMeta(array $meta): array
+    {
+        if (! isset($meta['utility']) || ! is_array($meta['utility'])) {
+            return $meta;
+        }
+
+        $strip = function (array $spec): array {
+            unset($spec['cost'], $spec['profit'], $spec['markup'], $spec['input']);
+
+            return $spec;
+        };
+
+        $utility = $meta['utility'];
+        $meta['utility'] = isset($utility['items']) && is_array($utility['items'])
+            ? ['items' => array_map(fn ($item) => is_array($item) ? $strip($item) : $item, $utility['items'])]
+            : $strip($utility);
+
+        return $meta;
     }
 
     /**

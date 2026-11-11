@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\ClientController as AdminClientController;
+use App\Http\Controllers\Admin\MarginController as AdminMarginController;
 use App\Http\Controllers\Admin\OnboardingController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
@@ -11,15 +12,19 @@ use App\Http\Controllers\Admin\PaymentGatewayController as AdminPaymentGatewayCo
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Admin\ReportController as AdminReportController;
+use App\Http\Controllers\Admin\RewardController as AdminRewardController;
+use App\Http\Controllers\Admin\RewardDisbursementController as AdminRewardDisbursementController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SenderIdBlacklistController as AdminSenderIdBlacklistController;
 use App\Http\Controllers\Admin\SenderIdController as AdminSenderIdController;
 use App\Http\Controllers\Admin\SmsController as AdminSmsController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
+use App\Http\Controllers\Admin\UtilityController as AdminUtilityController;
 use App\Http\Controllers\Admin\WalletController as AdminWalletController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\ClientAuthController;
 use App\Http\Controllers\Client\ApiKeyController as ClientApiKeyController;
+use App\Http\Controllers\Client\CampaignController as ClientCampaignController;
 use App\Http\Controllers\Client\ClientActivityLogController;
 use App\Http\Controllers\Client\ClientProfileController;
 use App\Http\Controllers\Client\ContactController as ClientContactController;
@@ -28,11 +33,18 @@ use App\Http\Controllers\Client\OrderController as ClientOrderController;
 use App\Http\Controllers\Client\PaymentController as ClientPaymentController;
 use App\Http\Controllers\Client\PlanController as ClientPlanController;
 use App\Http\Controllers\Client\ReportController as ClientReportController;
+use App\Http\Controllers\Client\RewardController as ClientRewardController;
+use App\Http\Controllers\Client\RewardDisbursementController as ClientRewardDisbursementController;
 use App\Http\Controllers\Client\SenderIdController as ClientSenderIdController;
 use App\Http\Controllers\Client\SmsController as ClientSmsController;
 use App\Http\Controllers\Client\SubscriptionController as ClientSubscriptionController;
+use App\Http\Controllers\Client\SurveyController as ClientSurveyController;
+use App\Http\Controllers\Client\UtilityController as ClientUtilityController;
 use App\Http\Controllers\Client\WalletController as ClientWalletController;
 use App\Http\Controllers\PaymentWebhookController;
+use App\Http\Controllers\PublicApi\CampaignController as PublicCampaignController;
+use App\Http\Controllers\PublicApi\SurveyController as PublicSurveyController;
+use App\Http\Controllers\SwiftWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,6 +54,20 @@ Route::middleware('throttle:120,1')->group(function () {
     Route::post('webhooks/paystack', [PaymentWebhookController::class, 'paystack']);
     Route::get('callbacks/paystack', [PaymentWebhookController::class, 'paystackReturn']);
     Route::post('webhooks/kairos-payment', [PaymentWebhookController::class, 'kairos']);
+
+    // Swift order updates (order.fulfilled / order.failed), signed with SWIFT_SECRET_KEY when set.
+    Route::post('swift_webhook', [SwiftWebhookController::class, 'handle']);
+});
+
+/*
+| Public pages for people who receive a campaign or survey SMS. The campaign id / survey token
+| is the only credential, so these are rate limited per IP.
+*/
+Route::prefix('public')->middleware('throttle:60,1')->group(function () {
+    Route::get('surveys/{token}', [PublicSurveyController::class, 'show']);
+    Route::post('surveys/{token}/click', [PublicSurveyController::class, 'click']);
+    Route::post('surveys/{token}/submit', [PublicSurveyController::class, 'submit']);
+    Route::post('campaigns/{campaign}/click', [PublicCampaignController::class, 'click'])->whereNumber('campaign');
 });
 
 Route::prefix('client')->group(function () {
@@ -87,6 +113,8 @@ Route::prefix('client')->group(function () {
             Route::post('contact-groups/{contactGroup}/restore', [ClientContactGroupController::class, 'restore']);
             Route::delete('contact-groups/{contactGroup}/force', [ClientContactGroupController::class, 'forceDestroy']);
 
+            Route::post('contact-groups/{contactGroup}/verify-beneficiaries', [ClientContactController::class, 'verifyBeneficiaries'])->middleware('throttle:10,1');
+            Route::post('contact-groups/{contactGroup}/submit-beneficiaries', [ClientContactController::class, 'submitBeneficiaries'])->middleware('throttle:10,1');
             Route::get('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'index']);
             Route::post('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'store']);
             Route::post('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'upload'])->middleware('throttle:10,1');
@@ -117,6 +145,53 @@ Route::prefix('client')->group(function () {
         Route::get('orders', [ClientOrderController::class, 'index']);
         Route::post('orders', [ClientOrderController::class, 'store'])->middleware('throttle:checkout');
         Route::get('orders/{order}', [ClientOrderController::class, 'show']);
+
+        Route::get('rewards', [ClientRewardController::class, 'index']);
+        Route::get('rewards/catalog', [ClientRewardController::class, 'catalog']);
+        Route::get('reward-disbursements', [ClientRewardDisbursementController::class, 'index']);
+        Route::get('reward-disbursements/{disbursement}', [ClientRewardDisbursementController::class, 'show'])->whereNumber('disbursement');
+
+        Route::get('campaigns', [ClientCampaignController::class, 'index']);
+        Route::post('campaigns', [ClientCampaignController::class, 'store']);
+        Route::whereNumber('campaign')->group(function () {
+            Route::get('campaigns/{campaign}', [ClientCampaignController::class, 'show']);
+            Route::put('campaigns/{campaign}', [ClientCampaignController::class, 'update']);
+            Route::delete('campaigns/{campaign}', [ClientCampaignController::class, 'destroy']);
+            Route::post('campaigns/{campaign}/fund', [ClientCampaignController::class, 'fund'])->middleware('throttle:checkout');
+            Route::post('campaigns/{campaign}/activate', [ClientCampaignController::class, 'activate']);
+            Route::post('campaigns/{campaign}/pause', [ClientCampaignController::class, 'pause']);
+            Route::post('campaigns/{campaign}/resume', [ClientCampaignController::class, 'resume']);
+            Route::post('campaigns/{campaign}/complete', [ClientCampaignController::class, 'complete']);
+            Route::post('campaigns/{campaign}/cancel', [ClientCampaignController::class, 'cancel']);
+            Route::get('campaigns/{campaign}/analytics', [ClientCampaignController::class, 'analytics']);
+            Route::get('campaigns/{campaign}/events', [ClientCampaignController::class, 'events']);
+            Route::post('campaigns/{campaign}/events', [ClientCampaignController::class, 'recordEvent']);
+        });
+
+        Route::get('surveys', [ClientSurveyController::class, 'index']);
+        Route::post('surveys', [ClientSurveyController::class, 'store']);
+        Route::whereNumber('survey')->group(function () {
+            Route::get('surveys/{survey}', [ClientSurveyController::class, 'show']);
+            Route::put('surveys/{survey}', [ClientSurveyController::class, 'update']);
+            Route::delete('surveys/{survey}', [ClientSurveyController::class, 'destroy']);
+            Route::get('surveys/{survey}/questions', [ClientSurveyController::class, 'questions']);
+            Route::put('surveys/{survey}/questions', [ClientSurveyController::class, 'syncQuestions']);
+            Route::post('surveys/{survey}/fund', [ClientSurveyController::class, 'fund'])->middleware('throttle:checkout');
+            Route::post('surveys/{survey}/activate', [ClientSurveyController::class, 'activate']);
+            Route::post('surveys/{survey}/pause', [ClientSurveyController::class, 'pause']);
+            Route::post('surveys/{survey}/resume', [ClientSurveyController::class, 'resume']);
+            Route::post('surveys/{survey}/complete', [ClientSurveyController::class, 'complete']);
+            Route::post('surveys/{survey}/cancel', [ClientSurveyController::class, 'cancel']);
+            Route::get('surveys/{survey}/analytics', [ClientSurveyController::class, 'analytics']);
+            Route::get('surveys/{survey}/responses', [ClientSurveyController::class, 'responses']);
+        });
+
+        Route::get('utilities/catalog', [ClientUtilityController::class, 'catalog']);
+        Route::post('utilities/quote', [ClientUtilityController::class, 'quote']);
+        Route::post('utilities/lookup', [ClientUtilityController::class, 'lookup'])->middleware('throttle:30,1');
+        Route::post('utilities/purchase', [ClientUtilityController::class, 'purchase'])->middleware('throttle:checkout');
+        Route::get('utilities/orders', [ClientUtilityController::class, 'orders']);
+        Route::get('utilities/orders/{order}', [ClientUtilityController::class, 'show'])->whereNumber('order');
 
         Route::get('sms/balance', [ClientSmsController::class, 'balance']);
         Route::get('sms/units/history', [ClientSmsController::class, 'unitHistory']);
@@ -209,6 +284,40 @@ Route::prefix('admin')->group(function () {
             Route::post('plans', [AdminPlanController::class, 'store']);
             Route::get('plans/{plan}', [AdminPlanController::class, 'show']);
             Route::put('plans/{plan}', [AdminPlanController::class, 'update']);
+        });
+
+        // Rewards catalog: priced like plans, so the same permission manages it.
+        Route::middleware('permission:plan.manage')->group(function () {
+            Route::get('rewards', [AdminRewardController::class, 'index']);
+            Route::post('rewards', [AdminRewardController::class, 'store']);
+            Route::get('rewards/{reward}', [AdminRewardController::class, 'show'])->whereNumber('reward');
+            Route::put('rewards/{reward}', [AdminRewardController::class, 'update'])->whereNumber('reward');
+            Route::put('rewards/{reward}/status', [AdminRewardController::class, 'updateStatus'])->whereNumber('reward');
+            Route::delete('rewards/{reward}', [AdminRewardController::class, 'destroy'])->whereNumber('reward');
+        });
+
+        // Utilities (Swift): provider balance and orders are money data, so they follow payments.
+        Route::middleware('permission:payment.view,payment.manage')->group(function () {
+            Route::get('utilities/catalog', [AdminUtilityController::class, 'catalog']);
+            Route::post('utilities/quote', [AdminUtilityController::class, 'quote']);
+            Route::get('utilities/balance', [AdminUtilityController::class, 'balance']);
+            Route::get('utilities/profit', [AdminUtilityController::class, 'profit']);
+            Route::get('utilities/orders', [AdminUtilityController::class, 'orders']);
+            Route::get('utilities/orders/{order}', [AdminUtilityController::class, 'show'])->whereNumber('order');
+
+            // Reward payouts (airtime, data and money rewards from campaigns and surveys).
+            Route::get('reward-disbursements', [AdminRewardDisbursementController::class, 'index']);
+            Route::get('reward-disbursements/{disbursement}', [AdminRewardDisbursementController::class, 'show'])->whereNumber('disbursement');
+        });
+
+        // Profit margins on top of the provider's prices.
+        Route::middleware('permission:payment.manage')->group(function () {
+            Route::get('margins', [AdminMarginController::class, 'index']);
+            Route::get('margins/options', [AdminMarginController::class, 'options']);
+            Route::post('margins', [AdminMarginController::class, 'store']);
+            Route::get('margins/{margin}', [AdminMarginController::class, 'show'])->whereNumber('margin');
+            Route::put('margins/{margin}', [AdminMarginController::class, 'update'])->whereNumber('margin');
+            Route::delete('margins/{margin}', [AdminMarginController::class, 'destroy'])->whereNumber('margin');
         });
 
         Route::middleware('permission:subscription.view')->group(function () {

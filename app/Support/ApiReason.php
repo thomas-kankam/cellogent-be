@@ -42,7 +42,11 @@ final class ApiReason
 
     public const INSUFFICIENT_BALANCE = 'insufficient_balance';
 
+    public const FUNDS_RESERVED = 'funds_reserved';
+
     public const GATEWAY_UNAVAILABLE = 'gateway_unavailable';
+
+    public const PROVIDER_UNAVAILABLE = 'provider_unavailable';
 
     public const SENDER_ID_NOT_ALLOWED = 'sender_id_not_allowed';
 

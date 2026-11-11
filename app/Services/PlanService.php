@@ -159,8 +159,10 @@ class PlanService
     }
 
     /**
+     * months 0 / null = non-expiry package. Cap at 4 options (validated on the request).
+     *
      * @param  array<int, mixed>  $details
-     * @return list<array{months: int, units: int, price: float}>
+     * @return list<array{months: int, units: int, price: float, non_expiry: bool}>
      */
     protected function normalizeDetails(array $details): array
     {
@@ -168,12 +170,19 @@ class PlanService
             $details = [$details];
         }
 
-        return array_values(array_map(function ($option) {
+        $normalized = array_values(array_map(function ($option) {
+            $months = array_key_exists('months', $option) && $option['months'] !== null && $option['months'] !== ''
+                ? max(0, (int) $option['months'])
+                : 0;
+
             return [
-                'months' => (int) ($option['months'] ?? 1),
+                'months' => $months,
                 'units' => (int) ($option['units'] ?? 0),
                 'price' => (float) ($option['price'] ?? 0),
+                'non_expiry' => $months === 0,
             ];
         }, $details));
+
+        return array_slice($normalized, 0, 4);
     }
 }

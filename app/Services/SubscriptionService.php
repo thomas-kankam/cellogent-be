@@ -119,11 +119,24 @@ class SubscriptionService
             return $this->result(true, 'This plan is not available.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        $months = max(0, $months);
+
         // A paid order delivers exactly what was priced at checkout, even if the plan changed since.
         $option = $purchasedOption ?? $plan->optionForMonths($months);
 
         if (! $option) {
-            return $this->result(true, 'This plan has no option for that duration.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            return $this->result(
+                true,
+                $months === 0 ? 'This plan has no non-expiry package.' : 'This plan has no option for that duration.',
+                ApiCode::BAD_REQUEST,
+                ApiReason::INVALID,
+            );
+        }
+
+        // months 0 always means non-expiry, even if the caller omitted/mis-set type.
+        if ($months === 0 || ! empty($option['non_expiry'])) {
+            $type = 'non_expiry';
+            $months = 0;
         }
 
         $starts = now();

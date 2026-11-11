@@ -55,11 +55,15 @@ class SubscriptionController extends Controller
             return $this->apiResponse(true, 'Plan not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
+        $months = max(0, $request->integer('months'));
+        $type = $request->input('type')
+            ?? ($months === 0 ? 'non_expiry' : 'monthly');
+
         return $this->respondFrom($this->subscriptions->activatePlan(
             $client,
             $plan,
-            $request->integer('months'),
-            $request->input('type', 'monthly'),
+            $months,
+            $type,
             null,
             'admin-assign',
             'assigned',

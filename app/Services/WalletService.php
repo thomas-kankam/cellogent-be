@@ -7,8 +7,10 @@ use App\Concerns\ReturnsServiceResult;
 use App\Models\Client;
 use App\Models\Payment;
 use App\Models\Wallet;
+use App\Models\WalletHold;
 use App\Models\WalletTopUp;
 use App\Models\WalletTransaction;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,12 +37,16 @@ class WalletService
     {
         $wallet->loadMissing('client');
         $client = $wallet->client;
+        $reserved = $this->reservedTotal($wallet->client_id);
+        $balance = (float) $wallet->balance;
 
         return [
             'id' => $wallet->id,
             'client_id' => $wallet->client_id,
             'status' => $wallet->status,
-            'balance' => $wallet->balance,
+            'balance' => $balance,
+            'reserved' => $reserved,
+            'available' => round(max(0, $balance - $reserved), 2),
             'currency' => $wallet->currency,
             'client' => $client ? [
                 'id' => $client->id,
@@ -55,6 +61,114 @@ class WalletService
                 'profile_image' => $client->profileImageUrl(),
             ] : null,
         ];
+    }
+
+    /**
+     * Spendable money = ledger balance minus active campaign/survey holds.
+     */
+    public function available(Client $client): float
+    {
+        $wallet = $this->forClient($client);
+
+        return round(max(0, (float) $wallet->balance - $this->reservedTotal($client->id)), 2);
+    }
+
+    public function reservedTotal(int $clientId): float
+    {
+        return round((float) WalletHold::query()
+            ->where('client_id', $clientId)
+            ->where('status', WalletHold::ACTIVE)
+            ->sum('remaining'), 2);
+    }
+
+    /**
+     * Reserve funds for an active campaign/survey so other spends cannot drain them.
+     * Does not change ledger balance — only reduces available.
+     */
+    public function hold(
+        Client $client,
+        float $amount,
+        Model $holdable,
+        string $purpose,
+        ?Payment $payment = null,
+        ?array $meta = null,
+    ): ?WalletHold {
+        $amount = round($amount, 2);
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $this->forClient($client);
+
+        return DB::transaction(function () use ($client, $amount, $holdable, $purpose, $payment, $meta) {
+            $wallet = Wallet::query()->where('client_id', $client->id)->lockForUpdate()->first();
+            $reserved = $this->reservedTotal($client->id);
+            $available = round((float) $wallet->balance - $reserved, 2);
+
+            if ($wallet->status !== 'active' || $available + 0.00001 < $amount) {
+                return null;
+            }
+
+            return WalletHold::create([
+                'client_id' => $client->id,
+                'wallet_id' => $wallet->id,
+                'holdable_type' => $holdable->getMorphClass(),
+                'holdable_id' => $holdable->getKey(),
+                'amount' => $amount,
+                'remaining' => $amount,
+                'currency' => $wallet->currency ?? 'GHS',
+                'status' => WalletHold::ACTIVE,
+                'purpose' => $purpose,
+                'payment_id' => $payment?->id,
+                'meta' => $meta,
+            ]);
+        }, 3);
+    }
+
+    /**
+     * Free unused reserved funds (campaign/survey closed or cancelled).
+     */
+    public function release(WalletHold $hold): WalletHold
+    {
+        return DB::transaction(function () use ($hold) {
+            $hold = WalletHold::query()->whereKey($hold->id)->lockForUpdate()->firstOrFail();
+
+            if ($hold->status !== WalletHold::ACTIVE) {
+                return $hold;
+            }
+
+            $hold->update([
+                'status' => ((float) $hold->remaining) <= 0.00001 ? WalletHold::CONSUMED : WalletHold::RELEASED,
+                'remaining' => 0,
+            ]);
+
+            return $hold->fresh();
+        }, 3);
+    }
+
+    /**
+     * Mark part of a hold as spent (reward disbursed). Pair with debit() in the same transaction.
+     */
+    public function consume(WalletHold $hold, float $amount): WalletHold
+    {
+        $amount = round($amount, 2);
+
+        return DB::transaction(function () use ($hold, $amount) {
+            $hold = WalletHold::query()->whereKey($hold->id)->lockForUpdate()->firstOrFail();
+
+            if ($hold->status !== WalletHold::ACTIVE || $amount <= 0) {
+                return $hold;
+            }
+
+            $remaining = round(max(0, (float) $hold->remaining - $amount), 2);
+            $hold->update([
+                'remaining' => $remaining,
+                'status' => $remaining <= 0.00001 ? WalletHold::CONSUMED : WalletHold::ACTIVE,
+            ]);
+
+            return $hold->fresh();
+        }, 3);
     }
 
     /**
@@ -189,8 +303,10 @@ class WalletService
         return DB::transaction(function () use ($client, $amount, $purpose, $payment, $description) {
             $wallet = Wallet::query()->where('client_id', $client->id)->lockForUpdate()->first();
             $previous = (float) $wallet->balance;
+            // Active campaign/survey holds cannot be spent on utilities or other checkout.
+            $available = round($previous - $this->reservedTotal($client->id), 2);
 
-            if ($wallet->status !== 'active' || $previous + 0.00001 < $amount) {
+            if ($wallet->status !== 'active' || $available + 0.00001 < $amount) {
                 return false;
             }
 
@@ -208,6 +324,54 @@ class WalletService
                 'payment_id' => $payment?->id,
                 'order_id' => $payment?->order_id,
                 'description' => $description,
+            ]);
+
+            return true;
+        }, 3);
+    }
+
+    /**
+     * Debit against a hold (reward payout). Uses ledger balance, then shrinks the hold so
+     * available for other spends stays correct.
+     */
+    public function debitFromHold(Client $client, WalletHold $hold, float $amount, string $purpose, ?string $description = null): bool
+    {
+        $amount = round($amount, 2);
+
+        return DB::transaction(function () use ($client, $hold, $amount, $purpose, $description) {
+            $hold = WalletHold::query()->whereKey($hold->id)->lockForUpdate()->first();
+
+            if (! $hold || $hold->status !== WalletHold::ACTIVE || (float) $hold->remaining + 0.00001 < $amount) {
+                return false;
+            }
+
+            $wallet = Wallet::query()->where('client_id', $client->id)->lockForUpdate()->first();
+            $previous = (float) $wallet->balance;
+
+            if ($wallet->status !== 'active' || $previous + 0.00001 < $amount) {
+                return false;
+            }
+
+            $after = round($previous - $amount, 2);
+            $wallet->update(['balance' => $after]);
+
+            WalletTransaction::create([
+                'client_id' => $client->id,
+                'wallet_id' => $wallet->id,
+                'type' => 'debit',
+                'purpose' => $purpose,
+                'amount' => $amount,
+                'balance_before' => $previous,
+                'balance_after' => $after,
+                'payment_id' => $hold->payment_id,
+                'order_id' => null,
+                'description' => $description,
+            ]);
+
+            $remaining = round((float) $hold->remaining - $amount, 2);
+            $hold->update([
+                'remaining' => $remaining,
+                'status' => $remaining <= 0.00001 ? WalletHold::CONSUMED : WalletHold::ACTIVE,
             ]);
 
             return true;

@@ -5,12 +5,15 @@ namespace App\Services\Payments;
 use App\Concerns\LogsActivity;
 use App\Concerns\ReturnsServiceResult;
 use App\Jobs\VerifyPaymentJob;
+use App\Models\Campaign;
 use App\Models\Client;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Setting;
+use App\Models\Survey;
 use App\Services\OrderService;
 use App\Services\PaymentService;
+use App\Services\Utilities\UtilityService;
 use App\Services\WalletService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -26,7 +29,16 @@ class CheckoutService
     use LogsActivity;
     use ReturnsServiceResult;
 
-    public const PURPOSES = ['wallet_top_up', 'sms_units'];
+    /** Pay for campaign / survey rewards by momo or card (wallet funding uses the fund endpoints). */
+    public const FUND_PURPOSES = ['campaign_fund', 'survey_fund'];
+
+    /** Several utility orders paid together (bulk purchase by momo/card). */
+    public const UTILITY_BULK = 'utility_bulk';
+
+    /** Utilities sold through the Swift developer API (single purposes + the bulk bundle). */
+    public const UTILITY_PURPOSES = ['data_bundle', 'airtime', 'ecg', 'gotv', 'dstv', 'starttimes', 'mashup', 'results', self::UTILITY_BULK];
+
+    public const PURPOSES = ['wallet_top_up', 'sms_units', ...self::FUND_PURPOSES, ...self::UTILITY_PURPOSES];
 
     public const METHODS = ['momo', 'card', 'wallet'];
 
@@ -50,11 +62,18 @@ class CheckoutService
      */
     public function quote(string $purpose, array $input, string $method = 'momo'): array
     {
-        $item = match ($purpose) {
-            'wallet_top_up' => $this->topUpItem($input),
-            'sms_units' => $this->planItem($input),
+        $item = match (true) {
+            $purpose === 'wallet_top_up' => $this->topUpItem($input),
+            $purpose === 'sms_units' => $this->planItem($input),
+            in_array($purpose, self::FUND_PURPOSES, true) => $this->fundItem($purpose, $input),
+            in_array($purpose, self::UTILITY_PURPOSES, true) => app(UtilityService::class)->checkoutItem($purpose, (array) ($input['utility'] ?? [])),
             default => 'This purchase type is not available yet.',
         };
+
+        // Utility pricing can fail with its own status (e.g. provider unavailable).
+        if (is_array($item) && ($item['in_error'] ?? false)) {
+            return $item;
+        }
 
         if (is_string($item)) {
             return $this->result(true, $item, ApiCode::BAD_REQUEST, ApiReason::INVALID);
@@ -85,10 +104,19 @@ class CheckoutService
             return $this->result(true, 'Cannot top up a wallet with wallet balance.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        // Funding and utilities paid from the wallet have their own endpoints (hold / debit + provider call).
+        if ($method === 'wallet' && (in_array($purpose, self::FUND_PURPOSES, true) || in_array($purpose, self::UTILITY_PURPOSES, true))) {
+            return $this->result(true, 'Pay this from your wallet using its own endpoint.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         $quote = $this->quote($purpose, $input, $method);
 
         if ($quote['in_error']) {
             return $quote;
+        }
+
+        if (in_array($purpose, self::FUND_PURPOSES, true) && ! $this->ownsFundTarget($client, $purpose, $input)) {
+            return $this->result(true, $purpose === 'campaign_fund' ? 'Campaign not found.' : 'Survey not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
         $q = $quote['data'];
@@ -261,6 +289,48 @@ class CheckoutService
     }
 
     /**
+     * Campaign / survey funding: the amount is what the client must reserve; fulfilment re-checks it.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{name: string, amount: float, meta: array<string, mixed>}|string
+     */
+    protected function fundItem(string $purpose, array $input): array|string
+    {
+        $amount = round((float) ($input['amount'] ?? 0), 2);
+
+        if ($amount < 0.01) {
+            return 'Enter the amount to fund (at least 0.01).';
+        }
+
+        $key = $purpose === 'campaign_fund' ? 'campaign_id' : 'survey_id';
+        $id = (int) ($input[$key] ?? 0);
+
+        if ($id < 1) {
+            return $purpose === 'campaign_fund' ? 'Choose the campaign to fund.' : 'Choose the survey to fund.';
+        }
+
+        $default = $purpose === 'campaign_fund' ? 'Campaign funding' : 'Survey funding';
+        $name = trim((string) ($input['name'] ?? ''));
+
+        return [
+            'name' => $name !== '' ? mb_substr($name, 0, 120) : $default,
+            'amount' => $amount,
+            'meta' => [$key => $id, 'amount' => $amount],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    protected function ownsFundTarget(Client $client, string $purpose, array $input): bool
+    {
+        $model = $purpose === 'campaign_fund' ? Campaign::class : Survey::class;
+        $id = (int) ($input[$purpose === 'campaign_fund' ? 'campaign_id' : 'survey_id'] ?? 0);
+
+        return $model::query()->where('client_id', $client->id)->whereKey($id)->exists();
+    }
+
+    /**
      * @param  array<string, mixed>  $input
      * @return array{name: string, amount: float, meta: array<string, mixed>}|string
      */
@@ -272,22 +342,32 @@ class CheckoutService
             return 'Plan not found.';
         }
 
-        $months = (int) ($input['months'] ?? 0);
+        // months 0 / null = non-expiry package on this plan.
+        $months = array_key_exists('months', $input) && $input['months'] !== null && $input['months'] !== ''
+            ? max(0, (int) $input['months'])
+            : 0;
         $option = $plan->optionForMonths($months);
 
         if (! $option) {
-            return 'This plan has no option for that duration.';
+            return $months === 0
+                ? 'This plan has no non-expiry package.'
+                : 'This plan has no option for that duration.';
         }
 
+        $nonExpiry = $months === 0 || ! empty($option['non_expiry']);
+
         return [
-            'name' => $plan->name.' '.$months.' month plan',
+            'name' => $nonExpiry
+                ? $plan->name.' non-expiry'
+                : $plan->name.' '.$months.' month plan',
             'amount' => round((float) $option['price'], 2),
             'meta' => [
                 'plan_id' => $plan->id,
                 'plan_name' => $plan->name,
                 'months' => $months,
                 'units' => $option['units'],
-                'type' => 'monthly',
+                'type' => $nonExpiry ? 'non_expiry' : 'monthly',
+                'non_expiry' => $nonExpiry,
             ],
         ];
     }

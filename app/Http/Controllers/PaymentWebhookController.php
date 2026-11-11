@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Payment;
 use App\Services\Payments\Gateways\PaystackGateway;
 use App\Services\Payments\PaymentVerifier;
+use App\Services\RewardDisbursementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ class PaymentWebhookController extends Controller
 {
     public function __construct(protected PaymentVerifier $verifier) {}
 
-    public function paystack(Request $request, PaystackGateway $paystack): JsonResponse
+    public function paystack(Request $request, PaystackGateway $paystack, RewardDisbursementService $rewards): JsonResponse
     {
         if (! $paystack->validSignature($request->getContent(), $request->header('x-paystack-signature'))) {
             return response()->json(['ok' => false], 401);
@@ -30,6 +31,11 @@ class PaymentWebhookController extends Controller
 
         if ($reference !== '' && str_starts_with($event, 'charge.')) {
             $this->check(Payment::query()->where('reference_id', $reference)->where('gateway', 'paystack')->first());
+        }
+
+        // Reward payouts: the transfer is re-read from Paystack before anything is marked paid.
+        if (in_array($event, ['transfer.success', 'transfer.failed', 'transfer.reversed'], true) && is_array($request->input('data'))) {
+            $rewards->handlePaystackTransfer($request->input('data'));
         }
 
         return response()->json(['ok' => true]);

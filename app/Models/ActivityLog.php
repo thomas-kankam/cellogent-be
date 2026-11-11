@@ -32,6 +32,12 @@ class ActivityLog extends Model
         'sms',
         'contact_group',
         'activity_log',
+        'reward',
+        'campaign',
+        'survey',
+        'utility',
+        'margin',
+        'reward_disbursement',
     ];
 
     public const ACTIONS = [
@@ -47,6 +53,12 @@ class ActivityLog extends Model
         'rejected',
         'blacklisted',
         'unblacklisted',
+        'funded',
+        'activated',
+        'paused',
+        'resumed',
+        'completed',
+        'cancelled',
     ];
 
     protected $fillable = [

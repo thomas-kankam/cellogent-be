@@ -5,10 +5,14 @@ namespace App\Services;
 use App\Concerns\LogsActivity;
 use App\Concerns\ReturnsServiceResult;
 use App\Models\Admin;
+use App\Models\Campaign;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Plan;
+use App\Models\Survey;
+use App\Services\Payments\CheckoutService;
+use App\Services\Utilities\UtilityService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 use Illuminate\Support\Facades\DB;
@@ -184,6 +188,18 @@ class PaymentService
             return;
         }
 
+        if (in_array($payment->purpose, CheckoutService::FUND_PURPOSES, true)) {
+            $this->fulfillFunding($payment, $client);
+
+            return;
+        }
+
+        if (in_array($payment->purpose, CheckoutService::UTILITY_PURPOSES, true)) {
+            $this->fulfillUtility($payment);
+
+            return;
+        }
+
         if ($payment->purpose === 'sms_units' && $payment->order_id) {
             $order = Order::query()->with('items')->find($payment->order_id);
             $item = $order?->items->first();
@@ -216,5 +232,75 @@ class PaymentService
                 throw new \RuntimeException("Cannot fulfil SMS plan for payment {$payment->id}: {$result['message']}");
             }
         }
+    }
+
+    /**
+     * Campaign / survey funding: the money lands in the wallet, then the reward budget is reserved
+     * (held) for that campaign or survey. If the target changed or is gone, the money simply stays
+     * in the wallet as available balance — it is never lost.
+     */
+    protected function fulfillFunding(Payment $payment, Client $client): void
+    {
+        $isCampaign = $payment->purpose === 'campaign_fund';
+        $label = $isCampaign ? 'Campaign funding' : 'Survey funding';
+
+        $this->wallets->credit($client, (float) $payment->amount, $payment->purpose, $payment, $label.' '.$payment->reference_id);
+
+        $order = $payment->order_id ? Order::query()->with('items')->find($payment->order_id) : null;
+        $meta = $order?->items->first()?->meta_data ?? [];
+        $id = (int) ($meta[$isCampaign ? 'campaign_id' : 'survey_id'] ?? 0);
+
+        $model = $id > 0
+            ? ($isCampaign ? Campaign::class : Survey::class)::query()->where('client_id', $client->id)->lockForUpdate()->find($id)
+            : null;
+
+        if (! $model || $model->status !== 'draft' || $model->wallet_hold_id || ! $model->reward_enabled) {
+            return;
+        }
+
+        $required = round((float) $model->estimated_cost, 2);
+
+        if ($required <= 0 || (float) $payment->amount + 0.009 < $required) {
+            return;
+        }
+
+        $hold = $this->wallets->hold($client, $required, $model, $payment->purpose, $payment, [
+            ($isCampaign ? 'campaign_id' : 'survey_id') => $model->id,
+        ]);
+
+        if (! $hold) {
+            return;
+        }
+
+        $model->update([
+            'wallet_hold_id' => $hold->id,
+            'funding_method' => $payment->method,
+            'payment_id' => $payment->id,
+            'reserved_amount' => $hold->amount,
+            'status' => 'funded',
+        ]);
+
+        $this->activity()->record($label.' paid', $isCampaign ? 'campaign' : 'survey', 'funded', 'client', $client, $client, [
+            ($isCampaign ? 'campaign_id' : 'survey_id') => $model->id,
+            'payment_id' => $payment->id,
+            'amount' => $required,
+        ]);
+    }
+
+    /**
+     * Utility purchase paid by momo/card: create the order(s) and queue them for the provider.
+     * A provider failure refunds the client's wallet, so completion itself never fails here.
+     */
+    protected function fulfillUtility(Payment $payment): void
+    {
+        $order = $payment->order_id ? Order::query()->with('items')->find($payment->order_id) : null;
+        $spec = $order?->items->first()?->meta_data['utility'] ?? null;
+
+        if (! is_array($spec)) {
+            // Rolls back the whole completion so money is never marked paid without delivery.
+            throw new \RuntimeException("Cannot fulfil utility purchase for payment {$payment->id}: order details missing.");
+        }
+
+        app(UtilityService::class)->queueFromPayment($payment, $spec);
     }
 }

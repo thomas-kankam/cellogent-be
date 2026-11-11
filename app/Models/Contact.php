@@ -21,7 +21,36 @@ class Contact extends Model
         'gps_address',
         'address',
         'dnd_status',
+        'beneficiary_status',
+        'beneficiary_checked_at',
+        'beneficiary_meta',
     ];
+
+    public const BENEFICIARY_UNKNOWN = 'unknown';
+
+    public const BENEFICIARY_VERIFIED = 'verified';
+
+    public const BENEFICIARY_UNVERIFIED = 'unverified';
+
+    public const BENEFICIARY_SUBMITTED = 'submitted';
+
+    public const BENEFICIARY_INVALID = 'invalid';
+
+    public const BENEFICIARY_STATUSES = [
+        self::BENEFICIARY_UNKNOWN,
+        self::BENEFICIARY_VERIFIED,
+        self::BENEFICIARY_UNVERIFIED,
+        self::BENEFICIARY_SUBMITTED,
+        self::BENEFICIARY_INVALID,
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'beneficiary_checked_at' => 'datetime',
+            'beneficiary_meta' => 'array',
+        ];
+    }
 
     public function client()
     {

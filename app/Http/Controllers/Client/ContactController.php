@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Contact\BeneficiaryActionRequest;
 use App\Http\Requests\Contact\StoreContactRequest;
 use App\Http\Requests\Contact\UpdateDndRequest;
 use App\Http\Requests\Contact\UploadContactsRequest;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\ContactImport;
+use App\Services\ContactBeneficiaryService;
 use App\Services\ContactService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
@@ -17,8 +19,34 @@ use Illuminate\Http\Request;
 
 class ContactController extends Controller
 {
-    public function __construct(protected ContactService $contacts)
+    public function __construct(protected ContactService $contacts, protected ContactBeneficiaryService $beneficiaries) {}
+
+    /**
+     * Check the group's numbers (or `phones[]`) against Swift. Queued; results land on each contact.
+     */
+    public function verifyBeneficiaries(BeneficiaryActionRequest $request, int $contactGroup): JsonResponse
     {
+        $group = $this->ownedGroup($request, $contactGroup);
+
+        if (! $group) {
+            return $this->apiResponse(true, 'Contact group not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->respondFrom($this->beneficiaries->queueVerify($request->user(), $group, $request->validated('phones')));
+    }
+
+    /**
+     * Submit the group's unverified numbers (or `phones[]`) to Swift for registration.
+     */
+    public function submitBeneficiaries(BeneficiaryActionRequest $request, int $contactGroup): JsonResponse
+    {
+        $group = $this->ownedGroup($request, $contactGroup);
+
+        if (! $group) {
+            return $this->apiResponse(true, 'Contact group not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->respondFrom($this->beneficiaries->queueSubmit($request->user(), $group, $request->validated('phones')));
     }
 
     public function index(Request $request, int $contactGroup): JsonResponse
@@ -33,6 +61,10 @@ class ContactController extends Controller
 
         if ($request->filled('dnd_status')) {
             $query->where('dnd_status', $request->string('dnd_status'));
+        }
+
+        if ($request->filled('beneficiary_status')) {
+            $query->where('beneficiary_status', $request->string('beneficiary_status'));
         }
 
         if ($request->filled('import_id')) {

@@ -24,7 +24,9 @@ class Plan extends Model
     }
 
     /**
-     * @return list<array{months: int, units: int, price: float}>
+     * months 0 = non-expiry package on this plan.
+     *
+     * @return list<array{months: int, units: int, price: float, non_expiry: bool}>
      */
     public function options(): array
     {
@@ -39,19 +41,26 @@ class Plan extends Model
         }
 
         return array_values(array_map(function ($option) {
+            $months = array_key_exists('months', $option) && $option['months'] !== null && $option['months'] !== ''
+                ? max(0, (int) $option['months'])
+                : 0;
+
             return [
-                'months' => (int) ($option['months'] ?? 1),
+                'months' => $months,
                 'units' => (int) ($option['units'] ?? 0),
                 'price' => (float) ($option['price'] ?? 0),
+                'non_expiry' => $months === 0,
             ];
         }, $details));
     }
 
     /**
-     * @return array{months: int, units: int, price: float}|null
+     * @return array{months: int, units: int, price: float, non_expiry: bool}|null
      */
     public function optionForMonths(int $months): ?array
     {
+        $months = max(0, $months);
+
         foreach ($this->options() as $option) {
             if ($option['months'] === $months) {
                 return $option;
@@ -59,5 +68,15 @@ class Plan extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Non-expiry package on this plan (months = 0), if any.
+     *
+     * @return array{months: int, units: int, price: float, non_expiry: bool}|null
+     */
+    public function nonExpiryOption(): ?array
+    {
+        return $this->optionForMonths(0);
     }
 }

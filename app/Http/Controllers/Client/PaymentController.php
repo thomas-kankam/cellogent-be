@@ -67,7 +67,7 @@ class PaymentController extends Controller
             ]);
         }
 
-        $result = $this->checkout->quote($purpose, $request->only(['amount', 'plan_id', 'months']), $method);
+        $result = $this->checkout->quote($purpose, $request->only(['amount', 'plan_id', 'months', 'name', 'campaign_id', 'survey_id', 'utility']), $method);
         unset($result['data']['meta']);
 
         return $this->respondFrom($result);

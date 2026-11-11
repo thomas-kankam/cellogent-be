@@ -47,6 +47,9 @@ class ContactService
             'gps_address' => $contact->gps_address,
             'address' => $contact->address,
             'dnd_status' => $contact->dnd_status,
+            'beneficiary_status' => $contact->beneficiary_status ?? Contact::BENEFICIARY_UNKNOWN,
+            'beneficiary_checked_at' => optional($contact->beneficiary_checked_at)->toDateTimeString(),
+            'beneficiary_meta' => $contact->beneficiary_meta,
             'created_at' => optional($contact->created_at)->toDateTimeString(),
         ];
     }

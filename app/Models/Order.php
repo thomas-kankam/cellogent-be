@@ -23,6 +23,14 @@ class Order extends Model
         'starttimes',
         'kwesetv',
         'gbctv',
+        'mashup',
+        'box_office',
+        'results_bece',
+        'results_waec',
+        'results',
+        'utility_bulk',
+        'campaign_fund',
+        'survey_fund',
     ];
 
     protected $fillable = [
@@ -71,6 +79,14 @@ class Order extends Model
             'starttimes' => 'Startimes',
             'kwesetv' => 'Kwese TV',
             'gbctv' => 'GBC TV',
+            'mashup' => 'Mashup',
+            'box_office' => 'Box office',
+            'results_bece' => 'BECE results',
+            'results_waec' => 'WAEC results',
+            'results' => 'Results checker',
+            'utility_bulk' => 'Bulk utilities',
+            'campaign_fund' => 'Campaign funding',
+            'survey_fund' => 'Survey funding',
             default => ucwords(str_replace('_', ' ', $type)),
         };
     }
