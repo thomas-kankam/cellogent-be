@@ -36,6 +36,10 @@ class AdminService
      */
     public function update(Admin $actor, Admin $admin, array $input, ?UploadedFile $image = null): array
     {
+        if ($denied = $this->guardTarget($actor, $admin, 'You cannot edit your own account here. Use your profile instead.')) {
+            return $denied;
+        }
+
         if (isset($input['email'])) {
             $email = strtolower(trim((string) $input['email']));
             $taken = Admin::query()->where('email', $email)->whereKeyNot($admin->id)->exists();
@@ -51,8 +55,16 @@ class AdminService
             $input['phone_number'] = GhanaPhone::normalize($input['phone_number']);
         }
 
-        if (isset($input['role_id']) && ! Role::query()->whereKey($input['role_id'])->exists()) {
-            return $this->result(true, 'Role not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        if (isset($input['role_id'])) {
+            $role = Role::query()->find($input['role_id']);
+
+            if (! $role) {
+                return $this->result(true, 'Role not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+            }
+
+            if (! $actor->canGrantRole($role)) {
+                return $this->result(true, 'You cannot assign a role with permissions you do not have.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
+            }
         }
 
         $before = $admin->only(['first_name', 'last_name', 'email', 'phone_number', 'role_id']);
@@ -83,8 +95,8 @@ class AdminService
             ]);
         }
 
-        if ((int) $actor->id === (int) $admin->id) {
-            return $this->result(true, 'You cannot change your own account status.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if ($denied = $this->guardTarget($actor, $admin, 'You cannot change your own account status.')) {
+            return $denied;
         }
 
         if ($admin->status === $status) {
@@ -109,14 +121,26 @@ class AdminService
      */
     public function assignRole(Admin $actor, Admin $admin, int $roleId): array
     {
+        if ($denied = $this->guardTarget($actor, $admin, 'You cannot change your own role.')) {
+            return $denied;
+        }
+
         $role = Role::query()->find($roleId);
 
         if (! $role) {
             return $this->result(true, 'Role not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
+        if (! $actor->canGrantRole($role)) {
+            return $this->result(true, 'You cannot assign a role with permissions you do not have.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
+        }
+
         $previous = $admin->role_id;
         $admin->update(['role_id' => $role->id]);
+
+        if ((int) $previous !== (int) $role->id) {
+            $this->revokeTokens($admin);
+        }
 
         $this->activity()->record('Role assigned', 'role', 'assigned', 'admin', $actor, $admin, [
             'role_id' => $role->id,
@@ -131,8 +155,8 @@ class AdminService
      */
     public function delete(Admin $actor, Admin $admin): array
     {
-        if ((int) $actor->id === (int) $admin->id) {
-            return $this->result(true, 'You cannot delete your own account.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if ($denied = $this->guardTarget($actor, $admin, 'You cannot delete your own account.')) {
+            return $denied;
         }
 
         DB::transaction(function () use ($admin) {
@@ -151,5 +175,23 @@ class AdminService
     protected function revokeTokens(Admin $admin): void
     {
         $admin->tokens()->get()->each->revoke();
+    }
+
+    /**
+     * Blocks acting on yourself and on admins who hold permissions the actor does not.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     */
+    protected function guardTarget(Admin $actor, Admin $target, string $selfMessage): ?array
+    {
+        if ((int) $actor->id === (int) $target->id) {
+            return $this->result(true, $selfMessage, ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if (! $actor->canManageAdmin($target)) {
+            return $this->result(true, 'You cannot manage an admin with permissions you do not have.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
+        }
+
+        return null;
     }
 }

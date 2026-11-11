@@ -46,8 +46,15 @@ class KairosPayGateway implements PaymentGatewayDriver
 
         $body = $response->json() ?? [];
 
-        if ($response->serverError() || in_array($response->status(), [401, 403], true)) {
+        // Bad credentials: no prompt was sent, safe to try the next gateway.
+        if (in_array($response->status(), [401, 403], true)) {
             return GatewayResult::unavailable('Kairos HTTP '.$response->status(), $body);
+        }
+
+        // 5xx after the request reached Kairos: the prompt may already be on the phone.
+        // Do not fall back (double charge / lost payment); status checks settle it.
+        if ($response->serverError()) {
+            return new GatewayResult(true, reference: $payment->reference_id, message: 'Approve the mobile money prompt on your phone.', raw: $body + ['http_status' => $response->status()]);
         }
 
         if (($body['statusCode'] ?? null) !== '0001') {

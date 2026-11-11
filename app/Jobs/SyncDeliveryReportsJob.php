@@ -63,19 +63,12 @@ class SyncDeliveryReportsJob implements ShouldQueue
 
             if ($response->ok && $status === 'DELIVERED') {
                 $delivered[] = $row->id;
-                $this->bump($inboxDelivered, $row->inbox_id);
 
                 continue;
             }
 
             if ($response->ok && in_array($status, self::FAILED_STATUSES, true)) {
                 $failed[$status][] = $row->id;
-                $this->bump($inboxFailed, $row->inbox_id);
-
-                if ($row->client_id) {
-                    $key = $row->client_id.':'.($row->inbox_id ?? 0);
-                    $refunds[$key] = ($refunds[$key] ?? 0) + (int) $row->units_used;
-                }
 
                 continue;
             }
@@ -91,24 +84,49 @@ class SyncDeliveryReportsJob implements ShouldQueue
         }
 
         $now = now();
+        $byId = $rows->keyBy('id');
 
-        DB::transaction(function () use ($delivered, $failed, $retry, $stop, $inboxDelivered, $inboxFailed, $backoff, $now) {
-            if ($delivered !== []) {
-                Sent::query()->whereIn('id', $delivered)->update([
+        DB::transaction(function () use ($delivered, $failed, $retry, $stop, &$inboxDelivered, &$inboxFailed, &$refunds, $backoff, $now, $byId) {
+            // Each row is flipped only if it is still submitted, so an overlapping job
+            // (lease expired, retry) can never count or refund the same message twice.
+            $inboxDelivered = [];
+            $inboxFailed = [];
+            $refunds = [];
+
+            foreach ($delivered as $id) {
+                $changed = Sent::query()->whereKey($id)->where('status', Sent::SUBMITTED)->update([
                     'status' => Sent::DELIVERED,
                     'dlr_status' => 'DELIVERED',
                     'delivered_at' => $now,
                     'next_dlr_at' => null,
                 ]);
+
+                if ($changed) {
+                    $this->bump($inboxDelivered, $byId[$id]->inbox_id);
+                }
             }
 
             foreach ($failed as $status => $ids) {
-                Sent::query()->whereIn('id', $ids)->update([
-                    'status' => Sent::FAILED,
-                    'dlr_status' => $status,
-                    'units_refunded' => true,
-                    'next_dlr_at' => null,
-                ]);
+                foreach ($ids as $id) {
+                    $changed = Sent::query()->whereKey($id)->where('status', Sent::SUBMITTED)->update([
+                        'status' => Sent::FAILED,
+                        'dlr_status' => $status,
+                        'units_refunded' => true,
+                        'next_dlr_at' => null,
+                    ]);
+
+                    if (! $changed) {
+                        continue;
+                    }
+
+                    $row = $byId[$id];
+                    $this->bump($inboxFailed, $row->inbox_id);
+
+                    if ($row->client_id) {
+                        $key = $row->client_id.':'.($row->inbox_id ?? 0);
+                        $refunds[$key] = ($refunds[$key] ?? 0) + (int) $row->units_used;
+                    }
+                }
             }
 
             foreach ($retry as $attempts => $ids) {

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Concerns\LogsActivity;
 use App\Models\Actor;
 use App\Models\Client;
+use App\Models\Otp;
 use App\Repositories\ActorRepository;
 use App\Repositories\OtpRepository;
 use App\Support\ApiCode;
@@ -34,25 +35,11 @@ class OtpService
     public function request(string $guard, string $email, string $type = 'login'): array
     {
         $email = strtolower(trim($email));
-        $actor = $this->actors->findByEmail($guard, $email);
-
-        if (! $actor) {
-            return $this->result(true, 'Account not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        if ($actor->status !== 'active') {
-            return $this->result(true, 'This account is not active.', ApiCode::FORBIDDEN, ApiReason::ACCOUNT_INACTIVE);
-        }
-
-        $blocked = $this->unverifiedClientBlock($actor, $type);
-        if ($blocked) {
-            return $blocked;
-        }
-
         $throttleKey = "otp:{$guard}:{$email}";
         $max = (int) config('otp.max_attempts', 5);
         $decay = (int) config('otp.decay_seconds', 600);
 
+        // Throttle before the account lookup so unknown emails get the same timing/limits.
         if (RateLimiter::tooManyAttempts($throttleKey, $max)) {
             return $this->result(
                 true,
@@ -64,6 +51,14 @@ class OtpService
         }
 
         RateLimiter::hit($throttleKey, $decay);
+
+        $actor = $this->actors->findByEmail($guard, $email);
+
+        // Unknown, inactive, or blocked accounts all get the same success shape so
+        // callers cannot tell whether the email is registered.
+        if (! $actor || $actor->status !== 'active' || $this->unverifiedClientBlock($actor, $type)) {
+            return $this->opaqueOtpSent($email);
+        }
 
         return $this->issue($actor, $type);
     }
@@ -86,19 +81,15 @@ class OtpService
         $email = strtolower(trim($email));
         $actor = $this->actors->findByEmail($guard, $email);
 
-        if (! $actor) {
-            return $this->result(true, 'Account not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
-        $blocked = $this->unverifiedClientBlock($actor, $type);
-        if ($blocked) {
-            return $blocked;
+        // Same generic failure for unknown emails, missing OTPs, and wrong codes.
+        if (! $actor || $this->unverifiedClientBlock($actor, $type)) {
+            return $this->result(true, 'OTP is invalid.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $otp = $this->otps->latestOpen($guard, $email, $type);
 
         if (! $otp) {
-            return $this->result(true, 'OTP not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+            return $this->result(true, 'OTP is invalid.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         if ($otp->isExpired()) {
@@ -110,12 +101,33 @@ class OtpService
         }
 
         if (! hash_equals($otp->token, $this->hashOtp($plainOtp))) {
-            $this->activity()->forActorSelf($actor, 'OTP invalid', 'otp', 'invalid', ['type' => $type]);
+            $max = max(1, (int) config('otp.max_verify_attempts', 5));
+            $otp->increment('attempts');
+            $burned = $otp->attempts >= $max;
 
-            return $this->result(true, 'OTP is invalid.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            if ($burned) {
+                $otp->update(['used_at' => now()]);
+            }
+
+            $this->activity()->forActorSelf($actor, 'OTP invalid', 'otp', 'invalid', [
+                'type' => $type,
+                'attempts' => $otp->attempts,
+                'burned' => $burned,
+            ]);
+
+            return $burned
+                ? $this->result(true, 'Too many wrong attempts. Request a new OTP.', ApiCode::BAD_REQUEST, ApiReason::EXPIRED)
+                : $this->result(true, 'OTP is invalid.', ApiCode::BAD_REQUEST, ApiReason::INVALID, [
+                    'attempts_left' => $max - $otp->attempts,
+                ]);
         }
 
-        $otp->update(['used_at' => now()]);
+        // Atomic consume: two parallel requests with the right code cannot both log in.
+        $consumed = Otp::query()->whereKey($otp->id)->whereNull('used_at')->update(['used_at' => now()]);
+
+        if ($consumed !== 1) {
+            return $this->result(true, 'OTP is invalid.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
 
         $this->activity()->forActorSelf($actor, 'OTP verified', 'otp', 'verified', ['type' => $type]);
 
@@ -170,26 +182,32 @@ class OtpService
             $data['debug_otp'] = $plain;
         }
 
-        return $this->result(false, 'OTP sent.', ApiCode::SUCCESS, ApiReason::OTP_SENT, $data);
+        return $this->result(false, 'If an account exists for this email, a code has been sent.', ApiCode::SUCCESS, ApiReason::OTP_SENT, $data);
     }
 
     /**
      * Unverified clients may only use the registration OTP until they confirm signup.
-     *
-     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     * Returns a truthy marker (not an API payload) so request/verify can stay opaque.
      */
-    protected function unverifiedClientBlock(Actor $actor, string $type): ?array
+    protected function unverifiedClientBlock(Actor $actor, string $type): bool
     {
-        if ($actor instanceof Client && ! $actor->is_verified && $type !== 'registration') {
-            return $this->result(
-                true,
-                'Request and verify a registration OTP first to activate your account.',
-                ApiCode::FORBIDDEN,
-                ApiReason::UNVERIFIED,
-            );
-        }
+        return $actor instanceof Client && ! $actor->is_verified && $type !== 'registration';
+    }
 
-        return null;
+    /**
+     * Success-shaped response used when we must not reveal whether the email exists.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function opaqueOtpSent(string $email): array
+    {
+        $minutes = (int) config('otp.expires_minutes', 10);
+
+        return $this->result(false, 'If an account exists for this email, a code has been sent.', ApiCode::SUCCESS, ApiReason::OTP_SENT, [
+            'email' => $email,
+            'channel' => 'email',
+            'expires_at' => now()->addMinutes($minutes)->toDateTimeString(),
+        ]);
     }
 
     /**

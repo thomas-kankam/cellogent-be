@@ -18,8 +18,13 @@ return [
     'decay_seconds' => (int) env('OTP_DECAY_SECONDS', 600),
 
     /*
+    | Wrong codes allowed against one OTP before it is burned (user must request a new one).
+    */
+    'max_verify_attempts' => (int) env('OTP_MAX_VERIFY_ATTEMPTS', 5),
+
+    /*
     | Only when APP_ENV=local: include the raw OTP in the JSON so Postman
     | testing works before mail/Horizon is running. Never enable this live.
     */
-    'expose_in_local' => (bool) env('OTP_EXPOSE_IN_LOCAL', true),
+    'expose_in_local' => filter_var(env('OTP_EXPOSE_IN_LOCAL', false), FILTER_VALIDATE_BOOL),
 ];

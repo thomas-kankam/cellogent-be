@@ -15,7 +15,7 @@ class UpdateProfileRequest extends ApiFormRequest
             'phone_number' => ['sometimes', 'required', 'string', GhanaPhone::rule()],
             'date_of_birth' => ['sometimes', 'nullable', 'date'],
             'gender' => ['sometimes', 'nullable', 'string', 'max:20'],
-            'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'account_type' => ['sometimes', 'nullable', 'string', 'in:individual,business'],
             'business_name' => ['sometimes', 'nullable', 'string', 'max:150'],
             'region' => ['sometimes', 'nullable', 'string', 'max:100'],
             'city' => ['sometimes', 'nullable', 'string', 'max:100'],

@@ -25,7 +25,7 @@ class StorePlanRequest extends ApiFormRequest
             'details' => ['required', 'array', 'min:1'],
             'details.*.months' => ['required', 'integer', 'min:1'],
             'details.*.units' => ['required', 'integer', 'min:0'],
-            'details.*.price' => ['required', 'numeric', 'min:0'],
+            'details.*.price' => ['required', 'numeric', 'min:0.01'],
         ];
     }
 

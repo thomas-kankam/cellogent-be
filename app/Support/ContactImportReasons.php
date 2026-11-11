@@ -13,16 +13,13 @@ final class ContactImportReasons
 
     public const DUPLICATE_EMAIL_IN_FILE = 'duplicate_email_in_file';
 
-    public const DUPLICATE_DOB_IN_FILE = 'duplicate_dob_in_file';
-
     public const ALREADY_IN_GROUP = 'already_in_group';
 
     public const LABELS = [
         self::INVALID_PHONE => 'Missing or invalid Ghana phone number',
         self::DUPLICATE_PHONE_IN_FILE => 'Same phone number appears earlier in this file',
         self::DUPLICATE_EMAIL_IN_FILE => 'Same email appears earlier in this file',
-        self::DUPLICATE_DOB_IN_FILE => 'Same date of birth appears earlier in this file',
-        self::ALREADY_IN_GROUP => 'Phone, email, or date of birth already exists in this group',
+        self::ALREADY_IN_GROUP => 'Phone or email already exists in this group',
     ];
 
     public static function keys(): array

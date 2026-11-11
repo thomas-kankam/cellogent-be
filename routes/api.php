@@ -45,7 +45,7 @@ Route::middleware('throttle:120,1')->group(function () {
 });
 
 Route::prefix('client')->group(function () {
-    Route::post('signup', [ClientAuthController::class, 'signup']);
+    Route::post('signup', [ClientAuthController::class, 'signup'])->middleware('throttle:5,1');
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('request_otp', [ClientAuthController::class, 'requestOtp']);
         Route::post('resend_otp_request', [ClientAuthController::class, 'resendOtpRequest']);
@@ -80,23 +80,25 @@ Route::prefix('client')->group(function () {
         Route::get('contact-groups', [ClientContactGroupController::class, 'index']);
         Route::get('contact-groups/trashed', [ClientContactGroupController::class, 'trashed']);
         Route::post('contact-groups', [ClientContactGroupController::class, 'store']);
-        Route::get('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'show']);
-        Route::put('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'update']);
-        Route::delete('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'destroy']);
-        Route::post('contact-groups/{contactGroup}/restore', [ClientContactGroupController::class, 'restore']);
-        Route::delete('contact-groups/{contactGroup}/force', [ClientContactGroupController::class, 'forceDestroy']);
+        Route::whereNumber(['contactGroup', 'contact'])->group(function () {
+            Route::get('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'show']);
+            Route::put('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'update']);
+            Route::delete('contact-groups/{contactGroup}', [ClientContactGroupController::class, 'destroy']);
+            Route::post('contact-groups/{contactGroup}/restore', [ClientContactGroupController::class, 'restore']);
+            Route::delete('contact-groups/{contactGroup}/force', [ClientContactGroupController::class, 'forceDestroy']);
 
-        Route::get('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'index']);
-        Route::post('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'store']);
-        Route::post('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'upload']);
-        Route::get('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'uploads']);
-        Route::get('contact-groups/{contactGroup}/contacts/upload/{import}/contacts', [ClientContactController::class, 'uploadContacts']);
-        Route::get('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'uploadStatus']);
-        Route::delete('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'destroyUpload']);
-        Route::get('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'show']);
-        Route::put('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'update']);
-        Route::patch('contact-groups/{contactGroup}/contacts/{contact}/dnd', [ClientContactController::class, 'dnd']);
-        Route::delete('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'destroy']);
+            Route::get('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'index']);
+            Route::post('contact-groups/{contactGroup}/contacts', [ClientContactController::class, 'store']);
+            Route::post('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'upload'])->middleware('throttle:10,1');
+            Route::get('contact-groups/{contactGroup}/contacts/upload', [ClientContactController::class, 'uploads']);
+            Route::get('contact-groups/{contactGroup}/contacts/upload/{import}/contacts', [ClientContactController::class, 'uploadContacts']);
+            Route::get('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'uploadStatus']);
+            Route::delete('contact-groups/{contactGroup}/contacts/upload/{import}', [ClientContactController::class, 'destroyUpload']);
+            Route::get('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'show']);
+            Route::put('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'update']);
+            Route::patch('contact-groups/{contactGroup}/contacts/{contact}/dnd', [ClientContactController::class, 'dnd']);
+            Route::delete('contact-groups/{contactGroup}/contacts/{contact}', [ClientContactController::class, 'destroy']);
+        });
 
         Route::get('api-keys', [ClientApiKeyController::class, 'index']);
         Route::post('api-keys', [ClientApiKeyController::class, 'store']);
@@ -118,13 +120,13 @@ Route::prefix('client')->group(function () {
 
         Route::get('sms/balance', [ClientSmsController::class, 'balance']);
         Route::get('sms/units/history', [ClientSmsController::class, 'unitHistory']);
-        Route::post('sms/quick', [ClientSmsController::class, 'quick']);
-        Route::post('sms/bulk', [ClientSmsController::class, 'bulk']);
+        Route::post('sms/quick', [ClientSmsController::class, 'quick'])->middleware('throttle:sms-api');
+        Route::post('sms/bulk', [ClientSmsController::class, 'bulk'])->middleware('throttle:sms-api');
         Route::get('sms', [ClientSmsController::class, 'index']);
         Route::get('sms/{inbox}', [ClientSmsController::class, 'show'])->whereNumber('inbox');
         Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
-        Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox');
-        Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox');
+        Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox')->middleware('throttle:sms-api');
+        Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox')->middleware('throttle:sms-api');
     });
 });
 
@@ -273,7 +275,7 @@ Route::prefix('admin')->group(function () {
             Route::get('sms/{inbox}', [AdminSmsController::class, 'show'])->whereNumber('inbox');
             Route::get('sms/{inbox}/recipients', [AdminSmsController::class, 'recipients'])->whereNumber('inbox');
         });
-        Route::post('sms/quick', [AdminSmsController::class, 'quick'])->middleware('permission:sms.send');
+        Route::post('sms/quick', [AdminSmsController::class, 'quick'])->middleware(['permission:sms.send', 'throttle:30,1']);
         Route::middleware('permission:sms.aggregator')->group(function () {
             Route::get('sms/aggregator/balance', [AdminSmsController::class, 'aggregatorBalance']);
             Route::get('sms/aggregator/requests', [AdminSmsController::class, 'aggregatorRequests']);

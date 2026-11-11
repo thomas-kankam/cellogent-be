@@ -13,6 +13,11 @@ final class KairosResponse
         public array $body,
         public ?string $error,
         public int $durationMs,
+        /**
+         * True when Kairos may already have accepted the message (read timeout, 5xx).
+         * Callers must NOT refund units or retry the same recipients.
+         */
+        public bool $uncertain = false,
     ) {}
 
     public function statusMessage(): ?string

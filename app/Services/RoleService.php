@@ -37,6 +37,10 @@ class RoleService
      */
     public function create(Admin $admin, array $input): array
     {
+        if (! $admin->holdsAllPermissionIds($input['permission_ids'] ?? [])) {
+            return $this->forbidden('You cannot give a role permissions you do not have.');
+        }
+
         $role = $this->roles->create([
             'name' => $input['name'],
             'description' => $input['description'] ?? null,
@@ -66,6 +70,18 @@ class RoleService
      */
     public function update(Admin $admin, Role $role, array $input): array
     {
+        if ((int) $role->id === (int) $admin->role_id) {
+            return $this->forbidden('You cannot edit your own role.');
+        }
+
+        if (! $admin->canGrantRole($role)) {
+            return $this->forbidden('You cannot edit a role with permissions you do not have.');
+        }
+
+        if (! $admin->holdsAllPermissionIds($input['permission_ids'] ?? [])) {
+            return $this->forbidden('You cannot give a role permissions you do not have.');
+        }
+
         $role->update([
             'name' => $input['name'] ?? $role->name,
             'description' => $input['description'] ?? $role->description,
@@ -107,7 +123,20 @@ class RoleService
             ];
         }
 
+        if ((int) $actor->id === (int) $target->id) {
+            return $this->forbidden('You cannot change your own role.');
+        }
+
+        if (! $actor->canManageAdmin($target) || ! $actor->canGrantRole($role)) {
+            return $this->forbidden('You cannot assign a role with permissions you do not have.');
+        }
+
+        $previous = $target->role_id;
         $target->update(['role_id' => $role->id]);
+
+        if ((int) $previous !== (int) $role->id) {
+            $target->tokens()->get()->each->revoke();
+        }
 
         $this->activity()->record('Role assigned', 'role', 'assigned', 'admin', $actor, $target, [
             'role_id' => $role->id,
@@ -121,6 +150,20 @@ class RoleService
             'data' => array_merge($this->present($role), [
                 'admin_id' => $target->id,
             ]),
+        ];
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function forbidden(string $message): array
+    {
+        return [
+            'in_error' => true,
+            'message' => $message,
+            'status_code' => ApiCode::FORBIDDEN,
+            'reason' => ApiReason::FORBIDDEN,
+            'data' => [],
         ];
     }
 }

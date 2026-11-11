@@ -102,15 +102,30 @@ class KairosClient
                 && $bodyStatus < 300
                 && ! isset($body['error']);
 
+            $httpStatus = (int) $http->status();
+            // 5xx: the request may have been accepted before Kairos failed to reply.
+            $uncertain = ! $ok && $httpStatus >= 500;
+
             $response = new KairosResponse(
                 $ok,
-                $http->status(),
+                $httpStatus,
                 $body,
-                $ok ? null : (string) ($body['message'] ?? $body['statusMessage'] ?? 'HTTP '.$http->status()),
+                $ok ? null : (string) ($body['message'] ?? $body['statusMessage'] ?? 'HTTP '.$httpStatus),
                 $this->elapsed($started),
+                $uncertain,
             );
         } catch (ConnectionException $e) {
-            $response = new KairosResponse(false, 0, [], 'Connection failed: '.$e->getMessage(), $this->elapsed($started));
+            // Read/operation timeouts are uncertain (message may already be queued at Kairos).
+            // Connect/DNS failures are safe to treat as "never sent".
+            $uncertain = $this->isTimeoutFailure($e->getMessage());
+            $response = new KairosResponse(
+                false,
+                0,
+                [],
+                ($uncertain ? 'Gateway timeout: ' : 'Connection failed: ').$e->getMessage(),
+                $this->elapsed($started),
+                $uncertain,
+            );
         } catch (Throwable $e) {
             Log::error('Kairos call failed', ['endpoint' => $endpoint, 'error' => $e->getMessage()]);
             $response = new KairosResponse(false, 0, [], $e->getMessage(), $this->elapsed($started));
@@ -186,5 +201,15 @@ class KairosClient
     protected function elapsed(float $started): int
     {
         return (int) round((microtime(true) - $started) * 1000);
+    }
+
+    protected function isTimeoutFailure(string $message): bool
+    {
+        $message = strtolower($message);
+
+        return str_contains($message, 'timed out')
+            || str_contains($message, 'timeout')
+            || str_contains($message, 'curl error 28')
+            || str_contains($message, 'operation timed out');
     }
 }

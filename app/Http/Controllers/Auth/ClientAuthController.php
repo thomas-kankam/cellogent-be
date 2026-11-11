@@ -54,9 +54,9 @@ class ClientAuthController extends PasswordlessAuthController
         if (! $actor->is_verified && $type !== 'registration') {
             return [
                 'in_error' => true,
-                'message' => 'Request and verify a registration OTP first to activate your account.',
-                'status_code' => ApiCode::FORBIDDEN,
-                'reason' => ApiReason::UNVERIFIED,
+                'message' => 'OTP is invalid.',
+                'status_code' => ApiCode::BAD_REQUEST,
+                'reason' => ApiReason::INVALID,
                 'data' => [],
             ];
         }

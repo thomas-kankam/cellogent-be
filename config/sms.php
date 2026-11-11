@@ -76,7 +76,8 @@ return [
         'first_check_after' => (int) env('SMS_DLR_FIRST_CHECK_AFTER', 15),
         'backoff' => [15, 30, 60, 120, 300, 900, 1800, 3600],
         // How long sms:sync-delivery holds a row before it can be picked again if the job never finishes.
-        'lease_seconds' => (int) env('SMS_DLR_LEASE_SECONDS', 90),
+        // Must exceed SyncDeliveryReportsJob::$timeout (300s) so a slow job is not re-dispatched mid-run.
+        'lease_seconds' => (int) env('SMS_DLR_LEASE_SECONDS', 360),
     ],
 
     /*

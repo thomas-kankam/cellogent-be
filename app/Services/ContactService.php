@@ -24,9 +24,7 @@ class ContactService
     use LogsActivity;
     use ReturnsServiceResult;
 
-    public function __construct(protected ContactGroupService $groups)
-    {
-    }
+    public function __construct(protected ContactGroupService $groups) {}
 
     /**
      * @return array<string, mixed>
@@ -67,8 +65,8 @@ class ContactService
             return $this->result(true, 'A valid Ghana phone number is required.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
         }
 
-        if ($this->clash($group->id, $phone, $email, $dob)) {
-            return $this->result(true, 'This phone, email, or date of birth is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if ($this->clash($group->id, $phone, $email)) {
+            return $this->result(true, 'This phone or email is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $contact = Contact::create([
@@ -108,8 +106,8 @@ class ContactService
             return $this->result(true, 'A valid Ghana phone number is required.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
         }
 
-        if ($this->clash($group->id, $phone, $email, $dob, $contact->id)) {
-            return $this->result(true, 'This phone, email, or date of birth is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if ($this->clash($group->id, $phone, $email, $contact->id)) {
+            return $this->result(true, 'This phone or email is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $contact->update([
@@ -259,20 +257,17 @@ class ContactService
         ]);
     }
 
-    protected function clash(int $groupId, ?string $phone, ?string $email, ?string $dob, ?int $ignoreId = null): bool
+    protected function clash(int $groupId, ?string $phone, ?string $email, ?int $ignoreId = null): bool
     {
         return Contact::query()
             ->where('contact_group_id', $groupId)
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
-            ->where(function ($query) use ($phone, $email, $dob) {
+            ->where(function ($query) use ($phone, $email) {
                 if ($phone) {
                     $query->orWhere('phone_number', $phone);
                 }
                 if ($email) {
                     $query->orWhere('email', $email);
-                }
-                if ($dob) {
-                    $query->orWhere('date_of_birth', $dob);
                 }
             })
             ->exists();

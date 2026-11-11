@@ -7,6 +7,7 @@ use App\Http\Requests\Concerns\ValidatesClientAccount;
 use App\Models\Actor;
 use App\Models\Admin;
 use App\Models\Client;
+use App\Models\Role;
 use App\Models\Subscription;
 use App\Models\SubscriptionArchive;
 use App\Models\Wallet;
@@ -46,8 +47,19 @@ class OnboardingService
         $input = ValidatesClientAccount::normalizeClientAccountPayload($input);
         $email = strtolower(trim($input['email']));
 
-        if ($this->actors->emailTaken('client', $email)) {
-            return $this->fail('This email is already registered.', ApiCode::BAD_REQUEST, ApiReason::EMAIL_TAKEN);
+        // Public signup must not reveal whether the email is already registered.
+        // Existing accounts get a fresh OTP (registration if still unverified, otherwise login)
+        // and the same success shape as a brand-new signup.
+        $existing = $this->actors->findByEmail('client', $email);
+
+        if ($existing instanceof Client) {
+            // Unverified: resend the registration code so they can finish signup.
+            // Verified: same API shape, no hint — they already log in with OTP.
+            if ($existing->status === 'active' && ! $existing->is_verified) {
+                $this->otp->issue($existing, 'registration');
+            }
+
+            return $this->publicSignupResponse($email);
         }
 
         $client = DB::transaction(function () use ($input, $email, $image) {
@@ -86,15 +98,9 @@ class OnboardingService
             ['type' => 'self'],
         );
 
-        $otp = $this->otp->issue($client, 'registration');
+        $this->otp->issue($client, 'registration');
 
-        return [
-            'in_error' => false,
-            'message' => 'Account created. OTP sent to your email.',
-            'status_code' => ApiCode::CREATED,
-            'reason' => ApiReason::CREATED,
-            'data' => $this->onboardPayload($client->fresh(), $otp),
-        ];
+        return $this->publicSignupResponse($email);
     }
 
     /**
@@ -178,6 +184,16 @@ class OnboardingService
     public function adminOnboardAdmin(Admin $admin, array $input, ?UploadedFile $image = null): array
     {
         $email = strtolower(trim($input['email']));
+
+        $role = Role::query()->find($input['role_id'] ?? 0);
+
+        if (! $role) {
+            return $this->fail('Role not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if (! $admin->canGrantRole($role)) {
+            return $this->fail('You cannot give a new admin permissions you do not have.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
+        }
 
         if ($this->actors->emailTaken('admin', $email)) {
             return $this->fail('This email is already registered.', ApiCode::BAD_REQUEST, ApiReason::EMAIL_TAKEN);
@@ -310,6 +326,7 @@ class OnboardingService
 
     /**
      * Profile fields plus OTP fields on the same data object.
+     * Used by admin-driven onboarding (not public signup).
      *
      * @param  array{data?: array<string, mixed>}  $otp
      * @return array<string, mixed>
@@ -317,6 +334,28 @@ class OnboardingService
     protected function onboardPayload(Actor $actor, array $otp): array
     {
         return array_merge($this->profiles->present($actor), $otp['data'] ?? []);
+    }
+
+    /**
+     * Same envelope for new and existing emails so signup cannot be used to enumerate accounts.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function publicSignupResponse(string $email): array
+    {
+        $minutes = (int) config('otp.expires_minutes', 10);
+
+        return [
+            'in_error' => false,
+            'message' => 'If this email can be used, a verification code has been sent.',
+            'status_code' => ApiCode::CREATED,
+            'reason' => ApiReason::CREATED,
+            'data' => [
+                'email' => $email,
+                'channel' => 'email',
+                'expires_at' => now()->addMinutes($minutes)->toDateTimeString(),
+            ],
+        ];
     }
 
     /**

@@ -13,6 +13,7 @@ class Otp extends Model
         'actor_id',
         'type',
         'channel',
+        'attempts',
         'expires_at',
         'used_at',
     ];
@@ -20,6 +21,7 @@ class Otp extends Model
     protected function casts(): array
     {
         return [
+            'attempts' => 'integer',
             'expires_at' => 'datetime',
             'used_at' => 'datetime',
         ];

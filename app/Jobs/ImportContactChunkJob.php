@@ -47,7 +47,6 @@ class ImportContactChunkJob implements ShouldQueue
         $toInsert = [];
         $seenPhone = [];
         $seenEmail = [];
-        $seenDob = [];
         $skipped = 0;
         $failed = 0;
         $reasons = array_fill_keys(ContactImportReasons::keys(), 0);
@@ -80,19 +79,9 @@ class ImportContactChunkJob implements ShouldQueue
                 continue;
             }
 
-            if ($dob && isset($seenDob[$dob])) {
-                $skipped++;
-                $reasons[ContactImportReasons::DUPLICATE_DOB_IN_FILE]++;
-
-                continue;
-            }
-
             $seenPhone[$phone] = true;
             if ($email) {
                 $seenEmail[$email] = true;
-            }
-            if ($dob) {
-                $seenDob[$dob] = true;
             }
 
             $toInsert[] = [

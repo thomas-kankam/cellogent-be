@@ -10,9 +10,7 @@ use Illuminate\Http\Request;
 
 class ClientActivityLogController extends Controller
 {
-    public function __construct(protected ActivityLogService $logs)
-    {
-    }
+    public function __construct(protected ActivityLogService $logs) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -28,7 +26,7 @@ class ClientActivityLogController extends Controller
             'Activity logs loaded.',
             ApiReason::SUCCESS,
             $paginator,
-            fn ($log) => $this->logs->present($log),
+            fn ($log) => $this->logs->presentForClient($log),
         );
     }
 }

@@ -65,7 +65,16 @@ final class TabularExport
             is_array($value) => json_encode($value),
             is_int($value), is_float($value) => $value,
             is_numeric($value) && ! str_starts_with((string) $value, '0') && strlen((string) $value) < 15 => $value + 0,
-            default => (string) $value,
+            default => self::neutralizeFormula((string) $value),
         };
+    }
+
+    /**
+     * Spreadsheet apps run cells starting with = + - @ (or tab/CR) as formulas. Prefix a quote so
+     * client-controlled text (SMS bodies, names) can't execute when an admin opens the export.
+     */
+    protected static function neutralizeFormula(string $value): string
+    {
+        return preg_match('/^[=+\-@\t\r]/', $value) ? "'".$value : $value;
     }
 }

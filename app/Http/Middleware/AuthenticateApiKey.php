@@ -27,7 +27,7 @@ class AuthenticateApiKey
         }
 
         $apiKey = ApiKey::query()
-            ->where('token', $token)
+            ->where('token', ApiKey::hashToken($token))
             ->where('status', 'active')
             ->first();
 

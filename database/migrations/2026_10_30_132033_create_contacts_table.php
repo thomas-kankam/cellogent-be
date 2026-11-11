@@ -28,7 +28,6 @@ return new class extends Migration
 
             $table->unique(['contact_group_id', 'phone_number'], 'contacts_group_phone_unique');
             $table->unique(['contact_group_id', 'email'], 'contacts_group_email_unique');
-            $table->unique(['contact_group_id', 'date_of_birth'], 'contacts_group_dob_unique');
         });
     }
 

@@ -76,4 +76,51 @@ class Admin extends Actor
 
         return false;
     }
+
+    /**
+     * @return list<int>
+     */
+    public function permissionIds(): array
+    {
+        $this->loadMissing('role.permissions');
+
+        return $this->role?->permissions->pluck('id')->map(fn ($id) => (int) $id)->values()->all() ?? [];
+    }
+
+    /**
+     * True when every permission id is one this admin already holds (no privilege escalation).
+     *
+     * @param  iterable<int|string>  $permissionIds
+     */
+    public function holdsAllPermissionIds(iterable $permissionIds): bool
+    {
+        $owned = $this->permissionIds();
+
+        foreach ($permissionIds as $id) {
+            if (! in_array((int) $id, $owned, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function canGrantRole(Role $role): bool
+    {
+        return $this->holdsAllPermissionIds($role->permissions()->pluck('permissions.id'));
+    }
+
+    /**
+     * Another admin can only be edited / re-roled / deactivated / deleted by someone at least as powerful.
+     */
+    public function canManageAdmin(Admin $target): bool
+    {
+        if ((int) $this->id === (int) $target->id) {
+            return false;
+        }
+
+        $target->loadMissing('role.permissions');
+
+        return $this->holdsAllPermissionIds($target->permissionIds());
+    }
 }

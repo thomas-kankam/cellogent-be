@@ -18,6 +18,14 @@ class SentWriter
      */
     public function apply(int $inboxId, array $recipients, KairosResponse $response): array
     {
+        // Timeout / 5xx: Kairos may already have sent. Keep the charge (no refund) and
+        // mark submitted without ids so we never retry the same recipients.
+        if ($response->uncertain) {
+            $this->markUnconfirmed($inboxId, $recipients, $response->error ?? 'Unconfirmed (gateway timeout)');
+
+            return [count($recipients), 0];
+        }
+
         if (! $response->ok) {
             $this->markFailed($inboxId, $recipients, $response->error ?? 'Not accepted by aggregator');
 
@@ -95,6 +103,30 @@ class SentWriter
                     'error' => mb_substr($error, 0, 255),
                     'units_refunded' => true,
                     'updated_at' => now(),
+                ]);
+        }
+    }
+
+    /**
+     * Gateway outcome unknown: charge stands, no retry, no DLR ids.
+     *
+     * @param  list<string>  $recipients
+     */
+    public function markUnconfirmed(int $inboxId, array $recipients, string $error): void
+    {
+        $now = now();
+
+        foreach (array_chunk($recipients, 1000) as $chunk) {
+            DB::table('sents')
+                ->where('inbox_id', $inboxId)
+                ->whereIn('to', $chunk)
+                ->where('status', Sent::QUEUED)
+                ->update([
+                    'status' => Sent::SUBMITTED,
+                    'error' => mb_substr($error, 0, 255),
+                    'units_refunded' => false,
+                    'submitted_at' => $now,
+                    'updated_at' => $now,
                 ]);
         }
     }

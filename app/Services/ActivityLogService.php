@@ -134,7 +134,7 @@ class ActivityLogService
     }
 
     /**
-     * Shape used by list endpoints.
+     * Shape used by admin list endpoints (full party details).
      *
      * @return array<string, mixed>
      */
@@ -149,6 +149,26 @@ class ActivityLogService
             'transmitter' => $this->presentParty($log->transmitter),
             'receiver' => $this->presentParty($log->receiver),
             'metadata' => $log->metadata ?? [],
+            'created_at' => optional($log->created_at)->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * Client-facing shape: admin identities are masked so staff emails never leave the admin API.
+     *
+     * @return array<string, mixed>
+     */
+    public function presentForClient(ActivityLog $log): array
+    {
+        return [
+            'id' => $log->id,
+            'title' => $log->title,
+            'module' => $log->module,
+            'action' => $log->action,
+            'actor' => $log->actor,
+            'transmitter' => $this->presentPartyForClient($log->transmitter),
+            'receiver' => $this->presentPartyForClient($log->receiver),
+            'metadata' => $this->scrubMetadataForClient($log->metadata ?? []),
             'created_at' => optional($log->created_at)->toDateTimeString(),
         ];
     }
@@ -170,5 +190,39 @@ class ActivityLogService
             'name' => $name !== '' ? $name : ($party->name ?? null),
             'email' => $party->email ?? null,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function presentPartyForClient(?Model $party): ?array
+    {
+        if (! $party) {
+            return null;
+        }
+
+        if ($party instanceof Admin) {
+            return [
+                'type' => 'Admin',
+                'id' => null,
+                'name' => 'Support',
+                'email' => null,
+            ];
+        }
+
+        return $this->presentParty($party);
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     * @return array<string, mixed>
+     */
+    protected function scrubMetadataForClient(array $metadata): array
+    {
+        foreach (['email', 'admin_email', 'actor_email', 'approved_by', 'rejected_by'] as $key) {
+            unset($metadata[$key]);
+        }
+
+        return $metadata;
     }
 }

@@ -3,14 +3,16 @@
 namespace App\Jobs;
 
 use App\Mail\OtpMail;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Mail;
 
 /**
  * Sends the OTP email on the Redis/Horizon queue so the API returns immediately.
+ * Encrypted so the plain code never sits readable in Redis or the Horizon dashboard.
  */
-class SendOtpMailJob implements ShouldQueue
+class SendOtpMailJob implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
 

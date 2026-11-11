@@ -27,8 +27,9 @@ abstract class ApiFormRequest extends FormRequest
     {
         $payload = [];
 
-        if ($this->exists('phone_number')) {
-            $payload['phone_number'] = GhanaPhone::normalize($this->input('phone_number'));
+        // Non-scalar values are left as-is so the 'string' rule rejects them with a 422 (not a TypeError 500).
+        if ($this->exists('phone_number') && is_scalar($this->input('phone_number'))) {
+            $payload['phone_number'] = GhanaPhone::normalize((string) $this->input('phone_number'));
         }
 
         if ($this->exists('to')) {
@@ -37,7 +38,7 @@ abstract class ApiFormRequest extends FormRequest
 
         if (is_array($this->input('meta_data')) && array_key_exists('phone', $this->input('meta_data'))) {
             $meta = $this->input('meta_data');
-            $meta['phone'] = GhanaPhone::normalize($meta['phone'] ?? null);
+            $meta['phone'] = is_scalar($meta['phone']) ? GhanaPhone::normalize((string) $meta['phone']) : $meta['phone'];
             $payload['meta_data'] = $meta;
         }
 

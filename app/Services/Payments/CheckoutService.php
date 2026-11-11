@@ -109,7 +109,20 @@ class CheckoutService
         }
 
         try {
-            $payment = $this->open($client, $purpose, $input, $method, $q, $msisdn);
+            // Wallet: debit + mark paid + deliver in ONE transaction, so a failure never leaves money taken without delivery.
+            $payment = DB::transaction(function () use ($client, $purpose, $input, $method, $q, $msisdn) {
+                $payment = $this->open($client, $purpose, $input, $method, $q, $msisdn);
+
+                if ($method === 'wallet') {
+                    $done = $this->payments->complete($payment->fresh());
+
+                    if ($done['in_error']) {
+                        throw new \RuntimeException('Wallet payment could not be completed: '.$done['message']);
+                    }
+                }
+
+                return $payment;
+            }, 3);
         } catch (InsufficientWallet) {
             return $this->result(true, 'Insufficient wallet balance.', ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
                 'balance' => $this->wallets->forClient($client)->balance,
@@ -118,8 +131,6 @@ class CheckoutService
         }
 
         if ($method === 'wallet') {
-            $this->payments->complete($payment->fresh());
-
             return $this->respond($payment->fresh(), 'Payment completed from your wallet.');
         }
 

@@ -82,9 +82,15 @@ class ImportContactsJob implements ShouldQueue
         $buffer = [];
         $total = 0;
         $isHeader = true;
+        // Compressed XLSX can expand to millions of rows; stop reading past this cap.
+        $maxRows = max(1, (int) env('CONTACT_IMPORT_MAX_ROWS', 500000));
 
         foreach ($reader->getSheetIterator() as $sheet) {
             foreach ($sheet->getRowIterator() as $row) {
+                if ($total >= $maxRows) {
+                    break;
+                }
+
                 $cells = $row->toArray();
 
                 if ($isHeader) {

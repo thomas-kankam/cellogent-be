@@ -113,12 +113,14 @@ class SubscriptionService
         string $paymentStatus = 'paid',
         ?Admin $actor = null,
         bool $requireActivePlan = true,
+        ?array $purchasedOption = null,
     ): array {
         if ($requireActivePlan && $plan->status !== 'active') {
             return $this->result(true, 'This plan is not available.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        $option = $plan->optionForMonths($months);
+        // A paid order delivers exactly what was priced at checkout, even if the plan changed since.
+        $option = $purchasedOption ?? $plan->optionForMonths($months);
 
         if (! $option) {
             return $this->result(true, 'This plan has no option for that duration.', ApiCode::BAD_REQUEST, ApiReason::INVALID);

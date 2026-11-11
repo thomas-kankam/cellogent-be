@@ -25,8 +25,8 @@ class PaymentWebhookController extends Controller
             return response()->json(['ok' => false], 401);
         }
 
-        $event = (string) $request->input('event');
-        $reference = (string) $request->input('data.reference');
+        $event = is_string($request->input('event')) ? $request->input('event') : '';
+        $reference = is_scalar($request->input('data.reference')) ? (string) $request->input('data.reference') : '';
 
         if ($reference !== '' && str_starts_with($event, 'charge.')) {
             $this->check(Payment::query()->where('reference_id', $reference)->where('gateway', 'paystack')->first());
@@ -40,7 +40,8 @@ class PaymentWebhookController extends Controller
      */
     public function paystackReturn(Request $request): RedirectResponse
     {
-        $reference = (string) ($request->query('reference') ?: $request->query('trxref'));
+        $raw = $request->query('reference') ?: $request->query('trxref');
+        $reference = is_string($raw) ? $raw : '';
         $payment = $reference !== ''
             ? Payment::query()->where('reference_id', $reference)->where('gateway', 'paystack')->first()
             : null;
@@ -53,22 +54,33 @@ class PaymentWebhookController extends Controller
     public function kairos(Request $request): JsonResponse
     {
         $token = (string) config('payments.gateways.kairos.webhook_token');
+        $given = $request->header('x-webhook-token') ?? $request->query('token');
 
-        if ($token !== '' && ! hash_equals($token, (string) ($request->query('token') ?? $request->header('x-webhook-token')))) {
+        // Required outside local; without it anyone could trigger status calls and log spam.
+        if ($token === '' && ! app()->environment('local')) {
+            Log::warning('Kairos payment webhook rejected: KAIROS_PAY_WEBHOOK_TOKEN is not set.');
+
+            return response()->json(['ok' => false], 401);
+        }
+
+        if ($token !== '' && (! is_string($given) || ! hash_equals($token, $given))) {
             return response()->json(['ok' => false], 401);
         }
 
         $payload = $request->all();
-        $candidates = array_filter(array_map('strval', [
-            Arr::get($payload, 'referenceNo'),
-            Arr::get($payload, 'data.referenceNo'),
-            Arr::get($payload, 'reference'),
-            Arr::get($payload, 'data.reference'),
-            Arr::get($payload, 'referenceId'),
-            Arr::get($payload, 'data.referenceId'),
-            Arr::get($payload, 'transactionId'),
-            Arr::get($payload, 'data.transactionId'),
-        ]));
+        $candidates = array_values(array_filter(array_map(
+            fn ($v) => is_scalar($v) ? trim((string) $v) : '',
+            [
+                Arr::get($payload, 'referenceNo'),
+                Arr::get($payload, 'data.referenceNo'),
+                Arr::get($payload, 'reference'),
+                Arr::get($payload, 'data.reference'),
+                Arr::get($payload, 'referenceId'),
+                Arr::get($payload, 'data.referenceId'),
+                Arr::get($payload, 'transactionId'),
+                Arr::get($payload, 'data.transactionId'),
+            ],
+        )));
 
         $payment = $candidates === [] ? null : Payment::query()
             ->where('gateway', 'kairos')

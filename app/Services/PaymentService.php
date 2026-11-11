@@ -186,21 +186,34 @@ class PaymentService
 
         if ($payment->purpose === 'sms_units' && $payment->order_id) {
             $order = Order::query()->with('items')->find($payment->order_id);
-            $meta = $order?->items->first()?->meta_data ?? [];
+            $item = $order?->items->first();
+            $meta = $item?->meta_data ?? [];
             $plan = isset($meta['plan_id']) ? Plan::query()->find($meta['plan_id']) : null;
 
-            if ($plan) {
-                $this->subscriptions->activatePlan(
-                    $client,
-                    $plan,
-                    (int) ($meta['months'] ?? 1),
-                    $meta['type'] ?? 'monthly',
-                    $payment->id,
-                    $payment->reference_id,
-                    'paid',
-                    $admin,
-                    false,
-                );
+            if (! $plan || ! isset($meta['units'], $meta['months'])) {
+                // Rolls back the whole completion so money is never marked paid without delivery.
+                throw new \RuntimeException("Cannot fulfil SMS plan for payment {$payment->id}: order details missing.");
+            }
+
+            $result = $this->subscriptions->activatePlan(
+                $client,
+                $plan,
+                (int) $meta['months'],
+                $meta['type'] ?? 'monthly',
+                $payment->id,
+                $payment->reference_id,
+                'paid',
+                $admin,
+                false,
+                [
+                    'months' => (int) $meta['months'],
+                    'units' => (int) $meta['units'],
+                    'price' => (float) $item->unit_price,
+                ],
+            );
+
+            if ($result['in_error']) {
+                throw new \RuntimeException("Cannot fulfil SMS plan for payment {$payment->id}: {$result['message']}");
             }
         }
     }

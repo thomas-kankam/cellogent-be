@@ -59,18 +59,10 @@ class HorizonServiceProvider extends ServiceProvider
     }
 
     /**
-     * Browser dashboard on this machine (artisan serve / local env).
+     * Open without a token only in local dev. Host / IP checks are spoofable behind proxies.
      */
     protected function horizonIsOpen($request): bool
     {
-        if ($this->app->environment(['local', 'development'])) {
-            return true;
-        }
-
-        $host = $request->getHost();
-        $ip = $request->ip();
-
-        return in_array($host, ['127.0.0.1', 'localhost'], true)
-            || in_array($ip, ['127.0.0.1', '::1'], true);
+        return $this->app->environment('local');
     }
 }
