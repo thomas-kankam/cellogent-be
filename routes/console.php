@@ -122,9 +122,17 @@ Artisan::command('contacts:verify-beneficiaries', function (ContactBeneficiarySe
     $result = $beneficiaries->dispatchPendingVerify();
 
     $this->info("Beneficiary verify: {$result['groups']} group(s), ~{$result['contacts']} contact(s) queued.");
-})->purpose('Check unknown/submitted contact numbers with Swift (client still submits unverified ones)');
+})->purpose('Check unknown/submitted contact numbers with Swift (daily at midnight)');
+
+Artisan::command('contacts:submit-beneficiaries', function (ContactBeneficiaryService $beneficiaries) {
+    $result = $beneficiaries->dispatchPendingSubmit();
+
+    $this->info("Beneficiary submit: {$result['groups']} group(s), ~{$result['contacts']} contact(s) queued.");
+})->purpose('Submit unverified contact numbers to Swift (weekly)');
 
 Schedule::command('engagement:dispatch-due')->everyMinute()->withoutOverlapping();
 Schedule::command('campaigns:run-occasions')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('rewards:process-pending')->everyMinute()->withoutOverlapping();
-Schedule::command('contacts:verify-beneficiaries')->everyFifteenMinutes()->withoutOverlapping();
+// Submit Sunday 22:00 → midnight verifies catch submitted → verified by morning.
+Schedule::command('contacts:submit-beneficiaries')->weeklyOn(0, '22:00')->withoutOverlapping();
+Schedule::command('contacts:verify-beneficiaries')->dailyAt('00:00')->withoutOverlapping();

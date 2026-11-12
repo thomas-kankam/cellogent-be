@@ -22,7 +22,7 @@ class ContactController extends Controller
     public function __construct(protected ContactService $contacts, protected ContactBeneficiaryService $beneficiaries) {}
 
     /**
-     * Manually re-check numbers with Swift (usually automatic after upload + every 15 min).
+     * Manually re-check numbers with Swift (also after upload + daily at midnight).
      * Omit phones → unknown/submitted only. Pass phones[] → check those specifically.
      */
     public function verifyBeneficiaries(BeneficiaryActionRequest $request, int $contactGroup): JsonResponse
@@ -37,8 +37,8 @@ class ContactController extends Controller
     }
 
     /**
-     * Register unverified numbers with Swift (client action — not automatic).
-     * After submit, status becomes `submitted`; the scheduler re-checks until verified/invalid.
+     * Manually register unverified numbers with Swift (also runs weekly in the background).
+     * Status becomes `submitted`; midnight verify then re-checks until verified/invalid.
      */
     public function submitBeneficiaries(BeneficiaryActionRequest $request, int $contactGroup): JsonResponse
     {

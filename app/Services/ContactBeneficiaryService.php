@@ -20,8 +20,9 @@ use Illuminate\Support\Str;
  * carrier has registered as beneficiaries. This checks the contacts in a group against Swift
  * and submits the unregistered ones, keeping the result on each contact.
  *
- * Verify is automatic after uploads and on a schedule (unknown / submitted numbers).
- * Submit stays a client action — that is what registers unverified numbers with Swift.
+ * Verify: after uploads + daily at midnight (unknown / submitted).
+ * Submit: weekly for unverified numbers; following midnight verifies then see if Swift
+ * approved them (submitted → verified). Manual verify/submit endpoints still work.
  *
  * Both actions are queued: Swift answers one number per request and can be slow.
  */
@@ -93,9 +94,42 @@ class ContactBeneficiaryService
      */
     public function dispatchPendingVerify(int $limitGroups = 40): array
     {
+        return $this->dispatchPendingByStatus(self::ACTION_VERIFY, self::VERIFY_PENDING, $limitGroups);
+    }
+
+    /**
+     * After verify marks numbers unverified: register them with Swift (status → submitted).
+     */
+    public function queueSubmitGroup(int $clientId, int $groupId): void
+    {
+        $pending = (int) $this->contacts($clientId, $groupId, null, [Contact::BENEFICIARY_UNVERIFIED])->count();
+
+        if ($pending < 1) {
+            return;
+        }
+
+        $this->dispatchStarter(self::ACTION_SUBMIT, $clientId, $groupId, null);
+    }
+
+    /**
+     * Schedule helper: submit unverified numbers so a later verify can see if they are approved.
+     *
+     * @return array{groups: int, contacts: int}
+     */
+    public function dispatchPendingSubmit(int $limitGroups = 40): array
+    {
+        return $this->dispatchPendingByStatus(self::ACTION_SUBMIT, [Contact::BENEFICIARY_UNVERIFIED], $limitGroups);
+    }
+
+    /**
+     * @param  list<string>  $statuses
+     * @return array{groups: int, contacts: int}
+     */
+    protected function dispatchPendingByStatus(string $action, array $statuses, int $limitGroups): array
+    {
         $rows = Contact::query()
             ->visible()
-            ->whereIn('beneficiary_status', self::VERIFY_PENDING)
+            ->whereIn('beneficiary_status', $statuses)
             ->selectRaw('client_id, contact_group_id, COUNT(*) as pending')
             ->groupBy('client_id', 'contact_group_id')
             ->orderByDesc('pending')
@@ -106,7 +140,7 @@ class ContactBeneficiaryService
         $contacts = 0;
 
         foreach ($rows as $row) {
-            if ($this->dispatchStarter(self::ACTION_VERIFY, (int) $row->client_id, (int) $row->contact_group_id, null)) {
+            if ($this->dispatchStarter($action, (int) $row->client_id, (int) $row->contact_group_id, null)) {
                 $started++;
                 $contacts += (int) $row->pending;
             }
