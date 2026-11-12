@@ -99,10 +99,14 @@ class CampaignService
                 'amount' => isset($reward['amount']) ? (float) $reward['amount'] : null,
                 'network' => $reward['network'] ?? null,
                 'currency' => $reward['currency'] ?? null,
+                'requires_beneficiary' => $this->support->rewardNeedsBeneficiary($reward),
                 'eligible_recipients' => (int) $campaign->eligible_recipients,
                 'not_eligible' => (int) $campaign->not_eligible,
                 'estimated_cost' => (float) $campaign->estimated_cost,
                 'estimated_cost_units' => (int) $campaign->estimated_cost_units,
+                'beneficiary_message' => $this->support->rewardNeedsBeneficiary($reward)
+                    ? "{$campaign->eligible_recipients} verified beneficiaries can receive this data reward (others in the groups are skipped)."
+                    : null,
             ],
             'funding' => [
                 'method' => $campaign->funding_method,
@@ -572,8 +576,10 @@ class CampaignService
             return $groups;
         }
 
-        $audience = $this->support->audience($client, $groups);
         $snapshot = is_array($campaign->reward) ? $campaign->reward : null;
+        $needsBeneficiary = $campaign->reward_enabled && $this->support->rewardNeedsBeneficiary($snapshot);
+        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary);
+        $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false) : $audience;
 
         if ($snapshot && is_numeric($override) && (float) $override > 0 && ($snapshot['type'] ?? null) === 'data') {
             $snapshot['estimate_override'] = round((float) $override, 2);
@@ -584,7 +590,7 @@ class CampaignService
             'eligible_recipients' => $audience['eligible'],
             'not_eligible' => $audience['not_eligible'],
             'estimated_cost' => $this->support->estimate($snapshot, $audience['eligible'], $snapshot['estimate_override'] ?? null),
-            'estimated_cost_units' => SmsParts::count($campaign->body) * $audience['eligible'],
+            'estimated_cost_units' => SmsParts::count($campaign->body) * $smsAudience['eligible'],
         ]);
 
         return $campaign->fresh();
@@ -770,7 +776,10 @@ class CampaignService
             return $reward;
         }
 
-        $audience = $this->support->audience($client, $groups);
+        $needsBeneficiary = $reward['enabled'] && $this->support->rewardNeedsBeneficiary($reward['snapshot'] ?? null);
+        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary);
+        // SMS can still go to the full reachable list; reward cost uses verified-only when required.
+        $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false) : $audience;
         $eligible = $audience['eligible'];
 
         return $fields + [
@@ -788,7 +797,7 @@ class CampaignService
             'estimated_cost' => $reward['enabled']
                 ? $this->support->estimate($reward['snapshot'], $eligible, $reward['snapshot']['estimate_override'] ?? null)
                 : 0,
-            'estimated_cost_units' => SmsParts::count($body) * $eligible,
+            'estimated_cost_units' => SmsParts::count($body) * $smsAudience['eligible'],
         ];
     }
 

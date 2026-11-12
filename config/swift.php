@@ -37,6 +37,18 @@ return [
     // Most orders in one /client/utilities/purchase call.
     'bulk_max' => 50,
 
+    // Max contacts expanded from contact_group_ids in one purchase.
+    'group_purchase_max' => (int) env('SWIFT_GROUP_PURCHASE_MAX', 2000),
+
+    /*
+    | Affordable MTN SME data (catalog network YELLO, sometimes labeled MTN).
+    | Mash Up / AT / TELECEL / airtime do NOT need beneficiary checks.
+    */
+    'beneficiary_required_networks' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('SWIFT_BENEFICIARY_NETWORKS', 'YELLO,MTN'))
+    ))),
+
     /*
     | Services we expose. SMS from Swift is intentionally not used (Cellogent has Kairos).
     | AFA registration is also not integrated.

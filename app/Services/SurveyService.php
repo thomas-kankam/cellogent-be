@@ -92,9 +92,13 @@ class SurveyService
                 'amount' => isset($reward['amount']) ? (float) $reward['amount'] : null,
                 'network' => $reward['network'] ?? null,
                 'currency' => $reward['currency'] ?? null,
+                'requires_beneficiary' => $this->support->rewardNeedsBeneficiary($reward),
                 'eligible_recipients' => (int) $survey->eligible_recipients,
                 'not_eligible' => (int) $survey->not_eligible,
                 'estimated_cost' => (float) $survey->estimated_cost,
+                'beneficiary_message' => $this->support->rewardNeedsBeneficiary($reward)
+                    ? "{$survey->eligible_recipients} verified beneficiaries can receive this data reward (others in the groups are skipped)."
+                    : null,
             ],
             'funding' => [
                 'method' => $survey->funding_method,
@@ -696,19 +700,26 @@ class SurveyService
                 $rewardMeta = null;
 
                 if ($locked->reward_enabled && is_array($locked->reward)) {
-                    $unit = EngagementSupport::unitCost(is_array($locked->reward) ? $locked->reward : null);
+                    $needsBeneficiary = $this->support->rewardNeedsBeneficiary($locked->reward);
+                    $canReward = ! $needsBeneficiary
+                        || ($contact && $contact->beneficiary_status === \App\Models\Contact::BENEFICIARY_VERIFIED);
+
+                    $unit = EngagementSupport::unitCost($locked->reward);
                     $committed = (float) SurveyResponse::query()
                         ->where('survey_id', $survey->id)
                         ->where('reward_status', 'pending')
                         ->count() * $unit;
                     $room = $this->support->holdRemaining($locked) - $committed;
 
-                    $rewardStatus = $unit > 0 && $room + 0.00001 >= $unit ? 'pending' : 'exhausted';
+                    $rewardStatus = ! $canReward
+                        ? 'ineligible'
+                        : ($unit > 0 && $room + 0.00001 >= $unit ? 'pending' : 'exhausted');
                     $rewardMeta = [
                         'reward_id' => $locked->reward['reward_id'] ?? null,
                         'type' => $locked->reward['type'] ?? null,
                         'amount' => $unit,
                         'queued_at' => now()->toDateTimeString(),
+                        'beneficiary_required' => $needsBeneficiary,
                     ];
                 }
 
@@ -755,8 +766,13 @@ class SurveyService
             return $groups;
         }
 
-        $audience = $this->support->audience($client, $groups);
         $snapshot = is_array($survey->reward) ? $survey->reward : null;
+        $audience = $this->support->audience(
+            $client,
+            $groups,
+            true,
+            $survey->reward_enabled && $this->support->rewardNeedsBeneficiary($snapshot),
+        );
 
         if ($snapshot && is_numeric($override) && (float) $override > 0 && ($snapshot['type'] ?? null) === 'data') {
             $snapshot['estimate_override'] = round((float) $override, 2);
@@ -885,7 +901,8 @@ class SurveyService
             return $reward;
         }
 
-        $audience = $this->support->audience($client, $groups);
+        $needsBeneficiary = $reward['enabled'] && $this->support->rewardNeedsBeneficiary($reward['snapshot'] ?? null);
+        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary);
 
         return [
             'name' => $name,

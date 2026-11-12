@@ -13,9 +13,13 @@ use App\Services\Payments\CheckoutService;
 use App\Services\Payments\InsufficientWallet;
 use App\Services\RewardDisbursementService;
 use App\Services\WalletService;
+use App\Models\Contact;
+use App\Models\ContactGroup;
+use App\Services\ContactBeneficiaryService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 use App\Support\GhanaPhone;
+use App\Support\SwiftBeneficiary;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +55,7 @@ class UtilityService
         protected MarginService $margins,
         protected WalletService $wallets,
         protected CheckoutService $checkout,
+        protected ContactBeneficiaryService $beneficiaries,
     ) {}
 
     public static function serviceForPurpose(string $purpose): ?string
@@ -230,17 +235,49 @@ class UtilityService
     */
 
     /**
-     * Price breakdown for one item, or for `items[]`. Clients never see cost or profit.
+     * Price breakdown for one item, `items[]`, or a package + `contact_group_ids`.
+     * Clients never see cost or profit.
      *
      * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function quote(array $input, bool $admin = false): array
+    public function quote(?Client $client, array $input, bool $admin = false): array
     {
+        $expanded = $this->expandPurchaseInput($client, $input, forQuote: true);
+
+        if ($this->failed($expanded)) {
+            return $expanded;
+        }
+
+        $audience = $expanded['audience'] ?? null;
+        $input = $expanded['input'];
         $specs = $this->itemsFrom($input);
 
         if ($this->failed($specs)) {
             return $specs;
+        }
+
+        // Group quotes: price one unit × verified count (do not build thousands of identical specs).
+        if ($audience && isset($input['package_id'])) {
+            $unit = $this->price((string) ($input['service'] ?? 'data'), $input + ['beneficiary' => '233200000000'], false);
+
+            if ($this->failed($unit)) {
+                return $unit;
+            }
+
+            $count = (int) $audience['verified'];
+            $presented = $this->presentPrice($unit, $admin);
+            $total = round((float) $unit['sell'] * $count, 2);
+
+            return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, $presented + [
+                'quantity' => $count,
+                'amount' => $total,
+                'currency' => config('payments.currency', 'GHS'),
+                'audience' => $audience,
+                'message' => $audience['requires_beneficiary']
+                    ? "{$audience['verified']}/{$audience['total']} contacts are verified beneficiaries and can receive this package."
+                    : null,
+            ]);
         }
 
         $prices = $this->priceAll($specs, false);
@@ -249,10 +286,16 @@ class UtilityService
             return $prices;
         }
 
+        $gate = $this->assertBeneficiaries($prices);
+
+        if ($this->failed($gate)) {
+            return $gate;
+        }
+
         $items = array_map(fn (array $price) => $this->presentPrice($price, $admin), $prices);
         $total = round(array_sum(array_column($prices, 'sell')), 2);
 
-        if (! isset($input['items'])) {
+        if (! isset($input['items']) && count($items) === 1) {
             return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, $items[0]);
         }
 
@@ -330,6 +373,14 @@ class UtilityService
             return $this->invalid(['method' => ['Allowed: '.implode(', ', self::METHODS)]]);
         }
 
+        $expanded = $this->expandPurchaseInput($client, $input, forQuote: false);
+
+        if ($this->failed($expanded)) {
+            return $expanded;
+        }
+
+        $audience = $expanded['audience'] ?? null;
+        $input = $expanded['input'];
         $bulk = isset($input['items']);
         $specs = $this->itemsFrom($input);
 
@@ -345,6 +396,12 @@ class UtilityService
 
         if ($this->failed($prices)) {
             return $prices;
+        }
+
+        $gate = $this->assertBeneficiaries($prices);
+
+        if ($this->failed($gate)) {
+            return $gate;
         }
 
         $total = round(array_sum(array_column($prices, 'sell')), 2);
@@ -400,13 +457,19 @@ class UtilityService
                 ProcessUtilityOrderJob::dispatch($order->id);
             }
 
-            return $this->result(false, 'Purchase received. '.count($orders).' orders are being processed.', ApiCode::CREATED, ApiReason::CREATED, [
+            $payload = [
                 'batch_id' => $batchId,
                 'count' => count($orders),
                 'amount' => $total,
                 'currency' => config('payments.currency', 'GHS'),
                 'orders' => array_map(fn (UtilityOrder $o) => $this->present($o), $orders),
-            ]);
+            ];
+
+            if ($audience) {
+                $payload['audience'] = $audience;
+            }
+
+            return $this->result(false, 'Purchase received. '.count($orders).' orders are being processed.', ApiCode::CREATED, ApiReason::CREATED, $payload);
         }
 
         $order = $this->process($orders[0]);
@@ -1024,12 +1087,184 @@ class UtilityService
         }
 
         $items = $input['items'];
+        $max = max($this->bulkMax(), (int) config('swift.group_purchase_max', 2000));
 
-        if (! is_array($items) || $items === [] || count($items) > $this->bulkMax()) {
-            return $this->invalid(['items' => ['Add between 1 and '.$this->bulkMax().' items.']]);
+        if (! is_array($items) || $items === [] || count($items) > $max) {
+            return $this->invalid(['items' => ['Add between 1 and '.$max.' items.']]);
         }
 
         return array_values(array_map(fn ($item) => is_array($item) ? $item : [], $items));
+    }
+
+    /**
+     * Expand `contact_group_ids` into per-phone items when buying a data package for a group.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{input: array<string, mixed>, audience?: array<string, mixed>}|array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function expandPurchaseInput(?Client $client, array $input, bool $forQuote): array
+    {
+        $groupIds = array_values(array_unique(array_map('intval', (array) ($input['contact_group_ids'] ?? []))));
+        $groupIds = array_values(array_filter($groupIds, fn (int $id) => $id > 0));
+
+        if ($groupIds === []) {
+            return ['input' => $input];
+        }
+
+        if (! $client) {
+            return $this->invalid(['contact_group_ids' => ['Sign in to buy for a contact group.']]);
+        }
+
+        if (isset($input['items']) || ! empty($input['beneficiary'])) {
+            return $this->invalid(['contact_group_ids' => ['Use either contact_group_ids or beneficiary/items, not both.']]);
+        }
+
+        $service = (string) ($input['service'] ?? 'data');
+        $packageId = trim((string) ($input['package_id'] ?? ''));
+
+        if (! in_array($service, ['data', 'mashup'], true) || $packageId === '') {
+            return $this->invalid(['package_id' => ['Group purchases need a data or mashup package_id.']]);
+        }
+
+        $owned = ContactGroup::query()
+            ->where('client_id', $client->id)
+            ->whereIn('id', $groupIds)
+            ->pluck('id')
+            ->all();
+
+        if (count($owned) !== count($groupIds)) {
+            return $this->invalid(['contact_group_ids' => ['Some contact groups were not found.']]);
+        }
+
+        $plan = $this->catalog->plan($packageId);
+
+        if (! $plan || ! $plan['available']) {
+            return $this->invalid(['package_id' => ['That package is not available.']]);
+        }
+
+        $needs = SwiftBeneficiary::required($plan['product_type'], $plan['network']);
+        $max = (int) config('swift.group_purchase_max', 2000);
+
+        $base = Contact::query()
+            ->where('client_id', $client->id)
+            ->visible()
+            ->whereIn('contact_group_id', $groupIds)
+            ->where(function ($q) {
+                $q->whereNull('dnd_status')->orWhere('dnd_status', '!=', 'active');
+            });
+
+        $total = (int) (clone $base)->distinct()->count('phone_number');
+
+        $eligibleQuery = clone $base;
+
+        if ($needs) {
+            $eligibleQuery->where('beneficiary_status', Contact::BENEFICIARY_VERIFIED);
+        }
+
+        $phones = $eligibleQuery
+            ->orderBy('id')
+            ->pluck('phone_number')
+            ->unique()
+            ->values()
+            ->all();
+
+        $verified = count($phones);
+        $audience = [
+            'total' => $total,
+            'verified' => $needs ? $verified : $total,
+            'not_verified' => $needs ? max(0, $total - $verified) : 0,
+            'requires_beneficiary' => $needs,
+            'network' => $plan['network'],
+            'package_id' => $plan['package_id'],
+        ];
+
+        if ($verified < 1) {
+            return $this->result(true, $needs
+                ? "0/{$total} contacts are verified MTN beneficiaries for this package. Submit and wait for verification first."
+                : 'No contacts found in the selected groups.', ApiCode::BAD_REQUEST, ApiReason::UNVERIFIED, [
+                    'audience' => $audience,
+                ]);
+        }
+
+        if ($verified > $max) {
+            return $this->invalid(['contact_group_ids' => ["At most {$max} recipients per purchase. Narrow the groups or split the buy."]]);
+        }
+
+        if ($forQuote) {
+            return ['input' => $input + ['service' => $service, 'package_id' => $packageId], 'audience' => $audience];
+        }
+
+        $items = array_map(fn (string $phone) => [
+            'service' => $service,
+            'package_id' => $packageId,
+            'beneficiary' => $phone,
+        ], $phones);
+
+        return [
+            'input' => [
+                'items' => $items,
+                'method' => $input['method'] ?? null,
+                'phone_number' => $input['phone_number'] ?? null,
+                'momo_network' => $input['momo_network'] ?? null,
+            ],
+            'audience' => $audience,
+        ];
+    }
+
+    /**
+     * Live Swift check for YELLO/MTN SME data recipients (skip mashup / other networks).
+     *
+     * @param  list<array<string, mixed>>  $prices
+     * @return true|array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function assertBeneficiaries(array $prices): true|array
+    {
+        foreach ($prices as $i => $price) {
+            if (! SwiftBeneficiary::required($price['product_type'] ?? null, $price['network'] ?? null)) {
+                continue;
+            }
+
+            $phone = GhanaPhone::toMobile((string) ($price['beneficiary'] ?? ''));
+
+            if (! $phone) {
+                return $this->invalid([
+                    (count($prices) > 1 ? "items.{$i}.beneficiary" : 'beneficiary') => ['Enter a valid Ghana mobile number.'],
+                ]);
+            }
+
+            // Prefer our stored status when this phone is already a contact.
+            $known = Contact::query()
+                ->where('phone_number', $phone)
+                ->where('beneficiary_status', Contact::BENEFICIARY_VERIFIED)
+                ->exists();
+
+            if ($known) {
+                continue;
+            }
+
+            $response = $this->swift->verifyBeneficiary([
+                'phone' => $this->localPhone($phone),
+                'network' => 'MTN',
+            ]);
+
+            if (! $response->ok) {
+                return $this->result(true, 'Could not verify the beneficiary with the provider. Try again shortly.', ApiCode::UNAVAILABLE, ApiReason::PROVIDER_UNAVAILABLE);
+            }
+
+            $status = $this->beneficiaries->statusFrom($response->body);
+
+            if ($status !== Contact::BENEFICIARY_VERIFIED) {
+                $key = count($prices) > 1 ? "items.{$i}.beneficiary" : 'beneficiary';
+
+                return $this->result(true, 'This number is not an approved MTN beneficiary for Affordable SME data.', ApiCode::BAD_REQUEST, ApiReason::UNVERIFIED, [
+                    $key => ['Number must be a verified MTN/YELLO beneficiary before this package can be sent.'],
+                    'beneficiary_status' => $status,
+                    'phone' => $phone,
+                ]);
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -1482,6 +1717,8 @@ class UtilityService
             'size_gb' => $plan['size_gb'],
             'price' => $priced['sell'],
             'available' => $plan['available'],
+            // Affordable MTN SME (YELLO) only — frontend can warn before purchase.
+            'requires_beneficiary' => SwiftBeneficiary::required($plan['product_type'], $plan['network']),
         ];
 
         if ($admin) {

@@ -13,6 +13,8 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             AdminSeeder::class,
             PlanSeeder::class,
+            ProductMarginSeeder::class,
+            RewardSeeder::class,
             PassportSeeder::class,
         ]);
     }

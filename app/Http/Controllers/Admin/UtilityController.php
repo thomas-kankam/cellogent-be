@@ -28,7 +28,7 @@ class UtilityController extends Controller
      */
     public function quote(QuoteUtilityRequest $request): JsonResponse
     {
-        return $this->respondFrom($this->utilities->quote($request->validated(), true));
+        return $this->respondFrom($this->utilities->quote(null, $request->validated(), true));
     }
 
     public function balance(): JsonResponse

@@ -100,11 +100,12 @@ class EngagementSupport
 
     /**
      * Distinct phones reachable in the groups. Phones marked DND in any selected group are excluded.
+     * When $requireBeneficiary is true (YELLO/MTN SME data rewards), only verified beneficiaries count as eligible.
      *
      * @param  list<int>  $groupIds
-     * @return array{eligible: int, not_eligible: int}
+     * @return array{eligible: int, not_eligible: int, total: int, verified: int|null, requires_beneficiary: bool}
      */
-    public function audience(Client $client, array $groupIds, bool $excludeDnd = true): array
+    public function audience(Client $client, array $groupIds, bool $excludeDnd = true, bool $requireBeneficiary = false): array
     {
         $base = fn () => Contact::query()
             ->where('client_id', $client->id)
@@ -113,16 +114,55 @@ class EngagementSupport
 
         $total = (int) $base()->distinct()->count('phone_number');
 
-        if (! $excludeDnd) {
-            return ['eligible' => $total, 'not_eligible' => 0];
+        $reachable = $base();
+
+        if ($excludeDnd) {
+            $reachable->whereNotIn('phone_number', $base()->where('dnd_status', 'active')->select('phone_number'));
         }
 
-        $eligible = (int) $base()
-            ->whereNotIn('phone_number', $base()->where('dnd_status', 'active')->select('phone_number'))
+        $reachableCount = (int) (clone $reachable)->distinct()->count('phone_number');
+
+        if (! $requireBeneficiary) {
+            return [
+                'eligible' => $reachableCount,
+                'not_eligible' => max(0, $total - $reachableCount),
+                'total' => $total,
+                'verified' => null,
+                'requires_beneficiary' => false,
+            ];
+        }
+
+        $verified = (int) (clone $reachable)
+            ->where('beneficiary_status', Contact::BENEFICIARY_VERIFIED)
             ->distinct()
             ->count('phone_number');
 
-        return ['eligible' => $eligible, 'not_eligible' => max(0, $total - $eligible)];
+        return [
+            'eligible' => $verified,
+            'not_eligible' => max(0, $reachableCount - $verified),
+            'total' => $total,
+            'verified' => $verified,
+            'requires_beneficiary' => true,
+        ];
+    }
+
+    /**
+     * True when a reward snapshot is Affordable MTN SME data (needs beneficiary).
+     *
+     * @param  array<string, mixed>|null  $snapshot
+     */
+    public function rewardNeedsBeneficiary(?array $snapshot): bool
+    {
+        if (! $snapshot) {
+            return false;
+        }
+
+        $type = (string) ($snapshot['type'] ?? '');
+        $product = $type === 'data'
+            ? (preg_match('/mash/i', (string) ($snapshot['package_id'] ?? $snapshot['bundle_id'] ?? '').' '.($snapshot['network'] ?? '')) ? 'mashup' : 'data_bundle')
+            : $type;
+
+        return \App\Support\SwiftBeneficiary::required($product, $snapshot['network'] ?? null);
     }
 
     /**

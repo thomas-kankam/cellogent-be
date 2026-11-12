@@ -15,7 +15,7 @@ class PurchaseUtilityRequest extends QuoteUtilityRequest
     public function rules(): array
     {
         return parent::rules() + [
-            'beneficiary' => ['required_without:items', 'nullable', 'string', 'max:30'],
+            'beneficiary' => ['required_without_all:items,contact_group_ids', 'nullable', 'string', 'max:30'],
             'items.*.beneficiary' => ['required', 'string', 'max:30'],
             'account_name' => ['nullable', 'string', 'max:120'],
             'items.*.account_name' => ['nullable', 'string', 'max:120'],

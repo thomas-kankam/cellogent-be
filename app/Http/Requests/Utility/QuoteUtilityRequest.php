@@ -18,9 +18,12 @@ class QuoteUtilityRequest extends ApiFormRequest
 {
     public function rules(): array
     {
-        return $this->itemRules('', 'required_without:items') + [
+        return $this->itemRules('', 'required_without_all:items,contact_group_ids') + [
             'items' => ['nullable', 'array', 'min:1', 'max:'.(int) config('swift.bulk_max', 50)],
             'items.*' => ['array'],
+            // Expand a group into recipients (YELLO/MTN SME data only sends to verified beneficiaries).
+            'contact_group_ids' => ['nullable', 'array', 'min:1', 'max:50'],
+            'contact_group_ids.*' => ['integer', 'min:1'],
         ] + $this->itemRules('items.*.', 'required');
     }
 

@@ -32,7 +32,7 @@ class UtilityController extends Controller
 
     public function quote(QuoteUtilityRequest $request): JsonResponse
     {
-        return $this->respondFrom($this->utilities->quote($request->validated()));
+        return $this->respondFrom($this->utilities->quote($request->user(), $request->validated()));
     }
 
     public function lookup(LookupUtilityRequest $request): JsonResponse

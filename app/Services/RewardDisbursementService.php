@@ -102,6 +102,12 @@ class RewardDisbursementService
             return null;
         }
 
+        // Affordable MTN SME data: skip numbers that are not verified beneficiaries.
+        if ($this->support->rewardNeedsBeneficiary(is_array($campaign->reward) ? $campaign->reward : null)
+            && $contact->beneficiary_status !== \App\Models\Contact::BENEFICIARY_VERIFIED) {
+            return null;
+        }
+
         return $this->queue($campaign, RewardDisbursement::SOURCE_CAMPAIGN, $mobile, $contact, $period, ['trigger' => $trigger]);
     }
 
