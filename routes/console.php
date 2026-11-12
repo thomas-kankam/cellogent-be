@@ -6,6 +6,7 @@ use App\Models\Inbox;
 use App\Models\Outbox;
 use App\Models\Payment;
 use App\Models\Sent;
+use App\Services\ContactBeneficiaryService;
 use App\Services\Engagement\EngagementBlastService;
 use App\Services\Engagement\OccasionService;
 use App\Services\RewardDisbursementService;
@@ -117,6 +118,13 @@ Artisan::command('rewards:process-pending', function (RewardDisbursementService 
     $this->info("Rewards: {$result['dispatched']} queued, {$result['reset']} reset, {$result['reconciled']} checked with the provider.");
 })->purpose('Pay queued rewards, retry failed attempts and check rewards waiting on a provider');
 
+Artisan::command('contacts:verify-beneficiaries', function (ContactBeneficiaryService $beneficiaries) {
+    $result = $beneficiaries->dispatchPendingVerify();
+
+    $this->info("Beneficiary verify: {$result['groups']} group(s), ~{$result['contacts']} contact(s) queued.");
+})->purpose('Check unknown/submitted contact numbers with Swift (client still submits unverified ones)');
+
 Schedule::command('engagement:dispatch-due')->everyMinute()->withoutOverlapping();
 Schedule::command('campaigns:run-occasions')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('rewards:process-pending')->everyMinute()->withoutOverlapping();
+Schedule::command('contacts:verify-beneficiaries')->everyFifteenMinutes()->withoutOverlapping();

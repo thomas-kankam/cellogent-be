@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Services\ContactBeneficiaryService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Verifies (or submits) one page of a contact group's numbers with Swift, then queues the next page.
@@ -37,6 +38,25 @@ class ProcessBeneficiariesJob implements ShouldQueue
 
         if ($next !== null) {
             self::dispatch($this->action, $this->clientId, $this->groupId, $this->phones, $next);
+
+            return;
         }
+
+        // Whole-group chains mark a lock so upload finalize + the scheduler do not stack starters.
+        if ($this->phones === null) {
+            Cache::forget($this->runLockKey());
+        }
+    }
+
+    public function failed(?\Throwable $e): void
+    {
+        if ($this->phones === null) {
+            Cache::forget($this->runLockKey());
+        }
+    }
+
+    public function runLockKey(): string
+    {
+        return "beneficiaries:{$this->action}:group:{$this->groupId}";
     }
 }

@@ -12,12 +12,16 @@ use App\Support\ApiCode;
 use App\Support\ApiReason;
 use App\Support\GhanaPhone;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 /**
  * Swift data bundles for some networks (e.g. Affordable MTN SME) can only go to numbers the
  * carrier has registered as beneficiaries. This checks the contacts in a group against Swift
  * and submits the unregistered ones, keeping the result on each contact.
+ *
+ * Verify is automatic after uploads and on a schedule (unknown / submitted numbers).
+ * Submit stays a client action — that is what registers unverified numbers with Swift.
  *
  * Both actions are queued: Swift answers one number per request and can be slow.
  */
@@ -35,17 +39,26 @@ class ContactBeneficiaryService
     /** Swift accepts at most this many numbers per submit request. */
     public const SUBMIT_CHUNK = 30;
 
+    /** Statuses the automatic / scheduled verify pass still needs to check. */
+    public const VERIFY_PENDING = [
+        Contact::BENEFICIARY_UNKNOWN,
+        Contact::BENEFICIARY_SUBMITTED,
+    ];
+
     public function __construct(protected SwiftClient $swift) {}
 
     /**
-     * Queue a check of every contact in the group (or only `$phones`).
+     * Queue a check of the group's pending numbers (or only `$phones`, any status).
      *
      * @param  list<string>|null  $phones
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function queueVerify(Client $client, ContactGroup $group, ?array $phones = null): array
     {
-        return $this->queue(self::ACTION_VERIFY, $client, $group, $phones, null);
+        // Explicit phone list → check those as asked. Otherwise only numbers that still need a check.
+        $only = $phones === null ? self::VERIFY_PENDING : null;
+
+        return $this->queue(self::ACTION_VERIFY, $client, $group, $phones, $only);
     }
 
     /**
@@ -57,6 +70,70 @@ class ContactBeneficiaryService
     public function queueSubmit(Client $client, ContactGroup $group, ?array $phones = null): array
     {
         return $this->queue(self::ACTION_SUBMIT, $client, $group, $phones, [Contact::BENEFICIARY_UNVERIFIED]);
+    }
+
+    /**
+     * After an upload (or a single add): start verifying that group's pending numbers.
+     */
+    public function queueVerifyGroup(int $clientId, int $groupId): void
+    {
+        $pending = (int) $this->contacts($clientId, $groupId, null, self::VERIFY_PENDING)->count();
+
+        if ($pending < 1) {
+            return;
+        }
+
+        $this->dispatchStarter(self::ACTION_VERIFY, $clientId, $groupId, null);
+    }
+
+    /**
+     * Schedule helper: kick off verify jobs for groups that still have unknown/submitted numbers.
+     *
+     * @return array{groups: int, contacts: int}
+     */
+    public function dispatchPendingVerify(int $limitGroups = 40): array
+    {
+        $rows = Contact::query()
+            ->visible()
+            ->whereIn('beneficiary_status', self::VERIFY_PENDING)
+            ->selectRaw('client_id, contact_group_id, COUNT(*) as pending')
+            ->groupBy('client_id', 'contact_group_id')
+            ->orderByDesc('pending')
+            ->limit($limitGroups)
+            ->get();
+
+        $started = 0;
+        $contacts = 0;
+
+        foreach ($rows as $row) {
+            if ($this->dispatchStarter(self::ACTION_VERIFY, (int) $row->client_id, (int) $row->contact_group_id, null)) {
+                $started++;
+                $contacts += (int) $row->pending;
+            }
+        }
+
+        return ['groups' => $started, 'contacts' => $contacts];
+    }
+
+    /**
+     * Start a whole-group chain once. Phone-scoped jobs always start (client asked for those numbers).
+     *
+     * @param  list<string>|null  $phones
+     */
+    protected function dispatchStarter(string $action, int $clientId, int $groupId, ?array $phones): bool
+    {
+        if ($phones === null) {
+            $key = "beneficiaries:{$action}:group:{$groupId}";
+
+            // Skip if a verify/submit chain for this group is already running.
+            if (! Cache::add($key, 1, 1800)) {
+                return false;
+            }
+        }
+
+        ProcessBeneficiariesJob::dispatch($action, $clientId, $groupId, $phones, 0);
+
+        return true;
     }
 
     /**
@@ -92,7 +169,7 @@ class ContactBeneficiaryService
                 : 'There are no contacts to verify.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        ProcessBeneficiariesJob::dispatch($action, $client->id, $group->id, $normalized, 0);
+        $this->dispatchStarter($action, $client->id, $group->id, $normalized);
 
         return $this->result(false, $action === self::ACTION_SUBMIT
             ? 'Submitting numbers to the network. Check the contacts for their status shortly.'
@@ -140,7 +217,12 @@ class ContactBeneficiaryService
      */
     public function runPage(string $action, int $clientId, int $groupId, ?array $phones, int $afterId): ?int
     {
-        $only = $action === self::ACTION_SUBMIT ? [Contact::BENEFICIARY_UNVERIFIED] : null;
+        // Submit: only unverified. Verify without phones: unknown + submitted. Verify with phones: those numbers.
+        $only = match (true) {
+            $action === self::ACTION_SUBMIT => [Contact::BENEFICIARY_UNVERIFIED],
+            $phones === null => self::VERIFY_PENDING,
+            default => null,
+        };
         $size = $action === self::ACTION_SUBMIT ? self::SUBMIT_CHUNK : self::PAGE_SIZE;
 
         $page = $this->contacts($clientId, $groupId, $phones, $only)

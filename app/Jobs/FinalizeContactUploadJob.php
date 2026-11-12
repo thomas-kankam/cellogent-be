@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Client;
 use App\Models\Contact;
 use App\Models\ContactGroup;
+use App\Services\ContactBeneficiaryService;
 use App\Support\ContactImportReasons;
 use App\Support\ContactUploadFinalizer;
 use App\Support\LongQueue;
@@ -75,5 +76,11 @@ class FinalizeContactUploadJob implements ShouldQueue
             'progress' => 100,
             'count_of_contacts' => $count,
         ]);
+
+        // New rows default to beneficiary_status=unknown — check them with Swift in the background.
+        // Client still calls submit-beneficiaries for numbers that come back unverified.
+        if ($inserted > 0) {
+            app(ContactBeneficiaryService::class)->queueVerifyGroup($this->clientId, $this->groupId);
+        }
     }
 }

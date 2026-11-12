@@ -86,11 +86,13 @@ class ContactService
             'gps_address' => $input['gps_address'] ?? null,
             'address' => $input['address'] ?? null,
             'dnd_status' => $input['dnd_status'] ?? 'inactive',
+            'beneficiary_status' => Contact::BENEFICIARY_UNKNOWN,
         ]);
 
         $this->groups->refreshCount($group);
+        app(ContactBeneficiaryService::class)->queueVerify($client, $group, [$phone]);
 
-        return $this->result(false, 'Contact added.', ApiCode::CREATED, ApiReason::CREATED, $this->present($contact));
+        return $this->result(false, 'Contact added. Beneficiary check queued.', ApiCode::CREATED, ApiReason::CREATED, $this->present($contact));
     }
 
     /**
@@ -113,6 +115,8 @@ class ContactService
             return $this->result(true, 'This phone or email is already in this group.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        $phoneChanged = $phone !== $contact->phone_number;
+
         $contact->update([
             'first_name' => $input['first_name'] ?? $contact->first_name,
             'last_name' => $input['last_name'] ?? $contact->last_name,
@@ -125,7 +129,16 @@ class ContactService
             'gps_address' => $input['gps_address'] ?? $contact->gps_address,
             'address' => $input['address'] ?? $contact->address,
             'dnd_status' => $input['dnd_status'] ?? $contact->dnd_status,
+            ...($phoneChanged ? [
+                'beneficiary_status' => Contact::BENEFICIARY_UNKNOWN,
+                'beneficiary_checked_at' => null,
+                'beneficiary_meta' => null,
+            ] : []),
         ]);
+
+        if ($phoneChanged && $owner = Client::query()->find($contact->client_id)) {
+            app(ContactBeneficiaryService::class)->queueVerify($owner, $group, [$phone]);
+        }
 
         return $this->result(false, 'Contact updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($contact->fresh()));
     }

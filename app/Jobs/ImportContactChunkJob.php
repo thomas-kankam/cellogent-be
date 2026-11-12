@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Contact;
 use App\Support\ContactDate;
 use App\Support\ContactGender;
 use App\Support\ContactImportReasons;
@@ -99,6 +100,7 @@ class ImportContactChunkJob implements ShouldQueue
                 'gps_address' => $this->limit($record['gps_address']),
                 'address' => $this->limit($record['address']),
                 'dnd_status' => strtolower((string) $record['dnd_status']) === 'active' ? 'active' : 'inactive',
+                'beneficiary_status' => Contact::BENEFICIARY_UNKNOWN,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
