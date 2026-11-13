@@ -7,7 +7,7 @@ use App\Support\GhanaPhone;
 
 /**
  * Pay for a campaign's or survey's rewards. Wallet reserves the money at once;
- * momo/card start a checkout.
+ * momo/card start a checkout. Paystack/Kairos do not need `network`.
  */
 class FundRequest extends ApiFormRequest
 {

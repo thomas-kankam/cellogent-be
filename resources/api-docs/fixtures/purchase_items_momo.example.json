@@ -1,0 +1,42 @@
+{
+    "http_status": 201,
+    "note": "Documented example \u2014 run against live API with real beneficiary/meter/smartcard.",
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Complete the payment on the checkout page.",
+        "reason": "created",
+        "data": {
+            "id": 99,
+            "resource": "payment",
+            "purpose": "utility",
+            "method": "momo",
+            "amount": 20,
+            "status": "pending",
+            "payment_link": "https://checkout.paystack.com/example",
+            "currency": "GHS"
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "method": "momo",
+            "phone_number": "0244123456",
+            "items": [
+                {
+                    "service": "airtime",
+                    "network": "MTN",
+                    "amount": 5,
+                    "beneficiary": "0244123456"
+                },
+                {
+                    "service": "data",
+                    "package_id": "at_3gb",
+                    "beneficiary": "0201234567"
+                }
+            ]
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

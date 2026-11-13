@@ -1,0 +1,30 @@
+{
+    "http_status": 200,
+    "note": "Documented example.",
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "tv",
+            "order_type": "starttimes",
+            "product_type": "tv",
+            "name": "StarTimes",
+            "bill_type": "STARTIMES",
+            "amount": 25,
+            "currency": "GHS",
+            "face_amount": 25
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "tv",
+            "bill_type": "STARTIMES",
+            "amount": 25
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

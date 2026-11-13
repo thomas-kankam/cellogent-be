@@ -1,0 +1,30 @@
+{
+    "http_status": 200,
+    "note": "Documented example.",
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "tv",
+            "order_type": "gotv",
+            "product_type": "tv",
+            "name": "GOtv",
+            "bill_type": "GOTV",
+            "amount": 30,
+            "currency": "GHS",
+            "face_amount": 30
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "tv",
+            "bill_type": "GOTV",
+            "amount": 30
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

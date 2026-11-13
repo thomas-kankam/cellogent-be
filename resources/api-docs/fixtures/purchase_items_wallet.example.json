@@ -1,0 +1,51 @@
+{
+    "http_status": 201,
+    "note": "Documented example \u2014 run against live API with real beneficiary/meter/smartcard.",
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Purchase received. 3 orders are being processed.",
+        "reason": "created",
+        "data": {
+            "batch_id": "BLK-EXAMPLEITM",
+            "count": 3,
+            "amount": 44.55,
+            "currency": "GHS",
+            "analytics": {
+                "total": 3,
+                "pending": 3,
+                "completed": 0,
+                "failed": 0,
+                "progress_percent": 0,
+                "message": "0/3 delivered, 0 failed, 3 pending."
+            }
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "method": "wallet",
+            "items": [
+                {
+                    "service": "airtime",
+                    "network": "MTN",
+                    "amount": 5,
+                    "beneficiary": "0244123456"
+                },
+                {
+                    "service": "ecg",
+                    "amount": 20,
+                    "beneficiary": "1234567890"
+                },
+                {
+                    "service": "results",
+                    "checker_type": "WASSCE",
+                    "quantity": 1,
+                    "beneficiary": "0244123456"
+                }
+            ]
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

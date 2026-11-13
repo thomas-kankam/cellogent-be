@@ -1,0 +1,37 @@
+{
+    "http_status": 201,
+    "note": "Documented example \u2014 run against live API with real beneficiary/meter/smartcard.",
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Purchase received and is being processed.",
+        "reason": "created",
+        "data": {
+            "id": 1,
+            "resource": "utility_order",
+            "reference": "UTL-EXAMPLE",
+            "batch_id": null,
+            "service": "tv",
+            "name": "DStv",
+            "beneficiary": "7012345678",
+            "amount": 50,
+            "currency": "GHS",
+            "status": "pending",
+            "funding_method": "wallet",
+            "product_type": "tv"
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "service": "tv",
+            "bill_type": "DSTV",
+            "amount": 50,
+            "beneficiary": "7012345678",
+            "account_name": "KOFI OWUSU",
+            "method": "wallet"
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

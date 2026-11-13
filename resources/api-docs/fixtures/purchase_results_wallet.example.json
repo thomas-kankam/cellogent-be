@@ -1,0 +1,36 @@
+{
+    "http_status": 201,
+    "note": "Documented example \u2014 run against live API with real beneficiary/meter/smartcard.",
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Purchase completed.",
+        "reason": "created",
+        "data": {
+            "id": 1,
+            "resource": "utility_order",
+            "reference": "UTL-EXAMPLE",
+            "batch_id": null,
+            "service": "results",
+            "name": "WASSCE Results Checker",
+            "beneficiary": "233244123456",
+            "amount": 39.1,
+            "currency": "GHS",
+            "status": "completed",
+            "funding_method": "wallet",
+            "quantity": 2
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "service": "results",
+            "checker_type": "WASSCE",
+            "quantity": 2,
+            "beneficiary": "0244123456",
+            "method": "wallet"
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

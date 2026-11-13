@@ -1,1 +1,37 @@
-{"in_error":false,"status_code":"200","message":"Quote ready.","reason":"success","data":{"service":"results","order_type":"results","product_type":"results","name":"BECE Results Checker","network":null,"package_id":null,"size":null,"bill_type":null,"checker_type":"BECE","quantity":1,"beneficiary":null,"amount":19.55,"currency":"GHS"},"point_in_time":"2026-11-13 13:36:53"}
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "results",
+            "order_type": "results",
+            "product_type": "results",
+            "name": "WASSCE Results Checker",
+            "network": null,
+            "package_id": null,
+            "size": null,
+            "bill_type": null,
+            "checker_type": "WASSCE",
+            "quantity": 2,
+            "beneficiary": null,
+            "amount": 39.1,
+            "currency": "GHS",
+            "face_amount": 34
+        },
+        "point_in_time": "2026-11-13 15:30:00"
+    },
+    "captured_at": "2026-11-13T15:30:00+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "results",
+            "checker_type": "WASSCE",
+            "quantity": 2
+        }
+    }
+}

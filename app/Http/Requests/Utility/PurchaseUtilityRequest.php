@@ -11,7 +11,9 @@ use Illuminate\Validation\Rule;
  * or a contact group. Each recipient needs a phone (data/mashup/airtime/results),
  * meter (ECG), or smartcard (TV).
  *
- * Pay with method=wallet|momo|card (Paystack/Kairos via checkout).
+ * Pay mode toggle: method=wallet | momo (card still accepted for hosted Paystack).
+ * `network` on the item is the airtime/telco network — not a payment field.
+ * Paystack/Kairos do not need a MoMo network code; omit momo_network.
  */
 class PurchaseUtilityRequest extends QuoteUtilityRequest
 {
@@ -28,8 +30,9 @@ class PurchaseUtilityRequest extends QuoteUtilityRequest
             'customer_phone' => ['nullable', 'string', GhanaPhone::rule()],
             'items.*.customer_phone' => ['nullable', 'string', GhanaPhone::rule()],
             'method' => ['nullable', 'string', Rule::in(UtilityService::METHODS)],
-            // Mobile money number / network used to pay when method is momo.
+            // Payer MSISDN when method=momo (defaults to the client's profile phone).
             'phone_number' => ['nullable', 'string', GhanaPhone::rule()],
+            // Optional / ignored by Paystack & Kairos. Do not confuse with airtime `network`.
             'momo_network' => ['nullable', 'string', 'max:50'],
         ]);
     }

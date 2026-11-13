@@ -40,8 +40,7 @@
             "amount": 1,
             "beneficiary": "0244123456",
             "method": "momo",
-            "phone_number": "0244123456",
-            "momo_network": "MTN"
+            "phone_number": "0244123456"
         }
     },
     "captured_at": "2026-11-13T13:43:35+00:00"

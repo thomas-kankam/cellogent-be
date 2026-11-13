@@ -373,7 +373,7 @@ class UtilityService
      * order per item and send them to Swift. Momo/card: start one checkout; the orders are created
      * and sent when that payment completes.
      *
-     * @param  array<string, mixed>  $input  item fields (or items[]) + method, phone_number, momo_network
+     * @param  array<string, mixed>  $input  item fields (or items[]) + method, phone_number, optional network
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function purchase(Client $client, array $input): array
@@ -381,7 +381,7 @@ class UtilityService
         $method = (string) ($input['method'] ?? 'wallet');
 
         if (! in_array($method, self::METHODS, true)) {
-            return $this->invalid(['method' => ['Allowed: '.implode(', ', self::METHODS)]]);
+            return $this->invalid(['method' => ['Allowed: '.implode(', ', self::METHODS).' — UI toggle is usually wallet|momo']]);
         }
 
         $expanded = $this->expandPurchaseInput($client, $input, forQuote: false);
@@ -421,6 +421,7 @@ class UtilityService
             return $this->checkout->start($client, $bulk ? CheckoutService::UTILITY_BULK : $prices[0]['order_type'], [
                 'method' => $method,
                 'phone_number' => $input['phone_number'] ?? null,
+                // Optional only — never pass airtime `network` here; gateways do not need MoMo network.
                 'network' => $input['momo_network'] ?? null,
                 'utility' => $bulk ? ['items' => $prices] : $prices[0],
             ]);

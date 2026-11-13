@@ -1,0 +1,44 @@
+{
+    "http_status": 201,
+    "note": "Documented example \u2014 run against live API with real beneficiary/meter/smartcard.",
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Purchase received. 12 orders are being processed.",
+        "reason": "created",
+        "data": {
+            "batch_id": "BLK-EXAMPLEGRP",
+            "count": 12,
+            "amount": 306,
+            "currency": "GHS",
+            "analytics": {
+                "total": 12,
+                "pending": 12,
+                "completed": 0,
+                "failed": 0,
+                "progress_percent": 0,
+                "message": "0/12 delivered, 0 failed, 12 pending."
+            },
+            "audience": {
+                "total": 40,
+                "verified": 12,
+                "not_verified": 28,
+                "requires_beneficiary": true,
+                "source": "contact_groups"
+            }
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "service": "data",
+            "package_id": "yellow_5gb",
+            "contact_group_ids": [
+                9
+            ],
+            "method": "wallet"
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

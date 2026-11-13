@@ -1,0 +1,34 @@
+{
+    "http_status": 201,
+    "note": "Documented example \u2014 run against live API with real beneficiary/meter/smartcard.",
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Purchase received and is being processed.",
+        "reason": "created",
+        "data": {
+            "id": 1,
+            "resource": "utility_order",
+            "reference": "UTL-EXAMPLE",
+            "batch_id": null,
+            "service": "mashup",
+            "name": "Mash Up 1GB+353mins",
+            "beneficiary": "233244123456",
+            "amount": 12,
+            "currency": "GHS",
+            "status": "pending",
+            "funding_method": "wallet"
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "service": "mashup",
+            "package_id": "mashup_1gb+353mins",
+            "beneficiary": "0244123456",
+            "method": "wallet"
+        }
+    },
+    "captured_at": "2026-11-13T15:28:11+00:00"
+}

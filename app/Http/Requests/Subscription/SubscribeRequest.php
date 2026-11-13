@@ -15,6 +15,7 @@ class SubscribeRequest extends ApiFormRequest
             'months' => ['required', 'integer', 'min:0', 'max:36'],
             // Optional: omit so Paystack (or similar) lets the payer pick card/momo;
             // we backfill method from the gateway after payment succeeds. Use wallet to pay from balance.
+            // wallet | momo | card — or omit for hosted Paystack (payer picks). Network not required.
             'method' => ['nullable', 'string', 'in:momo,card,wallet'],
             'phone_number' => ['nullable', 'string', GhanaPhone::rule()],
             'network' => ['nullable', 'string', 'max:50'],
