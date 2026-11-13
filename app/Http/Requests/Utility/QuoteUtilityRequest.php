@@ -9,17 +9,18 @@ use Illuminate\Validation\Validator;
 
 /**
  * One item (fields at the top level), `items[]` (≤50 mixed lines), `beneficiaries`
- * (CSV / array of phones for the same package), or `contact_group_ids`.
+ * (CSV / array for the same package — phones, meters, or smartcards), or `contact_group_ids`
+ * (phone contacts only: data / mashup / airtime).
  *
  * Per service:
  *  - data / mashup: package_id (from the catalog)
  *  - airtime: network (MTN|TELECEL|AT|GLO) + amount
- *  - ecg: amount (+ customer_phone)
- *  - tv: bill_type (DSTV|GOTV|STARTIMES) + amount
- *  - results: checker_type (WASSCE|BECE) + quantity
+ *  - ecg: amount (+ customer_phone); beneficiaries = meter numbers (not contact groups)
+ *  - tv: bill_type (DSTV|GOTV|STARTIMES) + amount; beneficiaries = smartcards (not contact groups)
+ *  - results: checker_type (WASSCE|BECE) + quantity; beneficiaries = phones (not contact groups)
  *
- * Prices are always looked up on the server. Swift data/airtime is 1 phone per API
- * call — our bulk creates N local orders and queues them (rate-limited).
+ * Prices are always looked up on the server. Swift is 1 recipient per API call —
+ * our bulk creates N local orders and queues them (rate-limited).
  */
 class QuoteUtilityRequest extends ApiFormRequest
 {
@@ -41,10 +42,10 @@ class QuoteUtilityRequest extends ApiFormRequest
             'items.*' => ['array'],
             // Optional on quote; required on purchase when not using items/groups/beneficiaries.
             'beneficiary' => ['nullable', 'string', 'max:30'],
-            // Same package to many phones (CSV string or array). Caps at Swift-friendly batch size.
+            // Same package to many recipients (CSV string or array). Caps at Swift-friendly batch size.
             'beneficiaries' => ['nullable', 'array', 'min:1', 'max:'.$bulkMax],
-            'beneficiaries.*' => ['required', 'string', 'max:20'],
-            // Expand a group into recipients (YELLO/MTN SME data only sends to verified beneficiaries).
+            'beneficiaries.*' => ['required', 'string', 'max:30'],
+            // Phone contact groups only (data / mashup / airtime). Not for ECG meters or TV smartcards.
             'contact_group_ids' => ['nullable', 'array', 'min:1', 'max:50'],
             'contact_group_ids.*' => ['integer', 'min:1'],
         ] + $this->itemRules('items.*.', 'required');
@@ -87,7 +88,9 @@ class QuoteUtilityRequest extends ApiFormRequest
     }
 
     /**
-     * Accept array, CSV, semicolon, or newline-separated phone lists.
+     * Accept array, CSV, semicolon, or newline-separated recipient lists.
+     * Phone services are normalized to 233…; meters/smartcards stay as cleaned tokens
+     * (validated later per service in UtilityService).
      *
      * @return list<string>
      */
@@ -101,6 +104,8 @@ class QuoteUtilityRequest extends ApiFormRequest
             return [];
         }
 
+        $service = (string) $this->input('service', '');
+        $phoneServices = ['data', 'mashup', 'airtime', 'results'];
         $out = [];
 
         foreach ($parts as $part) {
@@ -108,15 +113,20 @@ class QuoteUtilityRequest extends ApiFormRequest
                 continue;
             }
 
-            $raw = trim((string) $part);
+            $token = trim((string) $part);
 
-            if ($raw === '') {
+            if ($token === '') {
                 continue;
             }
 
-            // Prefer 233… so purchase GhanaPhone::rule() passes; keep raw if unparseable for a clear 422.
-            $phone = GhanaPhone::normalize($raw) ?? $raw;
-            $out[$phone] = $phone;
+            if (in_array($service, $phoneServices, true)) {
+                $token = GhanaPhone::normalize($token) ?? $token;
+            } else {
+                // ECG / TV: strip spaces/dashes only — do not force Ghana MSISDN shape.
+                $token = preg_replace('/[\s-]+/', '', $token) ?? $token;
+            }
+
+            $out[$token] = $token;
         }
 
         return array_values($out);

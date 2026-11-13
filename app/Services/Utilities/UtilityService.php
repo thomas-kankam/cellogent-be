@@ -276,7 +276,12 @@ class UtilityService
             if (! empty($audience['requires_beneficiary'])) {
                 $message = "{$audience['verified']}/{$audience['total']} numbers are verified beneficiaries and can receive this package.";
             } elseif (($audience['source'] ?? null) === 'beneficiaries') {
-                $message = "{$count} numbers will receive this package.";
+                $kind = match ($audience['recipient_kind'] ?? 'phone') {
+                    'meter' => 'meters',
+                    'smartcard' => 'smartcards',
+                    default => 'numbers',
+                };
+                $message = "{$count} {$kind} will receive this package.";
             }
 
             // array_merge so quantity/amount override the unit presentPrice fields
@@ -1181,8 +1186,19 @@ class UtilityService
         $service = (string) ($input['service'] ?? 'data');
         $packageId = trim((string) ($input['package_id'] ?? ''));
 
-        if (! in_array($service, ['data', 'mashup'], true) || $packageId === '') {
+        // Contact groups store phone numbers — not meters/smartcards. ECG/TV/results use beneficiaries CSV instead.
+        if (! in_array($service, ['data', 'mashup', 'airtime'], true)) {
+            return $this->invalid([
+                'contact_group_ids' => ['contact_group_ids is for data, mashup, or airtime (phone contacts). For ECG meters, TV smartcards, or results use beneficiaries CSV.'],
+            ]);
+        }
+
+        if (in_array($service, ['data', 'mashup'], true) && $packageId === '') {
             return $this->invalid(['package_id' => ['Group purchases need a data or mashup package_id.']]);
+        }
+
+        if ($service === 'airtime' && (trim((string) ($input['network'] ?? '')) === '' || ! isset($input['amount']))) {
+            return $this->invalid(['network' => ['Airtime group purchases need network and amount.']]);
         }
 
         $owned = ContactGroup::query()
@@ -1195,13 +1211,22 @@ class UtilityService
             return $this->invalid(['contact_group_ids' => ['Some contact groups were not found.']]);
         }
 
-        $plan = $this->catalog->plan($packageId);
+        $needs = false;
+        $network = $input['network'] ?? null;
+        $planPackageId = $packageId;
 
-        if (! $plan || ! $plan['available']) {
-            return $this->invalid(['package_id' => ['That package is not available.']]);
+        if ($packageId !== '') {
+            $plan = $this->catalog->plan($packageId);
+
+            if (! $plan || ! $plan['available']) {
+                return $this->invalid(['package_id' => ['That package is not available.']]);
+            }
+
+            $needs = SwiftBeneficiary::required($plan['product_type'], $plan['network']);
+            $network = $plan['network'];
+            $planPackageId = $plan['package_id'];
         }
 
-        $needs = SwiftBeneficiary::required($plan['product_type'], $plan['network']);
         $max = (int) config('swift.group_purchase_max', 2000);
 
         $base = Contact::query()
@@ -1233,8 +1258,8 @@ class UtilityService
             'verified' => $needs ? $verified : $total,
             'not_verified' => $needs ? max(0, $total - $verified) : 0,
             'requires_beneficiary' => $needs,
-            'network' => $plan['network'],
-            'package_id' => $plan['package_id'],
+            'network' => $network,
+            'package_id' => $planPackageId !== '' ? $planPackageId : null,
             'source' => 'contact_groups',
         ];
 
@@ -1250,11 +1275,12 @@ class UtilityService
             return $this->invalid(['contact_group_ids' => ["At most {$max} recipients per purchase. Narrow the groups or split the buy."]]);
         }
 
-        return $this->audienceExpansion($input, $service, $packageId, $phones, $audience, $forQuote);
+        return $this->audienceExpansion($input, $service, $planPackageId, $phones, $audience, $forQuote);
     }
 
     /**
-     * Same package/service to an explicit phone list (CSV or array, max bulk_max).
+     * Same package/service to an explicit recipient list (CSV or array, max bulk_max).
+     * Phones for data/mashup/airtime/results; meters for ECG; smartcards for TV.
      *
      * @param  array<string, mixed>  $input
      * @return array{input: array<string, mixed>, audience?: array<string, mixed>}|array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
@@ -1263,31 +1289,56 @@ class UtilityService
     {
         $service = (string) ($input['service'] ?? '');
         $raw = (array) ($input['beneficiaries'] ?? []);
-        $phones = [];
+        $max = $this->bulkMax();
+        $phoneServices = ['data', 'mashup', 'airtime', 'results'];
+        $accountServices = ['ecg', 'tv'];
 
-        foreach ($raw as $entry) {
-            $phone = GhanaPhone::toMobile((string) $entry);
+        if (! in_array($service, [...$phoneServices, ...$accountServices], true)) {
+            return $this->invalid(['service' => ['beneficiaries supports data, mashup, airtime, ecg, tv, or results.']]);
+        }
 
-            if (! $phone) {
-                return $this->invalid(['beneficiaries' => ['Each beneficiary must be a valid Ghana mobile number.']]);
+        $recipients = [];
+
+        foreach ($raw as $i => $entry) {
+            $token = trim((string) $entry);
+
+            if ($token === '') {
+                continue;
             }
 
-            $phones[$phone] = $phone;
+            if (in_array($service, $phoneServices, true)) {
+                $phone = GhanaPhone::toMobile($token);
+
+                if (! $phone) {
+                    return $this->invalid(['beneficiaries' => ['Each beneficiary must be a valid Ghana mobile number.']]);
+                }
+
+                $recipients[$phone] = $phone;
+            } else {
+                $account = $this->cleanAccount($token);
+
+                if (! $account) {
+                    $label = $service === 'ecg' ? 'meter / account number' : 'smartcard number';
+
+                    return $this->invalid(['beneficiaries' => ["Each beneficiary must be a valid {$label}."]]);
+                }
+
+                $recipients[$account] = $account;
+            }
         }
 
-        $phones = array_values($phones);
-        $max = $this->bulkMax();
+        $recipients = array_values($recipients);
 
-        if ($phones === []) {
-            return $this->invalid(['beneficiaries' => ['Add at least one phone number.']]);
+        if ($recipients === []) {
+            return $this->invalid(['beneficiaries' => ['Add at least one recipient.']]);
         }
 
-        if (count($phones) > $max) {
-            return $this->invalid(['beneficiaries' => ["At most {$max} numbers per request (Swift processes one order per number). Split larger lists or use contact_group_ids."]]);
-        }
+        if (count($recipients) > $max) {
+            $hint = in_array($service, $phoneServices, true)
+                ? ' Split larger lists or use contact_group_ids for data/mashup/airtime.'
+                : ' Split larger lists (contact groups cannot supply meters/smartcards).';
 
-        if (! in_array($service, ['data', 'mashup', 'airtime'], true)) {
-            return $this->invalid(['service' => ['beneficiaries is for data, mashup, or airtime. Use items[] for mixed services.']]);
+            return $this->invalid(['beneficiaries' => ["At most {$max} recipients per request.{$hint}"]]);
         }
 
         if (in_array($service, ['data', 'mashup'], true) && trim((string) ($input['package_id'] ?? '')) === '') {
@@ -1296,6 +1347,18 @@ class UtilityService
 
         if ($service === 'airtime' && (trim((string) ($input['network'] ?? '')) === '' || ! isset($input['amount']))) {
             return $this->invalid(['network' => ['Airtime needs network and amount.']]);
+        }
+
+        if ($service === 'ecg' && ! isset($input['amount'])) {
+            return $this->invalid(['amount' => ['ECG needs amount.']]);
+        }
+
+        if ($service === 'tv' && (trim((string) ($input['bill_type'] ?? '')) === '' || ! isset($input['amount']))) {
+            return $this->invalid(['bill_type' => ['TV needs bill_type (DSTV|GOTV|STARTIMES) and amount.']]);
+        }
+
+        if ($service === 'results' && trim((string) ($input['checker_type'] ?? '')) === '') {
+            return $this->invalid(['checker_type' => ['Results needs checker_type (WASSCE|BECE).']]);
         }
 
         $packageId = trim((string) ($input['package_id'] ?? ''));
@@ -1313,35 +1376,40 @@ class UtilityService
             $network = $plan['network'];
         }
 
-        $eligible = $phones;
+        $eligible = $recipients;
         $skipped = 0;
 
         if ($needs && $client) {
             // Drop contacts we already know are not verified; unknown numbers are live-checked at purchase.
             $knownUnverified = Contact::query()
                 ->where('client_id', $client->id)
-                ->whereIn('phone_number', $phones)
+                ->whereIn('phone_number', $recipients)
                 ->where('beneficiary_status', '!=', Contact::BENEFICIARY_VERIFIED)
                 ->pluck('phone_number')
                 ->unique()
                 ->all();
             $skip = array_fill_keys($knownUnverified, true);
-            $eligible = array_values(array_filter($phones, fn (string $p) => ! isset($skip[$p])));
-            $skipped = count($phones) - count($eligible);
+            $eligible = array_values(array_filter($recipients, fn (string $p) => ! isset($skip[$p])));
+            $skipped = count($recipients) - count($eligible);
         }
 
         $audience = [
-            'total' => count($phones),
-            'verified' => $needs ? count($eligible) : count($phones),
+            'total' => count($recipients),
+            'verified' => $needs ? count($eligible) : count($recipients),
             'not_verified' => $needs ? $skipped : 0,
             'requires_beneficiary' => $needs,
             'network' => $network,
             'package_id' => $packageId !== '' ? $packageId : null,
             'source' => 'beneficiaries',
+            'recipient_kind' => match ($service) {
+                'ecg' => 'meter',
+                'tv' => 'smartcard',
+                default => 'phone',
+            },
         ];
 
         if ($eligible === []) {
-            return $this->result(true, 'None of these numbers can receive this package (beneficiary check failed).', ApiCode::BAD_REQUEST, ApiReason::UNVERIFIED, [
+            return $this->result(true, 'None of these recipients can receive this package (beneficiary check failed).', ApiCode::BAD_REQUEST, ApiReason::UNVERIFIED, [
                 'audience' => $audience,
             ]);
         }
@@ -1351,11 +1419,11 @@ class UtilityService
 
     /**
      * @param  array<string, mixed>  $input
-     * @param  list<string>  $phones
+     * @param  list<string>  $recipients
      * @param  array<string, mixed>  $audience
      * @return array{input: array<string, mixed>, audience: array<string, mixed>}
      */
-    protected function audienceExpansion(array $input, string $service, string $packageId, array $phones, array $audience, bool $forQuote): array
+    protected function audienceExpansion(array $input, string $service, string $packageId, array $recipients, array $audience, bool $forQuote): array
     {
         if ($forQuote) {
             return [
@@ -1364,31 +1432,33 @@ class UtilityService
                     'package_id' => $packageId !== '' ? $packageId : null,
                     'network' => $input['network'] ?? null,
                     'amount' => $input['amount'] ?? null,
+                    'bill_type' => $input['bill_type'] ?? null,
+                    'checker_type' => $input['checker_type'] ?? null,
+                    'quantity' => $input['quantity'] ?? null,
+                    'customer_phone' => $input['customer_phone'] ?? null,
                 ], fn ($v) => $v !== null),
                 'audience' => $audience,
             ];
         }
 
-        $items = array_map(function (string $phone) use ($input, $service, $packageId) {
+        $items = array_map(function (string $recipient) use ($input, $service, $packageId) {
             $item = [
                 'service' => $service,
-                'beneficiary' => $phone,
+                'beneficiary' => $recipient,
             ];
 
             if ($packageId !== '') {
                 $item['package_id'] = $packageId;
             }
 
-            if (isset($input['network'])) {
-                $item['network'] = $input['network'];
-            }
-
-            if (isset($input['amount'])) {
-                $item['amount'] = $input['amount'];
+            foreach (['network', 'amount', 'bill_type', 'checker_type', 'quantity', 'customer_phone', 'account_name'] as $field) {
+                if (array_key_exists($field, $input) && $input[$field] !== null && $input[$field] !== '') {
+                    $item[$field] = $input[$field];
+                }
             }
 
             return $item;
-        }, $phones);
+        }, $recipients);
 
         return [
             'input' => [

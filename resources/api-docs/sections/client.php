@@ -309,9 +309,9 @@ return [
                         ['field' => 'checker_type', 'type' => 'WASSCE|BECE', 'notes' => 'results'],
                         ['field' => 'quantity', 'type' => 'integer 1–100', 'notes' => 'results vouchers'],
                         ['field' => 'beneficiary', 'type' => 'string', 'notes' => 'single recipient (optional on quote)'],
-                        ['field' => 'beneficiaries', 'type' => 'string CSV | string[] ≤50', 'notes' => 'same package to many phones'],
+                        ['field' => 'beneficiaries', 'type' => 'CSV | string[] ≤50', 'notes' => 'phones (data/airtime/results), meters (ecg), smartcards (tv)'],
                         ['field' => 'items[]', 'type' => 'array≤50', 'notes' => 'mixed services; each needs its own beneficiary'],
-                        ['field' => 'contact_group_ids[]', 'type' => 'int[]', 'notes' => 'data/mashup only; YELLO uses verified contacts'],
+                        ['field' => 'contact_group_ids[]', 'type' => 'int[]', 'notes' => 'phone contacts only: data/mashup/airtime — NOT ecg/tv/results'],
                     ],
                     'scenarios' => [
                         [
@@ -343,18 +343,62 @@ return [
                             'fixture' => 'quote_ecg',
                         ],
                         [
+                            'id' => 'ecg_csv',
+                            'title' => '5b) ECG meters CSV (bulk)',
+                            'explain' => 'beneficiaries = meter numbers. contact_group_ids is rejected for ECG.',
+                            'request' => [
+                                'service' => 'ecg',
+                                'amount' => 20,
+                                'beneficiaries' => '1234567890,9876543210',
+                                'customer_phone' => '0244123456',
+                            ],
+                            'response' => [
+                                'in_error' => false,
+                                'status_code' => '200',
+                                'message' => 'Quote ready.',
+                                'reason' => 'success',
+                                'data' => [
+                                    'service' => 'ecg',
+                                    'quantity' => 2,
+                                    'unit_amount' => 20,
+                                    'amount' => 40,
+                                    'message' => '2 meters will receive this package.',
+                                ],
+                            ],
+                        ],
+                        [
                             'id' => 'tv',
                             'title' => '6) DSTV quote (live)',
                             'fixture' => 'quote_tv',
                         ],
                         [
+                            'id' => 'tv_csv',
+                            'title' => '6b) DSTV smartcards CSV (bulk)',
+                            'request' => [
+                                'service' => 'tv',
+                                'bill_type' => 'DSTV',
+                                'amount' => 50,
+                                'beneficiaries' => ['7012345678', '7098765432'],
+                            ],
+                            'response' => [
+                                'in_error' => false,
+                                'status_code' => '200',
+                                'data' => [
+                                    'quantity' => 2,
+                                    'unit_amount' => 50,
+                                    'amount' => 100,
+                                    'message' => '2 smartcards will receive this package.',
+                                ],
+                            ],
+                        ],
+                        [
                             'id' => 'gotv',
-                            'title' => '6b) GOtv quote',
+                            'title' => '6c) GOtv quote',
                             'fixture' => 'quote_tv_gotv.example',
                         ],
                         [
                             'id' => 'startimes',
-                            'title' => '6c) StarTimes quote',
+                            'title' => '6d) StarTimes quote',
                             'fixture' => 'quote_tv_startimes.example',
                         ],
                         [
@@ -363,8 +407,19 @@ return [
                             'fixture' => 'quote_results',
                         ],
                         [
+                            'id' => 'results_csv',
+                            'title' => '7b) Results to many phones (CSV)',
+                            'explain' => 'quantity is vouchers per phone. contact_group_ids not supported for results.',
+                            'request' => [
+                                'service' => 'results',
+                                'checker_type' => 'WASSCE',
+                                'quantity' => 1,
+                                'beneficiaries' => '0244123456,0201234567',
+                            ],
+                        ],
+                        [
                             'id' => 'mashup',
-                            'title' => '7b) Mash Up quote (live)',
+                            'title' => '7c) Mash Up quote (live)',
                             'fixture' => 'quote_mashup',
                         ],
                         [
@@ -416,9 +471,9 @@ return [
                         ['field' => 'beneficiary', 'type' => 'string', 'notes' => 'phone / meter / smartcard'],
                         ['field' => 'customer_phone', 'type' => 'string', 'notes' => 'ECG customer mobile (optional)'],
                         ['field' => 'account_name', 'type' => 'string', 'notes' => 'from lookup (optional)'],
-                        ['field' => 'beneficiaries', 'type' => 'CSV|string[] ≤50', 'notes' => 'same package many phones'],
+                        ['field' => 'beneficiaries', 'type' => 'CSV|string[] ≤50', 'notes' => 'phones / meters / smartcards by service'],
                         ['field' => 'items[]', 'type' => 'array≤50', 'notes' => 'mixed services'],
-                        ['field' => 'contact_group_ids[]', 'type' => 'int[]', 'notes' => 'data/mashup; max group_purchase_max'],
+                        ['field' => 'contact_group_ids[]', 'type' => 'int[]', 'notes' => 'phones only: data/mashup/airtime — NOT ecg/tv/results'],
                     ],
                     'scenarios' => [
                         [
@@ -467,14 +522,37 @@ return [
                             'fixture' => 'purchase_ecg_wallet.example',
                         ],
                         [
+                            'id' => 'wallet_ecg_csv',
+                            'title' => 'D2) ECG meters CSV (wallet)',
+                            'explain' => 'beneficiaries = meters. Shared customer_phone. No contact_group_ids.',
+                            'request' => [
+                                'service' => 'ecg',
+                                'amount' => 20,
+                                'beneficiaries' => '1234567890,9876543210',
+                                'customer_phone' => '0244123456',
+                                'method' => 'wallet',
+                            ],
+                        ],
+                        [
                             'id' => 'momo_ecg',
-                            'title' => 'D2) ECG (momo)',
+                            'title' => 'D3) ECG (momo)',
                             'fixture' => 'purchase_ecg_momo.example',
                         ],
                         [
                             'id' => 'wallet_dstv',
                             'title' => 'E) DSTV (wallet)',
                             'fixture' => 'purchase_tv_dstv_wallet.example',
+                        ],
+                        [
+                            'id' => 'wallet_dstv_csv',
+                            'title' => 'E1b) DSTV smartcards CSV (wallet)',
+                            'request' => [
+                                'service' => 'tv',
+                                'bill_type' => 'DSTV',
+                                'amount' => 50,
+                                'beneficiaries' => ['7012345678', '7098765432'],
+                                'method' => 'wallet',
+                            ],
                         ],
                         [
                             'id' => 'wallet_gotv',
@@ -497,6 +575,18 @@ return [
                             'fixture' => 'purchase_results_wallet.example',
                         ],
                         [
+                            'id' => 'wallet_results_csv',
+                            'title' => 'F1b) Results CSV phones (wallet)',
+                            'explain' => 'quantity = vouchers per phone. Use beneficiaries, not contact_group_ids.',
+                            'request' => [
+                                'service' => 'results',
+                                'checker_type' => 'WASSCE',
+                                'quantity' => 1,
+                                'beneficiaries' => '0244123456,0201234567',
+                                'method' => 'wallet',
+                            ],
+                        ],
+                        [
                             'id' => 'momo_results',
                             'title' => 'F2) Results (momo)',
                             'fixture' => 'purchase_results_momo.example',
@@ -504,8 +594,19 @@ return [
                         [
                             'id' => 'group',
                             'title' => 'G) contact_group_ids (wallet)',
-                            'explain' => 'Up to group_purchase_max (default 2000). YELLO expands verified only.',
+                            'explain' => 'Phone contacts only (data/mashup/airtime). Up to group_purchase_max. YELLO expands verified only. Not for ECG/TV/results.',
                             'fixture' => 'purchase_group_wallet.example',
+                        ],
+                        [
+                            'id' => 'group_airtime',
+                            'title' => 'G2) Airtime to contact_group_ids (wallet)',
+                            'request' => [
+                                'service' => 'airtime',
+                                'network' => 'MTN',
+                                'amount' => 5,
+                                'contact_group_ids' => [9],
+                                'method' => 'wallet',
+                            ],
                         ],
                         [
                             'id' => 'bulk_momo',

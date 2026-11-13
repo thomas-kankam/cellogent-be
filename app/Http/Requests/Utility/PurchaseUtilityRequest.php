@@ -7,13 +7,15 @@ use App\Support\GhanaPhone;
 use Illuminate\Validation\Rule;
 
 /**
- * Purchase one item, many phones for one package (`beneficiaries`), mixed `items[]` (≤50),
- * or a contact group. Each recipient needs a phone (data/mashup/airtime/results),
- * meter (ECG), or smartcard (TV).
+ * Purchase one item, many recipients for one package (`beneficiaries` CSV/array ≤50),
+ * mixed `items[]` (≤50), or phone `contact_group_ids` (data/mashup/airtime only).
+ *
+ * beneficiaries by service:
+ *  - data / mashup / airtime / results → Ghana mobiles
+ *  - ecg → meter / account numbers
+ *  - tv → smartcard numbers
  *
  * Pay mode toggle: method=wallet | momo (card still accepted for hosted Paystack).
- * `network` on the item is the airtime/telco network — not a payment field.
- * Paystack/Kairos do not need a MoMo network code; omit momo_network.
  */
 class PurchaseUtilityRequest extends QuoteUtilityRequest
 {
@@ -22,11 +24,12 @@ class PurchaseUtilityRequest extends QuoteUtilityRequest
         // array_merge so purchase-specific beneficiary / phone rules override the quote defaults.
         return array_merge(parent::rules(), [
             'beneficiary' => ['required_without_all:items,contact_group_ids,beneficiaries', 'nullable', 'string', 'max:30'],
-            'beneficiaries.*' => ['required', 'string', GhanaPhone::rule()],
+            // Validated per service in UtilityService (phones vs meters/smartcards).
+            'beneficiaries.*' => ['required', 'string', 'max:30'],
             'items.*.beneficiary' => ['required', 'string', 'max:30'],
             'account_name' => ['nullable', 'string', 'max:120'],
             'items.*.account_name' => ['nullable', 'string', 'max:120'],
-            // ECG only: the customer's mobile number (defaults to the buyer's own).
+            // ECG: shared customer mobile for bulk meters (defaults to the buyer's own).
             'customer_phone' => ['nullable', 'string', GhanaPhone::rule()],
             'items.*.customer_phone' => ['nullable', 'string', GhanaPhone::rule()],
             'method' => ['nullable', 'string', Rule::in(UtilityService::METHODS)],
