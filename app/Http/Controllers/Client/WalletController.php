@@ -68,6 +68,7 @@ class WalletController extends Controller
 
     public function storeTopUp(StoreTopUpRequest $request): JsonResponse
     {
+        // No method — CheckoutService routes to the primary enabled gateway (never wallet→wallet).
         return $this->respondFrom($this->checkout->start($request->user(), 'wallet_top_up', $request->validated()));
     }
 }

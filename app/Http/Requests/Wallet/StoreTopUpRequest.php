@@ -6,10 +6,9 @@ use App\Http\Requests\ApiFormRequest;
 use App\Support\GhanaPhone;
 
 /**
- * Fund the wallet via gateway checkout.
- * Paystack / Kairos do not need a MoMo network — omit `network`.
- * method=momo needs a phone (falls back to the client's profile number).
- * method=card opens hosted checkout (payer can still pick MoMo on Paystack).
+ * Fund the wallet via the primary enabled payment gateway (priority 1).
+ * Clients do not pick method — you cannot top up a wallet with wallet balance.
+ * phone_number is optional (defaults to the client's profile); needed when Kairos is primary.
  */
 class StoreTopUpRequest extends ApiFormRequest
 {
@@ -17,10 +16,7 @@ class StoreTopUpRequest extends ApiFormRequest
     {
         return [
             'amount' => ['required', 'numeric', 'min:1'],
-            'method' => ['required', 'string', 'in:momo,card'],
             'phone_number' => ['nullable', 'string', GhanaPhone::rule()],
-            // Optional / ignored by Paystack & Kairos — kept for older clients.
-            'network' => ['nullable', 'string', 'max:50'],
         ];
     }
 }

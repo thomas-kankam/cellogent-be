@@ -85,6 +85,37 @@ class GatewayManager
             $usable = $usable->reject(fn (PaymentGateway $g) => $g->code === 'kairos');
         }
 
+        return $this->orderByHealth($usable);
+    }
+
+    /**
+     * Wallet top-up: always follow admin priority. Include Kairos when an MSISDN is available.
+     *
+     * @return list<PaymentGateway>
+     */
+    public function topUpCandidates(bool $hasMsisdn): array
+    {
+        $usable = $this->all()->filter(function (PaymentGateway $g) use ($hasMsisdn) {
+            if (! $g->is_enabled || ! $this->driver($g->code)->configured()) {
+                return false;
+            }
+
+            if ($g->code === 'kairos') {
+                return $hasMsisdn;
+            }
+
+            return $g->supports('card') || $g->supports('momo');
+        });
+
+        return $this->orderByHealth($usable);
+    }
+
+    /**
+     * @param  Collection<int, PaymentGateway>  $usable
+     * @return list<PaymentGateway>
+     */
+    protected function orderByHealth(Collection $usable): array
+    {
         [$tripped, $healthy] = $usable->partition(fn (PaymentGateway $g) => $this->isTripped($g));
 
         return $healthy->concat($tripped)->values()->all();

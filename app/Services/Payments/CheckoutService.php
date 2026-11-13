@@ -98,6 +98,12 @@ class CheckoutService
      */
     public function start(Client $client, string $purpose, array $input): array
     {
+        // Wallet top-up: client never picks a method — primary enabled gateway collects.
+        // You cannot top up a wallet with wallet balance.
+        if ($purpose === 'wallet_top_up') {
+            unset($input['method']);
+        }
+
         // Null method = hosted checkout (Paystack) where the payer picks card/momo; we set method after verify.
         $method = $this->normalizeMethod($input['method'] ?? null);
 
@@ -123,17 +129,28 @@ class CheckoutService
         $q = $quote['data'];
         $msisdn = null;
 
-        if ($method === 'momo') {
+        // MoMo flows + wallet top-up (Kairos may be primary) need an MSISDN.
+        if ($method === 'momo' || $purpose === 'wallet_top_up') {
             $msisdn = GhanaPhone::toMobile($input['phone_number'] ?? $client->phone_number);
+        }
 
-            if (! $msisdn) {
-                return $this->result(true, 'Enter a valid mobile money number.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
+        if ($method === 'momo' && ! $msisdn) {
+            return $this->result(true, 'Enter a valid mobile money number.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
+                'phone_number' => ['Enter a valid mobile money number.'],
+            ]);
+        }
+
+        $gatewayCandidates = $purpose === 'wallet_top_up'
+            ? $this->gateways->topUpCandidates($msisdn !== null)
+            : ($method === 'wallet' ? [] : $this->gateways->candidates($method));
+
+        if ($method !== 'wallet' && $gatewayCandidates === []) {
+            if ($purpose === 'wallet_top_up' && $msisdn === null) {
+                return $this->result(true, 'Enter a mobile money number to top up.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
                     'phone_number' => ['Enter a valid mobile money number.'],
                 ]);
             }
-        }
 
-        if ($method !== 'wallet' && $this->gateways->candidates($method) === []) {
             return $this->result(true, 'This payment method is not available right now. Try another method.', ApiCode::BAD_REQUEST, ApiReason::GATEWAY_UNAVAILABLE);
         }
 
@@ -224,7 +241,11 @@ class CheckoutService
     {
         $lastError = 'Payment service is unavailable. Try again shortly.';
 
-        foreach ($this->gateways->candidates($payment->method) as $gateway) {
+        $candidates = $payment->purpose === 'wallet_top_up'
+            ? $this->gateways->topUpCandidates(filled($payment->msisdn))
+            : $this->gateways->candidates($payment->method);
+
+        foreach ($candidates as $gateway) {
             $result = $this->gateways->driver($gateway->code)->initiate($payment);
 
             if ($result->ok) {

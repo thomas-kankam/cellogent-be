@@ -30,9 +30,10 @@ return [
             'Swift data/airtime is 1 phone per API call. Our bulk creates N local orders (≤50 for CSV/items; up to group_purchase_max for contact groups) and queues them with spacing for Swift’s ~30 req/min limit.',
             'Bulk tracking: purchase returns batch_id + analytics; poll GET /client/utilities/batches/{batch_id} (admin: /admin/utilities/batches/{batch}). Statuses update from jobs + Swift webhooks.',
             'Recipient shapes are mutually exclusive: beneficiary | beneficiaries | items[] | contact_group_ids.',
-            'Pay mode toggle for most client flows: method=wallet (debit balance) or method=momo (Paystack/Kairos checkout). method=card is also accepted (hosted Paystack). Omit method on subscription to let the payer pick on Paystack.',
+            'Wallet top-up (POST /client/wallet/top-ups): send only amount (+ optional phone_number). No method — the primary enabled gateway (priority 1) collects. You cannot top up a wallet with wallet.',
+            'Other pay flows: method=wallet (debit balance) or method=momo (gateway checkout). method=card / omit method still work where hosted Paystack applies (e.g. subscription).',
             'Paystack and Kairos do NOT need a MoMo network code — omit `network` / `momo_network` on payment. For airtime purchases, `network` means the telco (MTN|TELECEL|AT|GLO), not the payment rail.',
-            'MoMo phone_number is optional — defaults to the logged-in client’s profile phone. After momo/card, open payment_link; verify/webhook finalize; browser may land on /payments/complete.',
+            'MoMo phone_number is optional — defaults to the logged-in client’s profile phone. After gateway checkout, open payment_link (or approve MoMo prompt); verify/webhook finalize; browser may land on /payments/complete.',
         ],
     ],
     'sections' => [
