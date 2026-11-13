@@ -4,8 +4,9 @@ return [
 
     'currency' => 'GHS',
 
-    // Where the browser lands after a redirect checkout (Paystack). ?reference=&status= are appended.
-    'return_url' => env('PAYMENT_RETURN_URL', rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/').'/payments/complete'),
+    // Where the browser lands after Paystack redirect checkout (?reference=&status= appended).
+    // Defaults to this API app's Blade page: GET /payments/complete (see routes/web.php).
+    'return_url' => env('PAYMENT_RETURN_URL', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/payments/complete'),
 
     // Purchases a client can start per minute (top-ups, plans, checkout combined).
     'checkout_per_minute' => (int) env('PAYMENT_CHECKOUT_PER_MINUTE', 10),
