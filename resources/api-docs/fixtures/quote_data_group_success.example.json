@@ -1,0 +1,41 @@
+{
+    "http_status": 200,
+    "note": "Group quote: amount = unit_amount × verified. YELLO SME requires verified beneficiaries.",
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "data",
+            "order_type": "data_bundle",
+            "product_type": "data_bundle",
+            "name": "YELLO 5GB",
+            "network": "YELLO",
+            "package_id": "yellow_5gb",
+            "size": "5GB",
+            "quantity": 5,
+            "unit_amount": 25.76,
+            "amount": 128.8,
+            "currency": "GHS",
+            "audience": {
+                "total": 5,
+                "verified": 5,
+                "not_verified": 0,
+                "requires_beneficiary": true,
+                "network": "YELLO",
+                "package_id": "yellow_5gb"
+            },
+            "message": "5/5 contacts are verified beneficiaries and can receive this package."
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "data",
+            "package_id": "yellow_5gb",
+            "contact_group_ids": [9]
+        }
+    }
+}

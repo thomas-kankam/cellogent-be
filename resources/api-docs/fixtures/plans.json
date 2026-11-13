@@ -1,0 +1,161 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Plans loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 1,
+                "name": "Brass",
+                "details": [
+                    {
+                        "months": 1,
+                        "units": 1000,
+                        "price": 110,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 2,
+                        "units": 2000,
+                        "price": 200,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 3,
+                        "units": 3000,
+                        "price": 300,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 0,
+                        "units": 4000,
+                        "price": 400,
+                        "non_expiry": true
+                    }
+                ],
+                "status": "active",
+                "is_featured": true
+            },
+            {
+                "id": 6,
+                "name": "Bronze",
+                "details": [
+                    {
+                        "months": 1,
+                        "units": 1300,
+                        "price": 40,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 2,
+                        "units": 2600,
+                        "price": 80,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 3,
+                        "units": 3900,
+                        "price": 110,
+                        "non_expiry": false
+                    }
+                ],
+                "status": "active",
+                "is_featured": false
+            },
+            {
+                "id": 3,
+                "name": "Gold",
+                "details": [
+                    {
+                        "months": 1,
+                        "units": 8000,
+                        "price": 200,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 2,
+                        "units": 16000,
+                        "price": 380,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 3,
+                        "units": 24000,
+                        "price": 540,
+                        "non_expiry": false
+                    }
+                ],
+                "status": "active",
+                "is_featured": false
+            },
+            {
+                "id": 4,
+                "name": "Platinum",
+                "details": [
+                    {
+                        "months": 1,
+                        "units": 20000,
+                        "price": 400,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 2,
+                        "units": 40000,
+                        "price": 760,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 3,
+                        "units": 60000,
+                        "price": 1080,
+                        "non_expiry": false
+                    }
+                ],
+                "status": "active",
+                "is_featured": false
+            },
+            {
+                "id": 2,
+                "name": "Silver",
+                "details": [
+                    {
+                        "months": 1,
+                        "units": 3000,
+                        "price": 90,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 2,
+                        "units": 6000,
+                        "price": 170,
+                        "non_expiry": false
+                    },
+                    {
+                        "months": 3,
+                        "units": 9000,
+                        "price": 240,
+                        "non_expiry": false
+                    }
+                ],
+                "status": "active",
+                "is_featured": false
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 15,
+            "total": 5,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:16:16"
+    },
+    "captured_at": "2026-11-13T13:16:16+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/plans",
+        "body": null
+    }
+}

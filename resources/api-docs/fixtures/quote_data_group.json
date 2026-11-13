@@ -1,0 +1,28 @@
+{
+    "http_status": 422,
+    "error": null,
+    "body": {
+        "in_error": true,
+        "status_code": "422",
+        "message": "Validation failed.",
+        "reason": "validation_error",
+        "data": {
+            "package_id": [
+                "That package is not available."
+            ]
+        },
+        "point_in_time": "2026-11-13 13:17:00"
+    },
+    "captured_at": "2026-11-13T13:17:00+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "data",
+            "package_id": "yellow_5gb",
+            "contact_group_ids": [
+                1
+            ]
+        }
+    }
+}

@@ -1,0 +1,33 @@
+{
+    "http_status": 200,
+    "note": "Expected success when Swift catalogue is reachable (captured earlier from a live quote).",
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "data",
+            "order_type": "data_bundle",
+            "product_type": "data_bundle",
+            "name": "YELLO 5GB",
+            "network": "YELLO",
+            "package_id": "yellow_5gb",
+            "size": "5GB",
+            "bill_type": null,
+            "checker_type": null,
+            "quantity": null,
+            "beneficiary": null,
+            "amount": 25.76,
+            "currency": "GHS"
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "data",
+            "package_id": "yellow_5gb"
+        }
+    }
+}

@@ -1,0 +1,20 @@
+{
+    "http_status": 503,
+    "error": null,
+    "body": {
+        "in_error": true,
+        "status_code": "503",
+        "message": "The provider balance could not be loaded.",
+        "reason": "provider_unavailable",
+        "data": {
+            "detail": "Authentication failed: Profile not found or API key invalid."
+        },
+        "point_in_time": "2026-11-13 13:17:50"
+    },
+    "captured_at": "2026-11-13T13:17:50+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/utilities/balance",
+        "body": null
+    }
+}

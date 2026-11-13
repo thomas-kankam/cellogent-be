@@ -1,0 +1,36 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "results",
+            "order_type": "results",
+            "product_type": "results",
+            "name": "WASSCE Results Checker x2",
+            "network": null,
+            "package_id": null,
+            "size": null,
+            "bill_type": null,
+            "checker_type": "WASSCE",
+            "quantity": 2,
+            "beneficiary": null,
+            "amount": 39.1,
+            "currency": "GHS"
+        },
+        "point_in_time": "2026-11-13 13:17:23"
+    },
+    "captured_at": "2026-11-13T13:17:23+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "results",
+            "checker_type": "WASSCE",
+            "quantity": 2
+        }
+    }
+}

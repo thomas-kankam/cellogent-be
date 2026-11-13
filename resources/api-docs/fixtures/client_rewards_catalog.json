@@ -1,0 +1,65 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Rewards catalog loaded.",
+        "reason": "success",
+        "data": {
+            "currency": "GHS",
+            "provider_reachable": false,
+            "data": {
+                "categories": [],
+                "plans": []
+            },
+            "airtime": {
+                "networks": [
+                    {
+                        "code": "MTN",
+                        "name": "MTN",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    },
+                    {
+                        "code": "TELECEL",
+                        "name": "Telecel",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    },
+                    {
+                        "code": "AT",
+                        "name": "AirtelTigo",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    },
+                    {
+                        "code": "GLO",
+                        "name": "Glo",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    }
+                ],
+                "presets": [
+                    1,
+                    2,
+                    5,
+                    10,
+                    20,
+                    50
+                ]
+            },
+            "money": {
+                "currency": "GHS",
+                "method": "mobile_money"
+            }
+        },
+        "point_in_time": "2026-11-13 13:16:32"
+    },
+    "captured_at": "2026-11-13T13:16:32+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/rewards/catalog",
+        "body": null
+    }
+}

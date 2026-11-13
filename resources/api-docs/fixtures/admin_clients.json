@@ -1,0 +1,109 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Clients loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 8,
+                "first_name": "Thomas",
+                "last_name": "Cancam",
+                "email": "cancamthomas7@gmail.com",
+                "phone_number": "233261923244",
+                "date_of_birth": "1999-05-11",
+                "gender": "male",
+                "account_type": "individual",
+                "business_name": null,
+                "region": "Greater Accra",
+                "city": "Accra",
+                "address": "12 Ring Road",
+                "status": "active",
+                "is_verified": false,
+                "verified_at": null,
+                "profile_image": "http://localhost/storage/profiles/client/33e79e40-0b00-4ca7-abf4-698872e64753.png",
+                "onboarding_type": "admin",
+                "last_login_at": null,
+                "wallet": null,
+                "subscription": null,
+                "onboarding_by": {
+                    "id": 1,
+                    "first_name": "Super",
+                    "last_name": "Admin",
+                    "email": "kankamthomas6@gmail.com"
+                }
+            },
+            {
+                "id": 5,
+                "first_name": null,
+                "last_name": null,
+                "email": "kwabenadebrah6969@gmail.com",
+                "phone_number": "233244438393",
+                "date_of_birth": null,
+                "gender": null,
+                "account_type": "business",
+                "business_name": "Kaks",
+                "region": "Ashanti",
+                "city": "Kumasi",
+                "address": "Ejisu",
+                "status": "active",
+                "is_verified": false,
+                "verified_at": null,
+                "profile_image": "http://localhost/storage/profiles/client/2d5ae412-5355-43d8-8cac-9a2224bf6cb7.png",
+                "onboarding_type": "admin",
+                "last_login_at": null,
+                "wallet": null,
+                "subscription": null,
+                "onboarding_by": {
+                    "id": 1,
+                    "first_name": "Super",
+                    "last_name": "Admin",
+                    "email": "kankamthomas6@gmail.com"
+                }
+            },
+            {
+                "id": 4,
+                "first_name": "Toms",
+                "last_name": "Cook",
+                "email": "cancamthomas77@gmail.com",
+                "phone_number": "233244733719",
+                "date_of_birth": "1999-05-11",
+                "gender": "male",
+                "account_type": "individual",
+                "business_name": null,
+                "region": "Greater Accra",
+                "city": "Accra",
+                "address": "12 Ring Road",
+                "status": "active",
+                "is_verified": false,
+                "verified_at": null,
+                "profile_image": "http://localhost/storage/profiles/client/aadb07a5-10e6-4755-bf5d-4ede7040e73d.png",
+                "onboarding_type": "admin",
+                "last_login_at": null,
+                "wallet": null,
+                "subscription": null,
+                "onboarding_by": {
+                    "id": 1,
+                    "first_name": "Super",
+                    "last_name": "Admin",
+                    "email": "kankamthomas6@gmail.com"
+                }
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 3,
+            "total": 6,
+            "last_page": 2
+        },
+        "point_in_time": "2026-11-13 13:18:12"
+    },
+    "captured_at": "2026-11-13T13:18:12+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/clients?per_page=3",
+        "body": null
+    }
+}

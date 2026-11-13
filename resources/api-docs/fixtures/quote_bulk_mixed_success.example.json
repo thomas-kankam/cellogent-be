@@ -1,0 +1,48 @@
+{
+    "http_status": 200,
+    "note": "Bulk quote returns items[] + total amount.",
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "count": 2,
+            "amount": 18.2,
+            "currency": "GHS",
+            "items": [
+                {
+                    "service": "data",
+                    "order_type": "data_bundle",
+                    "product_type": "data_bundle",
+                    "name": "AT 3GB",
+                    "network": "AT",
+                    "package_id": "at_3gb",
+                    "size": "3GB",
+                    "amount": 13.2,
+                    "currency": "GHS"
+                },
+                {
+                    "service": "airtime",
+                    "order_type": "airtime",
+                    "product_type": "airtime",
+                    "name": "TELECEL airtime",
+                    "network": "TELECEL",
+                    "amount": 5,
+                    "face_amount": 5,
+                    "currency": "GHS"
+                }
+            ]
+        }
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "items": [
+                { "service": "data", "package_id": "at_3gb" },
+                { "service": "airtime", "network": "TELECEL", "amount": 5 }
+            ]
+        }
+    }
+}

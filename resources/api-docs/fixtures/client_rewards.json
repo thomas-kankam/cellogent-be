@@ -1,0 +1,145 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Rewards loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 11,
+                "name": "MTN Mash Up 1GB + 353 Mins",
+                "type": "data",
+                "size": "1GB + 353 Mins",
+                "amount": 24.77,
+                "network": "MTN Mash Up",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": "mashup_1gb+353mins",
+                "price": 24.77
+            },
+            {
+                "id": 10,
+                "name": "AT 3GB Data",
+                "type": "data",
+                "size": "3GB",
+                "amount": 12,
+                "network": "AT",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": "at_3gb",
+                "price": 12
+            },
+            {
+                "id": 9,
+                "name": "Telecel 10GB Data",
+                "type": "data",
+                "size": "10GB",
+                "amount": 38,
+                "network": "TELECEL",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": "telecel_10gb",
+                "price": 38
+            },
+            {
+                "id": 8,
+                "name": "YELLO 5GB Data",
+                "type": "data",
+                "size": "5GB",
+                "amount": 23,
+                "network": "YELLO",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": "yellow_5gb",
+                "price": 23
+            },
+            {
+                "id": 7,
+                "name": "YELLO 2GB Data",
+                "type": "data",
+                "size": "2GB",
+                "amount": 8.4,
+                "network": "YELLO",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": "yellow_2gb",
+                "price": 8.4
+            },
+            {
+                "id": 6,
+                "name": "YELLO 1GB Data",
+                "type": "data",
+                "size": "1GB",
+                "amount": 4.2,
+                "network": "YELLO",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": "yellow_1gb",
+                "price": 4.2
+            },
+            {
+                "id": 5,
+                "name": "Telecel Airtime GHS 5",
+                "type": "airtime",
+                "size": null,
+                "amount": 5,
+                "network": "TELECEL",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": null,
+                "price": 5
+            },
+            {
+                "id": 4,
+                "name": "MTN Airtime GHS 5",
+                "type": "airtime",
+                "size": null,
+                "amount": 5,
+                "network": "MTN",
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": null,
+                "price": 5
+            },
+            {
+                "id": 3,
+                "name": "GHS 10 Cash",
+                "type": "money",
+                "size": null,
+                "amount": 10,
+                "network": null,
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": null,
+                "price": 10
+            },
+            {
+                "id": 2,
+                "name": "GHS 5 Cash",
+                "type": "money",
+                "size": null,
+                "amount": 5,
+                "network": null,
+                "currency": "GHS",
+                "status": "instock",
+                "package_id": null,
+                "price": 5
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 50,
+            "total": 10,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:16:28"
+    },
+    "captured_at": "2026-11-13T13:16:28+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/rewards",
+        "body": null
+    }
+}

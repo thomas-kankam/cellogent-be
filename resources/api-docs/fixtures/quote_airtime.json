@@ -1,0 +1,37 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "airtime",
+            "order_type": "airtime",
+            "product_type": "airtime",
+            "name": "MTN airtime",
+            "network": "MTN",
+            "package_id": null,
+            "size": null,
+            "bill_type": null,
+            "checker_type": null,
+            "quantity": null,
+            "beneficiary": null,
+            "amount": 5,
+            "currency": "GHS",
+            "face_amount": 5
+        },
+        "point_in_time": "2026-11-13 13:17:16"
+    },
+    "captured_at": "2026-11-13T13:17:16+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "airtime",
+            "network": "MTN",
+            "amount": 5
+        }
+    }
+}

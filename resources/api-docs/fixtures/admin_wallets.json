@@ -1,0 +1,88 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Wallets loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 3,
+                "client_id": 3,
+                "status": "active",
+                "balance": 0,
+                "reserved": 0,
+                "available": 0,
+                "currency": "GHS",
+                "client": {
+                    "id": 3,
+                    "first_name": null,
+                    "last_name": null,
+                    "email": "naykobby@gmail.com",
+                    "phone_number": "233500085941",
+                    "account_type": "business",
+                    "business_name": "Minimax Trading Company Limited",
+                    "status": "active",
+                    "is_verified": true,
+                    "profile_image": "http://localhost/storage/profiles/client/217df0b7-1880-4808-ae6f-da067cb5e5ff.png"
+                }
+            },
+            {
+                "id": 2,
+                "client_id": 2,
+                "status": "active",
+                "balance": 0,
+                "reserved": 0,
+                "available": 0,
+                "currency": "GHS",
+                "client": {
+                    "id": 2,
+                    "first_name": "Kwabena",
+                    "last_name": "Acheampong",
+                    "email": "achiekobby17@gmail.com",
+                    "phone_number": "233249158582",
+                    "account_type": "individual",
+                    "business_name": null,
+                    "status": "active",
+                    "is_verified": true,
+                    "profile_image": "http://localhost/storage/profiles/client/1c7c3c03-c6ee-4be2-99aa-686d602461a9.png"
+                }
+            },
+            {
+                "id": 1,
+                "client_id": 1,
+                "status": "active",
+                "balance": 0,
+                "reserved": 0,
+                "available": 0,
+                "currency": "GHS",
+                "client": {
+                    "id": 1,
+                    "first_name": null,
+                    "last_name": null,
+                    "email": "kankamthomas6@gmail.com",
+                    "phone_number": "233556906969",
+                    "account_type": "business",
+                    "business_name": "Cellogent",
+                    "status": "active",
+                    "is_verified": true,
+                    "profile_image": "http://localhost/storage/profiles/client/3ca2330f-9c47-4ab4-914f-86f997a48c2d.png"
+                }
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 3,
+            "total": 3,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:18:17"
+    },
+    "captured_at": "2026-11-13T13:18:17+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/wallets?per_page=3",
+        "body": null
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "http_status": 0,
+    "body": null,
+    "request": {
+        "method": "GET",
+        "path": "/client/contact-groups?per_page=5",
+        "body": null
+    },
+    "captured_at": "2026-11-13T13:16:07+00:00"
+}

@@ -1,0 +1,161 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Campaigns loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 10,
+                "resource": "campaign",
+                "client_id": 1,
+                "name": "Birthday Gift",
+                "type": "occasion",
+                "status": "draft",
+                "occasion_type": "birthday",
+                "custom_date": null,
+                "trigger_offset": "on",
+                "custom_offset_days": null,
+                "send_time": "09:00",
+                "repeat_yearly": true,
+                "contact_group_ids": [
+                    9
+                ],
+                "sender": "CELLOGENT",
+                "body": "Hi, happy birthday! Enjoy your day.",
+                "send_at": null,
+                "cta": null,
+                "tracking_url": "http://127.0.0.1:8765/api/public/campaigns/10/click",
+                "reward": {
+                    "enabled": false,
+                    "reward_id": null,
+                    "name": null,
+                    "type": null,
+                    "size": null,
+                    "amount": null,
+                    "network": null,
+                    "currency": null,
+                    "requires_beneficiary": false,
+                    "eligible_recipients": 3,
+                    "not_eligible": 0,
+                    "estimated_cost": 0,
+                    "estimated_cost_units": 3,
+                    "beneficiary_message": null
+                },
+                "funding": {
+                    "method": null,
+                    "funded": false,
+                    "wallet_hold_id": null,
+                    "payment_id": null,
+                    "reserved_amount": 0,
+                    "reserved_remaining": 0
+                },
+                "analytics": {
+                    "sent": 0,
+                    "delivered": 0,
+                    "failed": 0,
+                    "clicks": 0,
+                    "unique_clicks": 0,
+                    "delivery_rate": 0,
+                    "click_rate": 0,
+                    "rewards_disbursed": 0,
+                    "rewards_failed": 0,
+                    "rewards_pending": 0,
+                    "reserved_remaining": 0,
+                    "estimated_cost": 0,
+                    "actual_cost": 0,
+                    "eligible_recipients": 3
+                },
+                "inbox_id": null,
+                "activated_at": null,
+                "completed_at": null,
+                "cancelled_at": null,
+                "created_at": "2026-11-11 15:01:40",
+                "updated_at": "2026-11-11 15:01:40"
+            },
+            {
+                "id": 4,
+                "resource": "campaign",
+                "client_id": 1,
+                "name": "Birthday Gift",
+                "type": "occasion",
+                "status": "draft",
+                "occasion_type": "birthday",
+                "custom_date": null,
+                "trigger_offset": "on",
+                "custom_offset_days": null,
+                "send_time": "09:00",
+                "repeat_yearly": true,
+                "contact_group_ids": [
+                    1
+                ],
+                "sender": "CELLOGENT",
+                "body": "Hi {firstName}, happy birthday!",
+                "send_at": null,
+                "cta": null,
+                "tracking_url": "http://127.0.0.1:8765/api/public/campaigns/4/click",
+                "reward": {
+                    "enabled": true,
+                    "reward_id": null,
+                    "name": "airtime",
+                    "type": "airtime",
+                    "size": null,
+                    "amount": 5,
+                    "network": null,
+                    "currency": "GHS",
+                    "requires_beneficiary": false,
+                    "eligible_recipients": 0,
+                    "not_eligible": 0,
+                    "estimated_cost": 0,
+                    "estimated_cost_units": 0,
+                    "beneficiary_message": null
+                },
+                "funding": {
+                    "method": null,
+                    "funded": false,
+                    "wallet_hold_id": null,
+                    "payment_id": null,
+                    "reserved_amount": 0,
+                    "reserved_remaining": 0
+                },
+                "analytics": {
+                    "sent": 0,
+                    "delivered": 0,
+                    "failed": 0,
+                    "clicks": 0,
+                    "unique_clicks": 0,
+                    "delivery_rate": 0,
+                    "click_rate": 0,
+                    "rewards_disbursed": 0,
+                    "rewards_failed": 0,
+                    "rewards_pending": 0,
+                    "reserved_remaining": 0,
+                    "estimated_cost": 0,
+                    "actual_cost": 0,
+                    "eligible_recipients": 0
+                },
+                "inbox_id": null,
+                "activated_at": null,
+                "completed_at": null,
+                "cancelled_at": null,
+                "created_at": "2026-11-11 06:23:29",
+                "updated_at": "2026-11-11 06:23:29"
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 3,
+            "total": 2,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:16:43"
+    },
+    "captured_at": "2026-11-13T13:16:43+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/campaigns?per_page=3",
+        "body": null
+    }
+}

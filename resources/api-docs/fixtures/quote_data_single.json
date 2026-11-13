@@ -1,0 +1,21 @@
+{
+    "http_status": 503,
+    "error": null,
+    "body": {
+        "in_error": true,
+        "status_code": "503",
+        "message": "The provider is unavailable right now. Try again shortly.",
+        "reason": "provider_unavailable",
+        "data": [],
+        "point_in_time": "2026-11-13 13:16:56"
+    },
+    "captured_at": "2026-11-13T13:16:56+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "data",
+            "package_id": "yellow_5gb"
+        }
+    }
+}

@@ -1,0 +1,38 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Wallet loaded.",
+        "reason": "success",
+        "data": {
+            "id": 1,
+            "client_id": 1,
+            "status": "active",
+            "balance": 0,
+            "reserved": 0,
+            "available": 0,
+            "currency": "GHS",
+            "client": {
+                "id": 1,
+                "first_name": null,
+                "last_name": null,
+                "email": "kankamthomas6@gmail.com",
+                "phone_number": "233556906969",
+                "account_type": "business",
+                "business_name": "Cellogent",
+                "status": "active",
+                "is_verified": true,
+                "profile_image": "http://localhost/storage/profiles/client/3ca2330f-9c47-4ab4-914f-86f997a48c2d.png"
+            }
+        },
+        "point_in_time": "2026-11-13 13:16:19"
+    },
+    "captured_at": "2026-11-13T13:16:19+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/wallet",
+        "body": null
+    }
+}

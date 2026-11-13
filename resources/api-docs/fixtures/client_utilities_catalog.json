@@ -1,0 +1,148 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Utility catalog loaded.",
+        "reason": "success",
+        "data": {
+            "currency": "GHS",
+            "provider_reachable": false,
+            "services": [
+                {
+                    "service": "data",
+                    "order_type": "data_bundle",
+                    "product_type": "data_bundle",
+                    "supported": true,
+                    "available": false,
+                    "reason": "The provider is unavailable right now."
+                },
+                {
+                    "service": "mashup",
+                    "order_type": "mashup",
+                    "product_type": "mashup",
+                    "supported": true,
+                    "available": false,
+                    "reason": "The provider is unavailable right now."
+                },
+                {
+                    "service": "airtime",
+                    "order_type": "airtime",
+                    "product_type": "airtime",
+                    "supported": true,
+                    "available": true,
+                    "reason": null
+                },
+                {
+                    "service": "ecg",
+                    "order_type": "ecg",
+                    "product_type": "ecg",
+                    "supported": true,
+                    "available": true,
+                    "reason": null
+                },
+                {
+                    "service": "tv",
+                    "order_type": "dstv",
+                    "product_type": "tv",
+                    "supported": true,
+                    "available": true,
+                    "reason": null
+                },
+                {
+                    "service": "results",
+                    "order_type": "results",
+                    "product_type": "results",
+                    "supported": true,
+                    "available": true,
+                    "reason": null
+                }
+            ],
+            "categories": [],
+            "networks": [],
+            "plans": [],
+            "airtime": {
+                "networks": [
+                    {
+                        "code": "MTN",
+                        "name": "MTN",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    },
+                    {
+                        "code": "TELECEL",
+                        "name": "Telecel",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    },
+                    {
+                        "code": "AT",
+                        "name": "AirtelTigo",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    },
+                    {
+                        "code": "GLO",
+                        "name": "Glo",
+                        "min_amount": 1,
+                        "max_amount": 500
+                    }
+                ]
+            },
+            "tv": {
+                "bill_types": [
+                    {
+                        "code": "DSTV",
+                        "name": "DStv",
+                        "order_type": "dstv",
+                        "min_amount": 1,
+                        "max_amount": 5000
+                    },
+                    {
+                        "code": "GOTV",
+                        "name": "GOtv",
+                        "order_type": "gotv",
+                        "min_amount": 1,
+                        "max_amount": 5000
+                    },
+                    {
+                        "code": "STARTIMES",
+                        "name": "StarTimes",
+                        "order_type": "starttimes",
+                        "min_amount": 1,
+                        "max_amount": 5000
+                    }
+                ]
+            },
+            "ecg": {
+                "min_amount": 1,
+                "max_amount": 5000
+            },
+            "results": {
+                "checkers": [
+                    {
+                        "type": "WASSCE",
+                        "name": "WASSCE Results Checker",
+                        "unit_price": 19.55,
+                        "available": true
+                    },
+                    {
+                        "type": "BECE",
+                        "name": "BECE Results Checker",
+                        "unit_price": 19.55,
+                        "available": true
+                    }
+                ],
+                "max_quantity": 100
+            }
+        },
+        "point_in_time": "2026-11-13 13:16:35"
+    },
+    "captured_at": "2026-11-13T13:16:35+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/utilities/catalog",
+        "body": null
+    }
+}

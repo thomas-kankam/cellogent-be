@@ -1,0 +1,246 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Profile loaded.",
+        "reason": "success",
+        "data": {
+            "id": 1,
+            "first_name": "Super",
+            "last_name": "Admin",
+            "email": "kankamthomas6@gmail.com",
+            "phone_number": "233556906969",
+            "status": "active",
+            "profile_image": "http://localhost/storage/profiles/admin/c2fffccd-9b79-40ae-b2c2-5b7047c8d545.png",
+            "last_login_at": "2026-11-05 13:02:52",
+            "role": {
+                "id": 1,
+                "name": "Super Admin",
+                "description": "Full access. Used to onboard other admins.",
+                "permissions": [
+                    {
+                        "module": "account_status",
+                        "permissions": [
+                            {
+                                "id": 4,
+                                "name": "account_status.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "activity_log",
+                        "permissions": [
+                            {
+                                "id": 12,
+                                "name": "activity_log.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "admin",
+                        "permissions": [
+                            {
+                                "id": 10,
+                                "name": "admin.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "api_key",
+                        "permissions": [
+                            {
+                                "id": 9,
+                                "name": "api_key.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "client",
+                        "permissions": [
+                            {
+                                "id": 11,
+                                "name": "client.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "onboarding",
+                        "permissions": [
+                            {
+                                "id": 2,
+                                "name": "onboarding.admin"
+                            },
+                            {
+                                "id": 1,
+                                "name": "onboarding.client"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "order",
+                        "permissions": [
+                            {
+                                "id": 23,
+                                "name": "order.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "otp",
+                        "permissions": [
+                            {
+                                "id": 3,
+                                "name": "otp.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment",
+                        "permissions": [
+                            {
+                                "id": 20,
+                                "name": "payment.manage"
+                            },
+                            {
+                                "id": 19,
+                                "name": "payment.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment_gateway",
+                        "permissions": [
+                            {
+                                "id": 21,
+                                "name": "payment_gateway.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment_settings",
+                        "permissions": [
+                            {
+                                "id": 22,
+                                "name": "payment_settings.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "permission",
+                        "permissions": [
+                            {
+                                "id": 7,
+                                "name": "permission.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "plan",
+                        "permissions": [
+                            {
+                                "id": 15,
+                                "name": "plan.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "profile",
+                        "permissions": [
+                            {
+                                "id": 5,
+                                "name": "profile.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "report",
+                        "permissions": [
+                            {
+                                "id": 25,
+                                "name": "report.export"
+                            },
+                            {
+                                "id": 24,
+                                "name": "report.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "role",
+                        "permissions": [
+                            {
+                                "id": 6,
+                                "name": "role.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sender_id",
+                        "permissions": [
+                            {
+                                "id": 8,
+                                "name": "sender_id.approve"
+                            },
+                            {
+                                "id": 14,
+                                "name": "sender_id.blacklist"
+                            },
+                            {
+                                "id": 13,
+                                "name": "sender_id.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sms",
+                        "permissions": [
+                            {
+                                "id": 28,
+                                "name": "sms.aggregator"
+                            },
+                            {
+                                "id": 27,
+                                "name": "sms.send"
+                            },
+                            {
+                                "id": 26,
+                                "name": "sms.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "subscription",
+                        "permissions": [
+                            {
+                                "id": 17,
+                                "name": "subscription.assign"
+                            },
+                            {
+                                "id": 16,
+                                "name": "subscription.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "wallet",
+                        "permissions": [
+                            {
+                                "id": 18,
+                                "name": "wallet.view"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        "point_in_time": "2026-11-13 13:17:10"
+    },
+    "captured_at": "2026-11-13T13:17:10+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/profile",
+        "body": null
+    }
+}

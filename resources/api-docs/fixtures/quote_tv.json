@@ -1,0 +1,37 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "tv",
+            "order_type": "dstv",
+            "product_type": "tv",
+            "name": "DStv payment",
+            "network": null,
+            "package_id": null,
+            "size": null,
+            "bill_type": "DSTV",
+            "checker_type": null,
+            "quantity": null,
+            "beneficiary": null,
+            "amount": 50,
+            "currency": "GHS",
+            "face_amount": 50
+        },
+        "point_in_time": "2026-11-13 13:17:21"
+    },
+    "captured_at": "2026-11-13T13:17:21+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "tv",
+            "bill_type": "DSTV",
+            "amount": 50
+        }
+    }
+}

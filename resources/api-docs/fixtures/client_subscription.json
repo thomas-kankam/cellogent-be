@@ -1,0 +1,42 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Subscription loaded.",
+        "reason": "success",
+        "data": {
+            "id": 1,
+            "client_id": 1,
+            "plan_id": 1,
+            "plan_name": "Bronze",
+            "status": "active",
+            "price": "40.00",
+            "units": 2597,
+            "type": "monthly",
+            "duration_in_months": 1,
+            "starts_at": "2026-11-10 16:50:26",
+            "ends_at": "2026-12-10 16:50:26",
+            "client": {
+                "id": 1,
+                "first_name": null,
+                "last_name": null,
+                "email": "kankamthomas6@gmail.com",
+                "phone_number": "233556906969",
+                "account_type": "business",
+                "business_name": "Cellogent",
+                "status": "active",
+                "is_verified": true,
+                "profile_image": "http://localhost/storage/profiles/client/3ca2330f-9c47-4ab4-914f-86f997a48c2d.png"
+            }
+        },
+        "point_in_time": "2026-11-13 13:16:22"
+    },
+    "captured_at": "2026-11-13T13:16:22+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/subscription",
+        "body": null
+    }
+}

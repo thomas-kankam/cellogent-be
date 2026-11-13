@@ -1,0 +1,24 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Surveys loaded.",
+        "reason": "success",
+        "data": [],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 3,
+            "total": 0,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:16:47"
+    },
+    "captured_at": "2026-11-13T13:16:47+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/surveys?per_page=3",
+        "body": null
+    }
+}

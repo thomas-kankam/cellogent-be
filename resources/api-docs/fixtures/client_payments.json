@@ -1,0 +1,85 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Payments loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 11,
+                "resource": "payment",
+                "client_id": 1,
+                "order_id": 11,
+                "reference_id": "ORDCNOLNYS9",
+                "purpose": "airtime",
+                "method": "momo",
+                "network": null,
+                "msisdn": "233556906969",
+                "amount": "1.00",
+                "charge": "0.00",
+                "total_amount": "1.00",
+                "currency": "GHS",
+                "status": "paid",
+                "payment_link": null,
+                "failure_reason": null,
+                "paid_at": "2026-11-13 13:04:52",
+                "created_at": "2026-11-13 13:04:32"
+            },
+            {
+                "id": 10,
+                "resource": "payment",
+                "client_id": 1,
+                "order_id": 10,
+                "reference_id": "ORDHOT8HWCA",
+                "purpose": "airtime",
+                "method": "momo",
+                "network": null,
+                "msisdn": "233556906969",
+                "amount": "1.00",
+                "charge": "0.00",
+                "total_amount": "1.00",
+                "currency": "GHS",
+                "status": "pending",
+                "payment_link": "https://checkout.paystack.com/rrepvs8oz00jp2k",
+                "failure_reason": null,
+                "paid_at": null,
+                "created_at": "2026-11-13 13:03:03"
+            },
+            {
+                "id": 9,
+                "resource": "payment",
+                "client_id": 1,
+                "order_id": 9,
+                "reference_id": "ORDGQZSXJIT",
+                "purpose": "airtime",
+                "method": "momo",
+                "network": null,
+                "msisdn": "233556906969",
+                "amount": "1.00",
+                "charge": "0.00",
+                "total_amount": "1.00",
+                "currency": "GHS",
+                "status": "pending",
+                "payment_link": "https://checkout.paystack.com/uux9l0e87g17q60",
+                "failure_reason": null,
+                "paid_at": null,
+                "created_at": "2026-11-13 13:01:32"
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 3,
+            "total": 6,
+            "last_page": 2
+        },
+        "point_in_time": "2026-11-13 13:16:38"
+    },
+    "captured_at": "2026-11-13T13:16:38+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/payments?per_page=3",
+        "body": null
+    }
+}

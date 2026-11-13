@@ -1,0 +1,45 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Payment settings loaded.",
+        "reason": "success",
+        "data": {
+            "charges": {
+                "wallet_top_up": 0,
+                "sms_units": 0,
+                "campaign_fund": 0,
+                "survey_fund": 0,
+                "data_bundle": 0,
+                "airtime": 0,
+                "ecg": 0,
+                "gotv": 0,
+                "dstv": 0,
+                "starttimes": 0,
+                "mashup": 0,
+                "results": 0,
+                "utility_bulk": 0
+            },
+            "charge_type": "percent",
+            "currency": "GHS",
+            "wallet_top_up": {
+                "min": 1,
+                "max": 50000,
+                "editable": false
+            },
+            "editable": [
+                "charges.wallet_top_up",
+                "charges.sms_units"
+            ]
+        },
+        "point_in_time": "2026-11-13 13:18:01"
+    },
+    "captured_at": "2026-11-13T13:18:01+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/settings/payments",
+        "body": null
+    }
+}

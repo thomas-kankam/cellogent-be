@@ -1,0 +1,69 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Sender IDs loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 5,
+                "name": "CELLOGENT",
+                "client_id": 1,
+                "status": "approved",
+                "approved_at": "2026-11-09 14:10:54",
+                "rejected_at": null,
+                "rejection_reason": null,
+                "created_at": "2026-11-09 14:10:27",
+                "client": {
+                    "id": 1,
+                    "first_name": null,
+                    "last_name": null,
+                    "email": "kankamthomas6@gmail.com",
+                    "phone_number": "233556906969",
+                    "account_type": "business",
+                    "business_name": "Cellogent",
+                    "status": "active",
+                    "is_verified": true,
+                    "profile_image": "http://localhost/storage/profiles/client/3ca2330f-9c47-4ab4-914f-86f997a48c2d.png"
+                }
+            },
+            {
+                "id": 2,
+                "name": "CelloBot",
+                "client_id": 1,
+                "status": "rejected",
+                "approved_at": "2026-11-05 17:36:46",
+                "rejected_at": "2026-11-05 17:40:04",
+                "rejection_reason": "You cannot use this sender id",
+                "created_at": "2026-10-30 15:46:02",
+                "client": {
+                    "id": 1,
+                    "first_name": null,
+                    "last_name": null,
+                    "email": "kankamthomas6@gmail.com",
+                    "phone_number": "233556906969",
+                    "account_type": "business",
+                    "business_name": "Cellogent",
+                    "status": "active",
+                    "is_verified": true,
+                    "profile_image": "http://localhost/storage/profiles/client/3ca2330f-9c47-4ab4-914f-86f997a48c2d.png"
+                }
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 5,
+            "total": 2,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:16:53"
+    },
+    "captured_at": "2026-11-13T13:16:53+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/sender-ids?per_page=5",
+        "body": null
+    }
+}

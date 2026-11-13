@@ -1,0 +1,30 @@
+{
+    "http_status": 503,
+    "error": null,
+    "body": {
+        "in_error": true,
+        "status_code": "503",
+        "message": "Item 1: The provider is unavailable right now. Try again shortly.",
+        "reason": "provider_unavailable",
+        "data": [],
+        "point_in_time": "2026-11-13 13:17:27"
+    },
+    "captured_at": "2026-11-13T13:17:27+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "items": [
+                {
+                    "service": "data",
+                    "package_id": "at_3gb"
+                },
+                {
+                    "service": "airtime",
+                    "network": "TELECEL",
+                    "amount": 5
+                }
+            ]
+        }
+    }
+}

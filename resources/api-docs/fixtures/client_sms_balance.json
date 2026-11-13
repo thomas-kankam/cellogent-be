@@ -1,0 +1,26 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "SMS balance loaded.",
+        "reason": "success",
+        "data": {
+            "units": 2597,
+            "plan_name": "Bronze",
+            "status": "active",
+            "expires_at": "2026-12-10 16:50:26",
+            "can_send": true,
+            "chars_per_unit": 160,
+            "message_max_length": 1600
+        },
+        "point_in_time": "2026-11-13 13:16:24"
+    },
+    "captured_at": "2026-11-13T13:16:24+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/client/sms/balance",
+        "body": null
+    }
+}

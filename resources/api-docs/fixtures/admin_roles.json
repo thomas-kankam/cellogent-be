@@ -1,0 +1,453 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Roles loaded.",
+        "reason": "success",
+        "data": [
+            {
+                "id": 3,
+                "name": "Sales Manager",
+                "description": "This is for a sales manager to manage all financial flows",
+                "permissions": [
+                    {
+                        "module": "order",
+                        "permissions": [
+                            {
+                                "id": 23,
+                                "name": "order.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment",
+                        "permissions": [
+                            {
+                                "id": 20,
+                                "name": "payment.manage"
+                            },
+                            {
+                                "id": 19,
+                                "name": "payment.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment_gateway",
+                        "permissions": [
+                            {
+                                "id": 21,
+                                "name": "payment_gateway.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment_settings",
+                        "permissions": [
+                            {
+                                "id": 22,
+                                "name": "payment_settings.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "plan",
+                        "permissions": [
+                            {
+                                "id": 15,
+                                "name": "plan.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "report",
+                        "permissions": [
+                            {
+                                "id": 25,
+                                "name": "report.export"
+                            },
+                            {
+                                "id": 24,
+                                "name": "report.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sms",
+                        "permissions": [
+                            {
+                                "id": 28,
+                                "name": "sms.aggregator"
+                            },
+                            {
+                                "id": 27,
+                                "name": "sms.send"
+                            },
+                            {
+                                "id": 26,
+                                "name": "sms.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "subscription",
+                        "permissions": [
+                            {
+                                "id": 17,
+                                "name": "subscription.assign"
+                            },
+                            {
+                                "id": 16,
+                                "name": "subscription.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "wallet",
+                        "permissions": [
+                            {
+                                "id": 18,
+                                "name": "wallet.view"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": 2,
+                "name": "Support",
+                "description": "Client support without role, gateway, or admin onboarding access.",
+                "permissions": [
+                    {
+                        "module": "activity_log",
+                        "permissions": [
+                            {
+                                "id": 12,
+                                "name": "activity_log.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "client",
+                        "permissions": [
+                            {
+                                "id": 11,
+                                "name": "client.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "order",
+                        "permissions": [
+                            {
+                                "id": 23,
+                                "name": "order.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment",
+                        "permissions": [
+                            {
+                                "id": 19,
+                                "name": "payment.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "profile",
+                        "permissions": [
+                            {
+                                "id": 5,
+                                "name": "profile.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "report",
+                        "permissions": [
+                            {
+                                "id": 24,
+                                "name": "report.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sender_id",
+                        "permissions": [
+                            {
+                                "id": 8,
+                                "name": "sender_id.approve"
+                            },
+                            {
+                                "id": 13,
+                                "name": "sender_id.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sms",
+                        "permissions": [
+                            {
+                                "id": 26,
+                                "name": "sms.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "subscription",
+                        "permissions": [
+                            {
+                                "id": 16,
+                                "name": "subscription.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "wallet",
+                        "permissions": [
+                            {
+                                "id": 18,
+                                "name": "wallet.view"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": 1,
+                "name": "Super Admin",
+                "description": "Full access. Used to onboard other admins.",
+                "permissions": [
+                    {
+                        "module": "account_status",
+                        "permissions": [
+                            {
+                                "id": 4,
+                                "name": "account_status.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "activity_log",
+                        "permissions": [
+                            {
+                                "id": 12,
+                                "name": "activity_log.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "admin",
+                        "permissions": [
+                            {
+                                "id": 10,
+                                "name": "admin.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "api_key",
+                        "permissions": [
+                            {
+                                "id": 9,
+                                "name": "api_key.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "client",
+                        "permissions": [
+                            {
+                                "id": 11,
+                                "name": "client.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "onboarding",
+                        "permissions": [
+                            {
+                                "id": 2,
+                                "name": "onboarding.admin"
+                            },
+                            {
+                                "id": 1,
+                                "name": "onboarding.client"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "order",
+                        "permissions": [
+                            {
+                                "id": 23,
+                                "name": "order.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "otp",
+                        "permissions": [
+                            {
+                                "id": 3,
+                                "name": "otp.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment",
+                        "permissions": [
+                            {
+                                "id": 20,
+                                "name": "payment.manage"
+                            },
+                            {
+                                "id": 19,
+                                "name": "payment.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment_gateway",
+                        "permissions": [
+                            {
+                                "id": 21,
+                                "name": "payment_gateway.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "payment_settings",
+                        "permissions": [
+                            {
+                                "id": 22,
+                                "name": "payment_settings.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "permission",
+                        "permissions": [
+                            {
+                                "id": 7,
+                                "name": "permission.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "plan",
+                        "permissions": [
+                            {
+                                "id": 15,
+                                "name": "plan.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "profile",
+                        "permissions": [
+                            {
+                                "id": 5,
+                                "name": "profile.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "report",
+                        "permissions": [
+                            {
+                                "id": 25,
+                                "name": "report.export"
+                            },
+                            {
+                                "id": 24,
+                                "name": "report.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "role",
+                        "permissions": [
+                            {
+                                "id": 6,
+                                "name": "role.manage"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sender_id",
+                        "permissions": [
+                            {
+                                "id": 8,
+                                "name": "sender_id.approve"
+                            },
+                            {
+                                "id": 14,
+                                "name": "sender_id.blacklist"
+                            },
+                            {
+                                "id": 13,
+                                "name": "sender_id.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "sms",
+                        "permissions": [
+                            {
+                                "id": 28,
+                                "name": "sms.aggregator"
+                            },
+                            {
+                                "id": 27,
+                                "name": "sms.send"
+                            },
+                            {
+                                "id": 26,
+                                "name": "sms.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "subscription",
+                        "permissions": [
+                            {
+                                "id": 17,
+                                "name": "subscription.assign"
+                            },
+                            {
+                                "id": 16,
+                                "name": "subscription.view"
+                            }
+                        ]
+                    },
+                    {
+                        "module": "wallet",
+                        "permissions": [
+                            {
+                                "id": 18,
+                                "name": "wallet.view"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "per_page": 10,
+            "total": 3,
+            "last_page": 1
+        },
+        "point_in_time": "2026-11-13 13:18:05"
+    },
+    "captured_at": "2026-11-13T13:18:05+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/roles?per_page=10",
+        "body": null
+    }
+}

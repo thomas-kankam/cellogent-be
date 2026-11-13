@@ -1,0 +1,33 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Margin options loaded.",
+        "reason": "success",
+        "data": {
+            "product_types": [
+                "data_bundle",
+                "airtime",
+                "ecg",
+                "tv",
+                "results",
+                "sms_units",
+                "wallet_top_up",
+                "mashup"
+            ],
+            "markup_types": [
+                "percent",
+                "fixed"
+            ]
+        },
+        "point_in_time": "2026-11-13 13:17:41"
+    },
+    "captured_at": "2026-11-13T13:17:41+00:00",
+    "request": {
+        "method": "GET",
+        "path": "/admin/margins/options",
+        "body": null
+    }
+}

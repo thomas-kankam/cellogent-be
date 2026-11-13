@@ -1,0 +1,36 @@
+{
+    "http_status": 200,
+    "error": null,
+    "body": {
+        "in_error": false,
+        "status_code": "200",
+        "message": "Quote ready.",
+        "reason": "success",
+        "data": {
+            "service": "ecg",
+            "order_type": "ecg",
+            "product_type": "ecg",
+            "name": "ECG payment",
+            "network": null,
+            "package_id": null,
+            "size": null,
+            "bill_type": null,
+            "checker_type": null,
+            "quantity": null,
+            "beneficiary": null,
+            "amount": 20,
+            "currency": "GHS",
+            "face_amount": 20
+        },
+        "point_in_time": "2026-11-13 13:17:18"
+    },
+    "captured_at": "2026-11-13T13:17:18+00:00",
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/quote",
+        "body": {
+            "service": "ecg",
+            "amount": 20
+        }
+    }
+}
