@@ -267,17 +267,21 @@ class UtilityService
 
             $count = (int) $audience['verified'];
             $presented = $this->presentPrice($unit, $admin);
-            $total = round((float) $unit['sell'] * $count, 2);
+            $unitSell = (float) $unit['sell'];
+            $total = round($unitSell * $count, 2);
 
-            return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, $presented + [
+            // array_merge so quantity/amount override the unit presentPrice fields
+            // (PHP's + keeps left-hand keys and would leave amount as the single-pack price).
+            return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, array_merge($presented, [
                 'quantity' => $count,
+                'unit_amount' => $unitSell,
                 'amount' => $total,
                 'currency' => config('payments.currency', 'GHS'),
                 'audience' => $audience,
                 'message' => $audience['requires_beneficiary']
                     ? "{$audience['verified']}/{$audience['total']} contacts are verified beneficiaries and can receive this package."
                     : null,
-            ]);
+            ]));
         }
 
         $prices = $this->priceAll($specs, false);
