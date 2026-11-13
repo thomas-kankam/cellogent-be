@@ -27,4 +27,14 @@ class WalletTransaction extends Model
             'balance_after' => 'decimal:2',
         ];
     }
+
+    public function client()
+    {
+        return $this->belongsTo(Client::class, 'client_id');
+    }
+
+    public function wallet()
+    {
+        return $this->belongsTo(Wallet::class, 'wallet_id');
+    }
 }

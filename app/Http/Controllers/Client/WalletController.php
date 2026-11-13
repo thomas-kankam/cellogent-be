@@ -44,7 +44,10 @@ class WalletController extends Controller
 
     public function transactions(Request $request): JsonResponse
     {
-        $query = WalletTransaction::query()->where('client_id', $request->user()->id)->latest('id');
+        $query = WalletTransaction::query()
+            ->with('client')
+            ->where('client_id', $request->user()->id)
+            ->latest('id');
 
         if ($request->filled('type')) {
             $query->where('type', $request->string('type'));
