@@ -51,6 +51,14 @@ class UtilityController extends Controller
         return $this->paginatedApiResponse('Utility orders loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (UtilityOrder $order) => $this->utilities->presentForAdmin($order));
     }
 
+    /**
+     * Admin batch tracker (includes cost/profit). Filter orders list with ?batch_id= as well.
+     */
+    public function batch(string $batch): JsonResponse
+    {
+        return $this->respondFrom($this->utilities->batch(null, $batch));
+    }
+
     public function show(UtilityOrder $order): JsonResponse
     {
         return $this->apiResponse(false, 'Utility order loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->utilities->presentForAdmin($order));

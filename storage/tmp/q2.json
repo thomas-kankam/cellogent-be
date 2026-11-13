@@ -1,0 +1,1 @@
+{"in_error":true,"status_code":"422","message":"Validation failed.","reason":"validation_error","data":{"beneficiaries":["Use only one of: beneficiary, beneficiaries, items, or contact_group_ids."]},"point_in_time":"2026-11-13 13:41:37"}

@@ -257,9 +257,10 @@ class UtilityService
             return $specs;
         }
 
-        // Group quotes: price one unit × verified count (do not build thousands of identical specs).
-        if ($audience && isset($input['package_id'])) {
-            $unit = $this->price((string) ($input['service'] ?? 'data'), $input + ['beneficiary' => '233200000000'], false);
+        // Multi-recipient quotes (groups / beneficiaries CSV): price one unit × eligible count.
+        if ($audience && (int) ($audience['verified'] ?? 0) > 0) {
+            $unitInput = $input + ['beneficiary' => '233200000000'];
+            $unit = $this->price((string) ($input['service'] ?? 'data'), $unitInput, false);
 
             if ($this->failed($unit)) {
                 return $unit;
@@ -270,6 +271,14 @@ class UtilityService
             $unitSell = (float) $unit['sell'];
             $total = round($unitSell * $count, 2);
 
+            $message = null;
+
+            if (! empty($audience['requires_beneficiary'])) {
+                $message = "{$audience['verified']}/{$audience['total']} numbers are verified beneficiaries and can receive this package.";
+            } elseif (($audience['source'] ?? null) === 'beneficiaries') {
+                $message = "{$count} numbers will receive this package.";
+            }
+
             // array_merge so quantity/amount override the unit presentPrice fields
             // (PHP's + keeps left-hand keys and would leave amount as the single-pack price).
             return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, array_merge($presented, [
@@ -278,9 +287,7 @@ class UtilityService
                 'amount' => $total,
                 'currency' => config('payments.currency', 'GHS'),
                 'audience' => $audience,
-                'message' => $audience['requires_beneficiary']
-                    ? "{$audience['verified']}/{$audience['total']} contacts are verified beneficiaries and can receive this package."
-                    : null,
+                'message' => $message,
             ]));
         }
 
@@ -457,15 +464,14 @@ class UtilityService
         ]);
 
         if (count($orders) > 1) {
-            foreach ($orders as $order) {
-                ProcessUtilityOrderJob::dispatch($order->id);
-            }
+            $this->queueOrders($orders);
 
             $payload = [
                 'batch_id' => $batchId,
                 'count' => count($orders),
                 'amount' => $total,
                 'currency' => config('payments.currency', 'GHS'),
+                'analytics' => $this->batchAnalytics($batchId, $client->id),
                 'orders' => array_map(fn (UtilityOrder $o) => $this->present($o), $orders),
             ];
 
@@ -512,11 +518,46 @@ class UtilityService
             $orders[] = $this->createOrder($client, (array) $price, $this->newReference(), (string) $payment->method, $payment, $batchId, ['bulk' => $bulk]);
         }
 
-        foreach ($orders as $order) {
-            ProcessUtilityOrderJob::dispatch($order->id)->afterCommit();
-        }
+        $this->queueOrders($orders, afterCommit: true);
 
         return $orders;
+    }
+
+    /**
+     * Batch progress for a client (or admin when $client is null).
+     * Poll this after a bulk purchase — statuses update from Swift webhooks / jobs.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function batch(?Client $client, string $batchId): array
+    {
+        $batchId = trim($batchId);
+
+        if ($batchId === '' || strlen($batchId) > 64 || ! preg_match('/^[A-Za-z0-9_-]+$/', $batchId)) {
+            return $this->invalid(['batch' => ['Invalid batch id.']]);
+        }
+
+        $query = UtilityOrder::query()->where('batch_id', $batchId);
+
+        if ($client) {
+            $query->where('client_id', $client->id);
+        }
+
+        if (! $query->exists()) {
+            return $this->result(true, 'Batch not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $analytics = $this->batchAnalytics($batchId, $client?->id);
+        $orders = (clone $query)->latest('id')->limit(100)->get()->map(fn (UtilityOrder $o) => $client
+            ? $this->present($o)
+            : $this->presentForAdmin($o))->values()->all();
+
+        return $this->result(false, 'Batch loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
+            'batch_id' => $batchId,
+            'analytics' => $analytics,
+            'orders' => $orders,
+            'orders_truncated' => count($orders) >= 100,
+        ]);
     }
 
     /**
@@ -1101,13 +1142,30 @@ class UtilityService
     }
 
     /**
-     * Expand `contact_group_ids` into per-phone items when buying a data package for a group.
+     * Expand `contact_group_ids` or `beneficiaries` (CSV/array) into per-phone items.
      *
      * @param  array<string, mixed>  $input
      * @return array{input: array<string, mixed>, audience?: array<string, mixed>}|array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     protected function expandPurchaseInput(?Client $client, array $input, bool $forQuote): array
     {
+        $modes = array_filter([
+            'items' => isset($input['items']),
+            'contact_group_ids' => ! empty($input['contact_group_ids']),
+            'beneficiaries' => ! empty($input['beneficiaries']),
+            'beneficiary' => filled($input['beneficiary'] ?? null),
+        ]);
+
+        if (count($modes) > 1) {
+            return $this->invalid([
+                'beneficiaries' => ['Use only one of: beneficiary, beneficiaries, items, or contact_group_ids.'],
+            ]);
+        }
+
+        if (! empty($input['beneficiaries'])) {
+            return $this->expandBeneficiariesList($client, $input, $forQuote);
+        }
+
         $groupIds = array_values(array_unique(array_map('intval', (array) ($input['contact_group_ids'] ?? []))));
         $groupIds = array_values(array_filter($groupIds, fn (int $id) => $id > 0));
 
@@ -1117,10 +1175,6 @@ class UtilityService
 
         if (! $client) {
             return $this->invalid(['contact_group_ids' => ['Sign in to buy for a contact group.']]);
-        }
-
-        if (isset($input['items']) || ! empty($input['beneficiary'])) {
-            return $this->invalid(['contact_group_ids' => ['Use either contact_group_ids or beneficiary/items, not both.']]);
         }
 
         $service = (string) ($input['service'] ?? 'data');
@@ -1180,6 +1234,7 @@ class UtilityService
             'requires_beneficiary' => $needs,
             'network' => $plan['network'],
             'package_id' => $plan['package_id'],
+            'source' => 'contact_groups',
         ];
 
         if ($verified < 1) {
@@ -1194,15 +1249,145 @@ class UtilityService
             return $this->invalid(['contact_group_ids' => ["At most {$max} recipients per purchase. Narrow the groups or split the buy."]]);
         }
 
-        if ($forQuote) {
-            return ['input' => $input + ['service' => $service, 'package_id' => $packageId], 'audience' => $audience];
+        return $this->audienceExpansion($input, $service, $packageId, $phones, $audience, $forQuote);
+    }
+
+    /**
+     * Same package/service to an explicit phone list (CSV or array, max bulk_max).
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{input: array<string, mixed>, audience?: array<string, mixed>}|array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function expandBeneficiariesList(?Client $client, array $input, bool $forQuote): array
+    {
+        $service = (string) ($input['service'] ?? '');
+        $raw = (array) ($input['beneficiaries'] ?? []);
+        $phones = [];
+
+        foreach ($raw as $entry) {
+            $phone = GhanaPhone::toMobile((string) $entry);
+
+            if (! $phone) {
+                return $this->invalid(['beneficiaries' => ['Each beneficiary must be a valid Ghana mobile number.']]);
+            }
+
+            $phones[$phone] = $phone;
         }
 
-        $items = array_map(fn (string $phone) => [
-            'service' => $service,
-            'package_id' => $packageId,
-            'beneficiary' => $phone,
-        ], $phones);
+        $phones = array_values($phones);
+        $max = $this->bulkMax();
+
+        if ($phones === []) {
+            return $this->invalid(['beneficiaries' => ['Add at least one phone number.']]);
+        }
+
+        if (count($phones) > $max) {
+            return $this->invalid(['beneficiaries' => ["At most {$max} numbers per request (Swift processes one order per number). Split larger lists or use contact_group_ids."]]);
+        }
+
+        if (! in_array($service, ['data', 'mashup', 'airtime'], true)) {
+            return $this->invalid(['service' => ['beneficiaries is for data, mashup, or airtime. Use items[] for mixed services.']]);
+        }
+
+        if (in_array($service, ['data', 'mashup'], true) && trim((string) ($input['package_id'] ?? '')) === '') {
+            return $this->invalid(['package_id' => ['Pick a package_id from the catalogue.']]);
+        }
+
+        if ($service === 'airtime' && (trim((string) ($input['network'] ?? '')) === '' || ! isset($input['amount']))) {
+            return $this->invalid(['network' => ['Airtime needs network and amount.']]);
+        }
+
+        $packageId = trim((string) ($input['package_id'] ?? ''));
+        $needs = false;
+        $network = $input['network'] ?? null;
+
+        if ($packageId !== '') {
+            $plan = $this->catalog->plan($packageId);
+
+            if (! $plan || ! $plan['available']) {
+                return $this->invalid(['package_id' => ['That package is not available.']]);
+            }
+
+            $needs = SwiftBeneficiary::required($plan['product_type'], $plan['network']);
+            $network = $plan['network'];
+        }
+
+        $eligible = $phones;
+        $skipped = 0;
+
+        if ($needs && $client) {
+            // Drop contacts we already know are not verified; unknown numbers are live-checked at purchase.
+            $knownUnverified = Contact::query()
+                ->where('client_id', $client->id)
+                ->whereIn('phone_number', $phones)
+                ->where('beneficiary_status', '!=', Contact::BENEFICIARY_VERIFIED)
+                ->pluck('phone_number')
+                ->unique()
+                ->all();
+            $skip = array_fill_keys($knownUnverified, true);
+            $eligible = array_values(array_filter($phones, fn (string $p) => ! isset($skip[$p])));
+            $skipped = count($phones) - count($eligible);
+        }
+
+        $audience = [
+            'total' => count($phones),
+            'verified' => $needs ? count($eligible) : count($phones),
+            'not_verified' => $needs ? $skipped : 0,
+            'requires_beneficiary' => $needs,
+            'network' => $network,
+            'package_id' => $packageId !== '' ? $packageId : null,
+            'source' => 'beneficiaries',
+        ];
+
+        if ($eligible === []) {
+            return $this->result(true, 'None of these numbers can receive this package (beneficiary check failed).', ApiCode::BAD_REQUEST, ApiReason::UNVERIFIED, [
+                'audience' => $audience,
+            ]);
+        }
+
+        return $this->audienceExpansion($input, $service, $packageId, $eligible, $audience, $forQuote);
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @param  list<string>  $phones
+     * @param  array<string, mixed>  $audience
+     * @return array{input: array<string, mixed>, audience: array<string, mixed>}
+     */
+    protected function audienceExpansion(array $input, string $service, string $packageId, array $phones, array $audience, bool $forQuote): array
+    {
+        if ($forQuote) {
+            return [
+                'input' => array_filter([
+                    'service' => $service,
+                    'package_id' => $packageId !== '' ? $packageId : null,
+                    'network' => $input['network'] ?? null,
+                    'amount' => $input['amount'] ?? null,
+                ], fn ($v) => $v !== null),
+                'audience' => $audience,
+            ];
+        }
+
+        $items = array_map(function (string $phone) use ($input, $service, $packageId) {
+            $item = [
+                'service' => $service,
+                'beneficiary' => $phone,
+            ];
+
+            if ($packageId !== '') {
+                $item['package_id'] = $packageId;
+            }
+
+            if (isset($input['network'])) {
+                $item['network'] = $input['network'];
+            }
+
+            if (isset($input['amount'])) {
+                $item['amount'] = $input['amount'];
+            }
+
+            return $item;
+        }, $phones);
 
         return [
             'input' => [
@@ -1213,6 +1398,77 @@ class UtilityService
             ],
             'audience' => $audience,
         ];
+    }
+
+    /**
+     * Queue provider sends with a small stagger so we stay under Swift's ~30 req/min default.
+     *
+     * @param  list<UtilityOrder>  $orders
+     */
+    protected function queueOrders(array $orders, bool $afterCommit = false): void
+    {
+        $spacing = max(0, (int) config('swift.dispatch_spacing_seconds', 2));
+
+        foreach (array_values($orders) as $i => $order) {
+            $job = ProcessUtilityOrderJob::dispatch($order->id)->delay(now()->addSeconds($i * $spacing));
+
+            if ($afterCommit) {
+                $job->afterCommit();
+            }
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function batchAnalytics(string $batchId, ?int $clientId = null): array
+    {
+        $query = UtilityOrder::query()->where('batch_id', $batchId);
+
+        if ($clientId) {
+            $query->where('client_id', $clientId);
+        }
+
+        $rows = (clone $query)
+            ->selectRaw('status, COUNT(*) as total, COALESCE(SUM(sell_amount),0) as sell, COALESCE(SUM(cost_amount),0) as cost, COALESCE(SUM(profit_amount),0) as profit')
+            ->groupBy('status')
+            ->get();
+
+        $byStatus = [];
+        $total = 0;
+        $sell = 0.0;
+
+        foreach ($rows as $row) {
+            $count = (int) $row->total;
+            $byStatus[(string) $row->status] = $count;
+            $total += $count;
+            $sell += (float) $row->sell;
+        }
+
+        $completed = (int) ($byStatus['completed'] ?? 0);
+        $failed = (int) ($byStatus['failed'] ?? 0);
+        $pending = (int) ($byStatus['pending'] ?? 0);
+
+        $out = [
+            'total' => $total,
+            'pending' => $pending,
+            'completed' => $completed,
+            'failed' => $failed,
+            'by_status' => $byStatus,
+            'sell_amount' => round($sell, 2),
+            'currency' => config('payments.currency', 'GHS'),
+            'progress_percent' => $total > 0 ? round((($completed + $failed) / $total) * 100, 1) : 0,
+            'message' => $total > 0
+                ? "{$completed}/{$total} delivered, {$failed} failed, {$pending} pending."
+                : 'No orders in this batch.',
+        ];
+
+        if ($clientId === null) {
+            $out['cost_amount'] = round((float) $rows->sum('cost'), 2);
+            $out['profit_amount'] = round((float) $rows->sum('profit'), 2);
+        }
+
+        return $out;
     }
 
     /**

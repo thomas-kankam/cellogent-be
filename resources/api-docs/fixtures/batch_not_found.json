@@ -1,0 +1,17 @@
+{
+    "http_status": 404,
+    "body": {
+        "in_error": true,
+        "status_code": "404",
+        "message": "Batch not found.",
+        "reason": "not_found",
+        "data": [],
+        "point_in_time": "2026-11-13 13:41:48"
+    },
+    "request": {
+        "method": "GET",
+        "path": "/client/utilities/batches/BLK-DOESNOTEXIST",
+        "body": null
+    },
+    "captured_at": "2026-11-13T13:43:35+00:00"
+}

@@ -34,11 +34,18 @@ return [
     // Seconds the /plans catalogue is cached.
     'catalog_ttl' => (int) env('SWIFT_CATALOG_TTL', 300),
 
-    // Most orders in one /client/utilities/purchase call.
-    'bulk_max' => 50,
+    /*
+    | Client-facing batch size for items[] / beneficiaries CSV (one Swift call per number).
+    | Swift has no multi-phone data purchase — each recipient is its own /payment/data call.
+    | Default API rate limit is ~30 req/min; we stagger job dispatch (see dispatch_spacing_seconds).
+    */
+    'bulk_max' => (int) env('SWIFT_BULK_MAX', 50),
 
-    // Max contacts expanded from contact_group_ids in one purchase.
+    // Max contacts expanded from contact_group_ids in one purchase (queued individually).
     'group_purchase_max' => (int) env('SWIFT_GROUP_PURCHASE_MAX', 2000),
+
+    // Seconds between queued Swift sends in a batch (keeps us under provider rate limits).
+    'dispatch_spacing_seconds' => (int) env('SWIFT_DISPATCH_SPACING', 2),
 
     /*
     | Affordable MTN SME data (catalog network YELLO, sometimes labeled MTN).

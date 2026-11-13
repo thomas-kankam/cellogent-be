@@ -20,6 +20,13 @@ class SwiftWebhookController extends Controller
     {
         $secret = (string) config('swift.secret_key');
 
+        // Outside local/testing, unsigned webhooks are rejected so strangers cannot flip order status.
+        if ($secret === '' && ! app()->environment(['local', 'testing'])) {
+            Log::warning('Swift webhook rejected: SWIFT_SECRET_KEY is not set.');
+
+            return response()->json(['ok' => false], 401);
+        }
+
         if ($secret !== '') {
             $given = (string) $request->header('X-Swift-Signature', '');
             $expected = hash_hmac('sha256', $request->getContent(), $secret);

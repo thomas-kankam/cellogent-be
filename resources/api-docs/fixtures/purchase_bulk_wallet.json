@@ -1,0 +1,108 @@
+{
+    "http_status": 201,
+    "body": {
+        "in_error": false,
+        "status_code": "201",
+        "message": "Purchase received. 2 orders are being processed.",
+        "reason": "created",
+        "data": {
+            "batch_id": "BLK-DYWE4D99UC",
+            "count": 2,
+            "amount": 2,
+            "currency": "GHS",
+            "analytics": {
+                "total": 2,
+                "pending": 2,
+                "completed": 0,
+                "failed": 0,
+                "by_status": {
+                    "pending": 2
+                },
+                "sell_amount": 2,
+                "currency": "GHS",
+                "progress_percent": 0,
+                "message": "0/2 delivered, 0 failed, 2 pending."
+            },
+            "orders": [
+                {
+                    "id": 14,
+                    "resource": "utility_order",
+                    "reference": "UTL-6AF713D14E2F9",
+                    "batch_id": "BLK-DYWE4D99UC",
+                    "service": "airtime",
+                    "product_type": "airtime",
+                    "order_type": "airtime",
+                    "name": "MTN airtime",
+                    "network": "MTN",
+                    "beneficiary": "233244123456",
+                    "package_id": null,
+                    "size": null,
+                    "size_gb": null,
+                    "provider_code": "MTN",
+                    "quantity": null,
+                    "amount": 1,
+                    "currency": "GHS",
+                    "status": "pending",
+                    "funding_method": "wallet",
+                    "payment_id": null,
+                    "order_id": null,
+                    "failure_reason": null,
+                    "refunded": false,
+                    "vouchers": null,
+                    "completed_at": null,
+                    "created_at": "2026-11-13 13:42:41"
+                },
+                {
+                    "id": 15,
+                    "resource": "utility_order",
+                    "reference": "UTL-6AF713D1E55B5",
+                    "batch_id": "BLK-DYWE4D99UC",
+                    "service": "airtime",
+                    "product_type": "airtime",
+                    "order_type": "airtime",
+                    "name": "MTN airtime",
+                    "network": "MTN",
+                    "beneficiary": "233201234567",
+                    "package_id": null,
+                    "size": null,
+                    "size_gb": null,
+                    "provider_code": "MTN",
+                    "quantity": null,
+                    "amount": 1,
+                    "currency": "GHS",
+                    "status": "pending",
+                    "funding_method": "wallet",
+                    "payment_id": null,
+                    "order_id": null,
+                    "failure_reason": null,
+                    "refunded": false,
+                    "vouchers": null,
+                    "completed_at": null,
+                    "created_at": "2026-11-13 13:42:42"
+                }
+            ],
+            "audience": {
+                "total": 2,
+                "verified": 2,
+                "not_verified": 0,
+                "requires_beneficiary": false,
+                "network": "MTN",
+                "package_id": null,
+                "source": "beneficiaries"
+            }
+        },
+        "point_in_time": "2026-11-13 13:42:44"
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "service": "airtime",
+            "network": "MTN",
+            "amount": 1,
+            "beneficiaries": "0244123456,0201234567",
+            "method": "wallet"
+        }
+    },
+    "captured_at": "2026-11-13T13:43:35+00:00"
+}

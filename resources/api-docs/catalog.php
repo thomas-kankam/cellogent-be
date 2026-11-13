@@ -27,8 +27,10 @@ return [
         'notes' => [
             'Never trust client-sent prices — quote/purchase always recalculate sell price with margins.',
             'YELLO / plain MTN Affordable SME data_bundle requires verified beneficiaries. Mash Up, AT, TELECEL, airtime, ECG, TV, results do not.',
-            'Group utility quotes: amount = unit_amount × verified. SMS still goes to all reachable contacts; rewards/data only to verified when required.',
-            'Payment flow: start checkout → open payment_link / approve MoMo → optional POST …/verify → browser may land on /payments/complete.',
+            'Swift data/airtime is 1 phone per API call. Our bulk creates N local orders (≤50 for CSV/items; up to group_purchase_max for contact groups) and queues them with spacing for Swift’s ~30 req/min limit.',
+            'Bulk tracking: purchase returns batch_id + analytics; poll GET /client/utilities/batches/{batch_id} (admin: /admin/utilities/batches/{batch}). Statuses update from jobs + Swift webhooks.',
+            'Recipient shapes are mutually exclusive: beneficiary | beneficiaries | items[] | contact_group_ids.',
+            'Payment flow: method=wallet debits now; momo/card → Paystack/Kairos checkout → payment_link → verify/webhook → orders queued. Browser may land on /payments/complete.',
         ],
     ],
     'sections' => [

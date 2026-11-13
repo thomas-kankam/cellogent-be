@@ -114,6 +114,26 @@ $calls = [
             ['service' => 'airtime', 'network' => 'TELECEL', 'amount' => 5],
         ],
     ]],
+    ['quote_airtime_beneficiaries', 'POST', '/client/utilities/quote', $client, [
+        'service' => 'airtime',
+        'network' => 'MTN',
+        'amount' => 5,
+        'beneficiaries' => '0244123456,0201234567',
+    ]],
+    ['quote_mutual_exclusion', 'POST', '/client/utilities/quote', $client, [
+        'service' => 'airtime',
+        'network' => 'MTN',
+        'amount' => 5,
+        'beneficiary' => '0244123456',
+        'beneficiaries' => ['0244123456'],
+    ]],
+    ['purchase_missing_beneficiary', 'POST', '/client/utilities/purchase', $client, [
+        'service' => 'airtime',
+        'network' => 'MTN',
+        'amount' => 5,
+        'method' => 'wallet',
+    ]],
+    ['batch_not_found', 'GET', '/client/utilities/batches/BLK-DOESNOTEXIST', $client, null],
 
     // Admin
     ['admin_plans', 'GET', '/admin/plans?per_page=5', $admin, null],

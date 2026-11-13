@@ -52,6 +52,14 @@ class UtilityController extends Controller
         return $this->paginatedApiResponse('Utility orders loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (UtilityOrder $order) => $this->utilities->present($order));
     }
 
+    /**
+     * Bulk purchase progress: completed / failed / pending for a batch_id.
+     */
+    public function batch(Request $request, string $batch): JsonResponse
+    {
+        return $this->respondFrom($this->utilities->batch($request->user(), $batch));
+    }
+
     public function show(Request $request, UtilityOrder $order): JsonResponse
     {
         if ((int) $order->client_id !== (int) $request->user()->id) {

@@ -191,6 +191,7 @@ Route::prefix('client')->group(function () {
         Route::post('utilities/lookup', [ClientUtilityController::class, 'lookup'])->middleware('throttle:30,1');
         Route::post('utilities/purchase', [ClientUtilityController::class, 'purchase'])->middleware('throttle:checkout');
         Route::get('utilities/orders', [ClientUtilityController::class, 'orders']);
+        Route::get('utilities/batches/{batch}', [ClientUtilityController::class, 'batch'])->where('batch', '[A-Za-z0-9_-]+');
         Route::get('utilities/orders/{order}', [ClientUtilityController::class, 'show'])->whereNumber('order');
 
         Route::get('sms/balance', [ClientSmsController::class, 'balance']);
@@ -303,6 +304,7 @@ Route::prefix('admin')->group(function () {
             Route::get('utilities/balance', [AdminUtilityController::class, 'balance']);
             Route::get('utilities/profit', [AdminUtilityController::class, 'profit']);
             Route::get('utilities/orders', [AdminUtilityController::class, 'orders']);
+            Route::get('utilities/batches/{batch}', [AdminUtilityController::class, 'batch'])->where('batch', '[A-Za-z0-9_-]+');
             Route::get('utilities/orders/{order}', [AdminUtilityController::class, 'show'])->whereNumber('order');
 
             // Reward payouts (airtime, data and money rewards from campaigns and surveys).

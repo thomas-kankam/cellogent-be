@@ -1,0 +1,26 @@
+{
+    "http_status": 422,
+    "body": {
+        "in_error": true,
+        "status_code": "422",
+        "message": "Validation failed.",
+        "reason": "validation_error",
+        "data": {
+            "beneficiary": [
+                "The beneficiary field is required when none of items / contact group ids / beneficiaries are present."
+            ]
+        },
+        "point_in_time": "2026-11-13 13:41:43"
+    },
+    "request": {
+        "method": "POST",
+        "path": "/client/utilities/purchase",
+        "body": {
+            "service": "airtime",
+            "network": "MTN",
+            "amount": 5,
+            "method": "wallet"
+        }
+    },
+    "captured_at": "2026-11-13T13:43:35+00:00"
+}
