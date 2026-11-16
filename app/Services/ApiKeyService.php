@@ -27,7 +27,7 @@ class ApiKeyService
             'id' => $apiKey->id,
             'resource' => 'api_key',
             'client_id' => $apiKey->client_id,
-            'token' => $apiKey->token_prefix.$apiKey->token,
+            'token' => $apiKey->token,
             'token_hint' => $apiKey->token_prefix ? $apiKey->token_prefix.'••••••••' : null,
             'status' => $apiKey->status,
             'last_used_at' => optional($apiKey->last_used_at)->toDateTimeString(),
@@ -124,7 +124,7 @@ class ApiKeyService
     {
         return [
             'client_id' => $client->id,
-            'token' => ApiKey::hashToken($plain),
+            'token' => $plain,
             'token_prefix' => substr($plain, 0, 12),
             'status' => 'active',
         ];
