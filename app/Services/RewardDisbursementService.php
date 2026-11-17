@@ -64,7 +64,7 @@ class RewardDisbursementService
      */
     public function campaignTrigger(Campaign $campaign): ?string
     {
-        if (! $campaign->reward_enabled || ! is_array($campaign->reward)) {
+        if (! EngagementSupport::rewardOn($campaign)) {
             return null;
         }
 
@@ -116,7 +116,7 @@ class RewardDisbursementService
      */
     public function queueFromSurveyResponse(Survey $survey, SurveyResponse $response): ?RewardDisbursement
     {
-        if (! $survey->reward_enabled || $response->reward_status !== 'pending') {
+        if (! EngagementSupport::rewardOn($survey) || $response->reward_status !== 'pending') {
             return null;
         }
 

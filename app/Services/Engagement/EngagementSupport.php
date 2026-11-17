@@ -25,6 +25,21 @@ class EngagementSupport
 {
     use ReturnsServiceResult;
 
+    /**
+     * Rewards (and reward funding) for campaigns and surveys are switched off for now.
+     * While false: reward_enabled is always saved as false, nothing needs funding,
+     * and no reward is ever queued. Flip to true to bring rewards back.
+     */
+    public const REWARDS_ENABLED = false;
+
+    /**
+     * True only when rewards are switched on globally AND this campaign/survey has one.
+     */
+    public static function rewardOn(Model $item): bool
+    {
+        return self::REWARDS_ENABLED && (bool) $item->reward_enabled && is_array($item->reward);
+    }
+
     public function __construct(
         protected WalletService $wallets,
         protected MarginService $margins,

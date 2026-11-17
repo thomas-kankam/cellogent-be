@@ -68,10 +68,9 @@ class CampaignService
      */
     public function present(Campaign $campaign): array
     {
-        $reward = is_array($campaign->reward) ? $campaign->reward : null;
         $summary = $this->summary($campaign);
 
-        return [
+        $data = [
             'id' => $campaign->id,
             'resource' => 'campaign',
             'client_id' => $campaign->client_id,
@@ -90,7 +89,25 @@ class CampaignService
             'send_at' => optional($campaign->send_at)->toDateTimeString(),
             'cta' => $campaign->cta,
             'tracking_url' => url('/api/public/campaigns/'.$campaign->id.'/click'),
-            'reward' => [
+            'audience' => [
+                'eligible_recipients' => (int) $campaign->eligible_recipients,
+                'not_eligible' => (int) $campaign->not_eligible,
+                'estimated_sms_units' => (int) $campaign->estimated_cost_units,
+            ],
+            'analytics' => $summary,
+            'inbox_id' => $campaign->inbox_id,
+            'activated_at' => optional($campaign->activated_at)->toDateTimeString(),
+            'completed_at' => optional($campaign->completed_at)->toDateTimeString(),
+            'cancelled_at' => optional($campaign->cancelled_at)->toDateTimeString(),
+            'created_at' => optional($campaign->created_at)->toDateTimeString(),
+            'updated_at' => optional($campaign->updated_at)->toDateTimeString(),
+        ];
+
+        // Rewards are switched off for now (EngagementSupport::REWARDS_ENABLED).
+        if (EngagementSupport::REWARDS_ENABLED) {
+            $reward = is_array($campaign->reward) ? $campaign->reward : null;
+
+            $data['reward'] = [
                 'enabled' => (bool) $campaign->reward_enabled,
                 'reward_id' => $campaign->reward_id,
                 'name' => $reward['name'] ?? null,
@@ -107,23 +124,18 @@ class CampaignService
                 'beneficiary_message' => $this->support->rewardNeedsBeneficiary($reward)
                     ? "{$campaign->eligible_recipients} verified beneficiaries can receive this data reward (others in the groups are skipped)."
                     : null,
-            ],
-            'funding' => [
+            ];
+            $data['funding'] = [
                 'method' => $campaign->funding_method,
                 'funded' => $this->support->isFunded($campaign),
                 'wallet_hold_id' => $campaign->wallet_hold_id,
                 'payment_id' => $campaign->payment_id,
                 'reserved_amount' => (float) $campaign->reserved_amount,
-                'reserved_remaining' => $summary['reserved_remaining'],
-            ],
-            'analytics' => $summary,
-            'inbox_id' => $campaign->inbox_id,
-            'activated_at' => optional($campaign->activated_at)->toDateTimeString(),
-            'completed_at' => optional($campaign->completed_at)->toDateTimeString(),
-            'cancelled_at' => optional($campaign->cancelled_at)->toDateTimeString(),
-            'created_at' => optional($campaign->created_at)->toDateTimeString(),
-            'updated_at' => optional($campaign->updated_at)->toDateTimeString(),
-        ];
+                'reserved_remaining' => $summary['reserved_remaining'] ?? 0,
+            ];
+        }
+
+        return $data;
     }
 
     /**
@@ -255,7 +267,7 @@ class CampaignService
             ]);
         }
 
-        if (! $campaign->reward_enabled) {
+        if (! EngagementSupport::rewardOn($campaign)) {
             return $this->result(false, 'This campaign has no reward, so no funding is needed. You can activate it.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($campaign));
         }
 
@@ -335,18 +347,19 @@ class CampaignService
      */
     public function activate(Client $client, Campaign $campaign): array
     {
+        $hasReward = EngagementSupport::rewardOn($campaign);
         $ready = $campaign->status === Campaign::STATUS_FUNDED
-            || ($campaign->status === Campaign::STATUS_DRAFT && ! $campaign->reward_enabled);
+            || ($campaign->status === Campaign::STATUS_DRAFT && ! $hasReward);
 
         if (! $ready) {
-            $message = $campaign->status === Campaign::STATUS_DRAFT && $campaign->reward_enabled
+            $message = $campaign->status === Campaign::STATUS_DRAFT && $hasReward
                 ? 'Fund this campaign before activating it.'
-                : 'Only funded campaigns, or drafts without a reward, can be activated.';
+                : 'Only draft campaigns can be activated.';
 
             return $this->result(true, $message, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        if ($campaign->reward_enabled && ! $this->support->isFunded($campaign)) {
+        if ($hasReward && ! $this->support->isFunded($campaign)) {
             return $this->result(true, 'The reserved funds for this campaign are no longer available. Fund it again.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
@@ -391,7 +404,7 @@ class CampaignService
      */
     public function resume(Client $client, Campaign $campaign): array
     {
-        if ($campaign->reward_enabled && ! $this->support->isFunded($campaign)) {
+        if (EngagementSupport::rewardOn($campaign) && ! $this->support->isFunded($campaign)) {
             return $this->result(true, 'The reserved funds for this campaign are no longer available.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
@@ -411,7 +424,7 @@ class CampaignService
             [Campaign::STATUS_ACTIVE, Campaign::STATUS_SCHEDULED, Campaign::STATUS_PAUSED],
             Campaign::STATUS_COMPLETED,
             'completed',
-            'Campaign completed. Unused reserved funds were released.',
+            'Campaign completed.',
             ['completed_at' => now()],
             true,
         );
@@ -428,7 +441,7 @@ class CampaignService
             [Campaign::STATUS_ACTIVE, Campaign::STATUS_SCHEDULED, Campaign::STATUS_PAUSED, Campaign::STATUS_FUNDED],
             Campaign::STATUS_CANCELLED,
             'cancelled',
-            'Campaign cancelled. Unused reserved funds were released.',
+            'Campaign cancelled.',
             ['cancelled_at' => now()],
             true,
         );
@@ -481,7 +494,7 @@ class CampaignService
         $unit = EngagementSupport::unitCost(is_array($campaign->reward) ? $campaign->reward : null);
         $actual = isset($stored['actual_cost']) ? round((float) $stored['actual_cost'], 2) : round($disbursed * $unit, 2);
 
-        return [
+        $summary = [
             'sent' => $sent,
             'delivered' => $delivered,
             'failed' => $failed,
@@ -489,14 +502,22 @@ class CampaignService
             'unique_clicks' => max($uniqueClicks, (int) ($stored['unique_clicks'] ?? 0)),
             'delivery_rate' => $sent > 0 ? round($delivered / $sent * 100, 2) : 0.0,
             'click_rate' => $delivered > 0 ? round($clicks / $delivered * 100, 2) : 0.0,
-            'rewards_disbursed' => $disbursed,
-            'rewards_failed' => $rewardsFailed,
-            'rewards_pending' => $pending,
-            'reserved_remaining' => $this->support->holdRemaining($campaign),
-            'estimated_cost' => (float) $campaign->estimated_cost,
-            'actual_cost' => $actual,
             'eligible_recipients' => (int) $campaign->eligible_recipients,
         ];
+
+        // Rewards are switched off for now (EngagementSupport::REWARDS_ENABLED).
+        if (EngagementSupport::REWARDS_ENABLED) {
+            $summary += [
+                'rewards_disbursed' => $disbursed,
+                'rewards_failed' => $rewardsFailed,
+                'rewards_pending' => $pending,
+                'reserved_remaining' => $this->support->holdRemaining($campaign),
+                'estimated_cost' => (float) $campaign->estimated_cost,
+                'actual_cost' => $actual,
+            ];
+        }
+
+        return $summary;
     }
 
     /**
@@ -807,6 +828,11 @@ class CampaignService
      */
     protected function rewardFields(array $input, ?Campaign $existing): array
     {
+        // Rewards are switched off for now: always save reward_enabled = false.
+        if (! EngagementSupport::REWARDS_ENABLED) {
+            return ['enabled' => false, 'snapshot' => null, 'reward_id' => null];
+        }
+
         $given = $this->support->rewardInput($input);
         $override = $input['estimated_cost'] ?? ($given['inline']['estimate_override'] ?? null);
 
@@ -871,10 +897,11 @@ class CampaignService
             'delivered' => 0,
             'failed' => 0,
             'clicks' => 0,
-            'rewards_disbursed' => 0,
-            'rewards_failed' => 0,
-            'rewards_pending' => 0,
-            'actual_cost' => 0,
+            // Reward counters (rewards are switched off for now).
+            // 'rewards_disbursed' => 0,
+            // 'rewards_failed' => 0,
+            // 'rewards_pending' => 0,
+            // 'actual_cost' => 0,
         ];
     }
 }

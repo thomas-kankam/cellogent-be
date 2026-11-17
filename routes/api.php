@@ -146,10 +146,10 @@ Route::prefix('client')->group(function () {
         Route::post('orders', [ClientOrderController::class, 'store'])->middleware('throttle:checkout');
         Route::get('orders/{order}', [ClientOrderController::class, 'show']);
 
-        Route::get('rewards', [ClientRewardController::class, 'index']);
-        Route::get('rewards/catalog', [ClientRewardController::class, 'catalog']);
-        Route::get('reward-disbursements', [ClientRewardDisbursementController::class, 'index']);
-        Route::get('reward-disbursements/{disbursement}', [ClientRewardDisbursementController::class, 'show'])->whereNumber('disbursement');
+        // Route::get('rewards', [ClientRewardController::class, 'index']);
+        // Route::get('rewards/catalog', [ClientRewardController::class, 'catalog']);
+        // Route::get('reward-disbursements', [ClientRewardDisbursementController::class, 'index']);
+        // Route::get('reward-disbursements/{disbursement}', [ClientRewardDisbursementController::class, 'show'])->whereNumber('disbursement');
 
         Route::get('campaigns', [ClientCampaignController::class, 'index']);
         Route::post('campaigns', [ClientCampaignController::class, 'store']);
@@ -157,7 +157,8 @@ Route::prefix('client')->group(function () {
             Route::get('campaigns/{campaign}', [ClientCampaignController::class, 'show']);
             Route::put('campaigns/{campaign}', [ClientCampaignController::class, 'update']);
             Route::delete('campaigns/{campaign}', [ClientCampaignController::class, 'destroy']);
-            Route::post('campaigns/{campaign}/fund', [ClientCampaignController::class, 'fund'])->middleware('throttle:checkout');
+            // Funding is only for rewards, which are switched off for now.
+            // Route::post('campaigns/{campaign}/fund', [ClientCampaignController::class, 'fund'])->middleware('throttle:checkout');
             Route::post('campaigns/{campaign}/activate', [ClientCampaignController::class, 'activate']);
             Route::post('campaigns/{campaign}/pause', [ClientCampaignController::class, 'pause']);
             Route::post('campaigns/{campaign}/resume', [ClientCampaignController::class, 'resume']);
@@ -176,7 +177,8 @@ Route::prefix('client')->group(function () {
             Route::delete('surveys/{survey}', [ClientSurveyController::class, 'destroy']);
             Route::get('surveys/{survey}/questions', [ClientSurveyController::class, 'questions']);
             Route::put('surveys/{survey}/questions', [ClientSurveyController::class, 'syncQuestions']);
-            Route::post('surveys/{survey}/fund', [ClientSurveyController::class, 'fund'])->middleware('throttle:checkout');
+            // Funding is only for rewards, which are switched off for now.
+            // Route::post('surveys/{survey}/fund', [ClientSurveyController::class, 'fund'])->middleware('throttle:checkout');
             Route::post('surveys/{survey}/activate', [ClientSurveyController::class, 'activate']);
             Route::post('surveys/{survey}/pause', [ClientSurveyController::class, 'pause']);
             Route::post('surveys/{survey}/resume', [ClientSurveyController::class, 'resume']);
@@ -288,14 +290,14 @@ Route::prefix('admin')->group(function () {
         });
 
         // Rewards catalog: priced like plans, so the same permission manages it.
-        Route::middleware('permission:plan.manage')->group(function () {
-            Route::get('rewards', [AdminRewardController::class, 'index']);
-            Route::post('rewards', [AdminRewardController::class, 'store']);
-            Route::get('rewards/{reward}', [AdminRewardController::class, 'show'])->whereNumber('reward');
-            Route::put('rewards/{reward}', [AdminRewardController::class, 'update'])->whereNumber('reward');
-            Route::put('rewards/{reward}/status', [AdminRewardController::class, 'updateStatus'])->whereNumber('reward');
-            Route::delete('rewards/{reward}', [AdminRewardController::class, 'destroy'])->whereNumber('reward');
-        });
+        // Route::middleware('permission:plan.manage')->group(function () {
+        //     Route::get('rewards', [AdminRewardController::class, 'index']);
+        //     Route::post('rewards', [AdminRewardController::class, 'store']);
+        //     Route::get('rewards/{reward}', [AdminRewardController::class, 'show'])->whereNumber('reward');
+        //     Route::put('rewards/{reward}', [AdminRewardController::class, 'update'])->whereNumber('reward');
+        //     Route::put('rewards/{reward}/status', [AdminRewardController::class, 'updateStatus'])->whereNumber('reward');
+        //     Route::delete('rewards/{reward}', [AdminRewardController::class, 'destroy'])->whereNumber('reward');
+        // });
 
         // Utilities (Swift): provider balance and orders are money data, so they follow payments.
         Route::middleware('permission:payment.view,payment.manage')->group(function () {
@@ -313,14 +315,14 @@ Route::prefix('admin')->group(function () {
         });
 
         // Profit margins on top of the provider's prices.
-        Route::middleware('permission:payment.manage')->group(function () {
-            Route::get('margins', [AdminMarginController::class, 'index']);
-            Route::get('margins/options', [AdminMarginController::class, 'options']);
-            Route::post('margins', [AdminMarginController::class, 'store']);
-            Route::get('margins/{margin}', [AdminMarginController::class, 'show'])->whereNumber('margin');
-            Route::put('margins/{margin}', [AdminMarginController::class, 'update'])->whereNumber('margin');
-            Route::delete('margins/{margin}', [AdminMarginController::class, 'destroy'])->whereNumber('margin');
-        });
+        // Route::middleware('permission:payment.manage')->group(function () {
+        //     Route::get('margins', [AdminMarginController::class, 'index']);
+        //     Route::get('margins/options', [AdminMarginController::class, 'options']);
+        //     Route::post('margins', [AdminMarginController::class, 'store']);
+        //     Route::get('margins/{margin}', [AdminMarginController::class, 'show'])->whereNumber('margin');
+        //     Route::put('margins/{margin}', [AdminMarginController::class, 'update'])->whereNumber('margin');
+        //     Route::delete('margins/{margin}', [AdminMarginController::class, 'destroy'])->whereNumber('margin');
+        // });
 
         Route::middleware('permission:subscription.view')->group(function () {
             Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);

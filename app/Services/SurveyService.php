@@ -66,10 +66,9 @@ class SurveyService
     public function present(Survey $survey): array
     {
         $survey->loadMissing('questions');
-        $reward = is_array($survey->reward) ? $survey->reward : null;
         $summary = $this->summary($survey);
 
-        return [
+        $data = [
             'id' => $survey->id,
             'resource' => 'survey',
             'client_id' => $survey->client_id,
@@ -83,7 +82,23 @@ class SurveyService
             'public_token' => $survey->public_token,
             'survey_url' => $this->surveyUrl($survey),
             'questions' => $survey->questions->map(fn (SurveyQuestion $q) => $this->presentQuestion($q))->values()->all(),
-            'reward' => [
+            'audience' => [
+                'eligible_recipients' => (int) $survey->eligible_recipients,
+                'not_eligible' => (int) $survey->not_eligible,
+            ],
+            'analytics' => $summary,
+            'activated_at' => optional($survey->activated_at)->toDateTimeString(),
+            'completed_at' => optional($survey->completed_at)->toDateTimeString(),
+            'cancelled_at' => optional($survey->cancelled_at)->toDateTimeString(),
+            'created_at' => optional($survey->created_at)->toDateTimeString(),
+            'updated_at' => optional($survey->updated_at)->toDateTimeString(),
+        ];
+
+        // Rewards are switched off for now (EngagementSupport::REWARDS_ENABLED).
+        if (EngagementSupport::REWARDS_ENABLED) {
+            $reward = is_array($survey->reward) ? $survey->reward : null;
+
+            $data['reward'] = [
                 'enabled' => (bool) $survey->reward_enabled,
                 'reward_id' => $survey->reward_id,
                 'name' => $reward['name'] ?? null,
@@ -99,22 +114,18 @@ class SurveyService
                 'beneficiary_message' => $this->support->rewardNeedsBeneficiary($reward)
                     ? "{$survey->eligible_recipients} verified beneficiaries can receive this data reward (others in the groups are skipped)."
                     : null,
-            ],
-            'funding' => [
+            ];
+            $data['funding'] = [
                 'method' => $survey->funding_method,
                 'funded' => $this->support->isFunded($survey),
                 'wallet_hold_id' => $survey->wallet_hold_id,
                 'payment_id' => $survey->payment_id,
                 'reserved_amount' => (float) $survey->reserved_amount,
-                'reserved_remaining' => $summary['reserved_remaining'],
-            ],
-            'analytics' => $summary,
-            'activated_at' => optional($survey->activated_at)->toDateTimeString(),
-            'completed_at' => optional($survey->completed_at)->toDateTimeString(),
-            'cancelled_at' => optional($survey->cancelled_at)->toDateTimeString(),
-            'created_at' => optional($survey->created_at)->toDateTimeString(),
-            'updated_at' => optional($survey->updated_at)->toDateTimeString(),
-        ];
+                'reserved_remaining' => $summary['reserved_remaining'] ?? 0,
+            ];
+        }
+
+        return $data;
     }
 
     /**
@@ -125,7 +136,7 @@ class SurveyService
     public function presentPublic(Survey $survey): array
     {
         $survey->loadMissing('questions');
-        $reward = is_array($survey->reward) ? $survey->reward : null;
+        $reward = EngagementSupport::rewardOn($survey) ? $survey->reward : null;
 
         return [
             'name' => $survey->name,
@@ -133,7 +144,7 @@ class SurveyService
             'status' => $survey->status,
             'accepting_responses' => $survey->status === Survey::STATUS_ACTIVE,
             'questions' => $survey->questions->map(fn (SurveyQuestion $q) => $this->presentQuestion($q))->values()->all(),
-            'reward' => $survey->reward_enabled && $reward ? [
+            'reward' => $reward ? [
                 'name' => $reward['name'] ?? null,
                 'type' => $reward['type'] ?? null,
                 'size' => $reward['size'] ?? null,
@@ -316,7 +327,7 @@ class SurveyService
             ]);
         }
 
-        if (! $survey->reward_enabled) {
+        if (! EngagementSupport::rewardOn($survey)) {
             return $this->result(false, 'This survey has no reward, so no funding is needed. You can activate it.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey));
         }
 
@@ -396,18 +407,19 @@ class SurveyService
      */
     public function activate(Client $client, Survey $survey): array
     {
+        $hasReward = EngagementSupport::rewardOn($survey);
         $ready = $survey->status === Survey::STATUS_FUNDED
-            || ($survey->status === Survey::STATUS_DRAFT && ! $survey->reward_enabled);
+            || ($survey->status === Survey::STATUS_DRAFT && ! $hasReward);
 
         if (! $ready) {
-            $message = $survey->status === Survey::STATUS_DRAFT && $survey->reward_enabled
+            $message = $survey->status === Survey::STATUS_DRAFT && $hasReward
                 ? 'Fund this survey before activating it.'
-                : 'Only funded surveys, or drafts without a reward, can be activated.';
+                : 'Only draft surveys can be activated.';
 
             return $this->result(true, $message, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        if ($survey->reward_enabled && ! $this->support->isFunded($survey)) {
+        if ($hasReward && ! $this->support->isFunded($survey)) {
             return $this->result(true, 'The reserved funds for this survey are no longer available. Fund it again.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
@@ -456,7 +468,7 @@ class SurveyService
      */
     public function resume(Client $client, Survey $survey): array
     {
-        if ($survey->reward_enabled && ! $this->support->isFunded($survey)) {
+        if (EngagementSupport::rewardOn($survey) && ! $this->support->isFunded($survey)) {
             return $this->result(true, 'The reserved funds for this survey are no longer available.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
@@ -474,7 +486,7 @@ class SurveyService
             [Survey::STATUS_ACTIVE, Survey::STATUS_SCHEDULED, Survey::STATUS_PAUSED],
             Survey::STATUS_COMPLETED,
             'completed',
-            'Survey completed. Unused reserved funds were released.',
+            'Survey completed.',
             ['completed_at' => now()],
             true,
         );
@@ -491,7 +503,7 @@ class SurveyService
             [Survey::STATUS_ACTIVE, Survey::STATUS_SCHEDULED, Survey::STATUS_PAUSED, Survey::STATUS_FUNDED],
             Survey::STATUS_CANCELLED,
             'cancelled',
-            'Survey cancelled. Unused reserved funds were released.',
+            'Survey cancelled.',
             ['cancelled_at' => now()],
             true,
         );
@@ -531,21 +543,29 @@ class SurveyService
         $disbursed = (int) ($rewards['disbursed'] ?? 0);
         $unit = EngagementSupport::unitCost(is_array($survey->reward) ? $survey->reward : null);
 
-        return [
+        $summary = [
             'blasted' => $blasted,
             'clicks' => $clicks,
             'responded' => $responded,
             'not_responded' => max(0, $eligible - $responded),
             'completion_rate' => $clicks > 0 ? min(100, round($responded / $clicks * 100, 2)) : 0.0,
             'response_rate' => $eligible > 0 ? min(100, round($responded / $eligible * 100, 2)) : 0.0,
-            'rewards_pending' => (int) ($rewards['pending'] ?? 0),
-            'rewards_disbursed' => $disbursed,
-            'rewards_failed' => (int) ($rewards['failed'] ?? 0),
-            'reserved_remaining' => $this->support->holdRemaining($survey),
-            'estimated_cost' => (float) $survey->estimated_cost,
-            'actual_cost' => isset($stored['actual_cost']) ? round((float) $stored['actual_cost'], 2) : round($disbursed * $unit, 2),
             'eligible_recipients' => $eligible,
         ];
+
+        // Rewards are switched off for now (EngagementSupport::REWARDS_ENABLED).
+        if (EngagementSupport::REWARDS_ENABLED) {
+            $summary += [
+                'rewards_pending' => (int) ($rewards['pending'] ?? 0),
+                'rewards_disbursed' => $disbursed,
+                'rewards_failed' => (int) ($rewards['failed'] ?? 0),
+                'reserved_remaining' => $this->support->holdRemaining($survey),
+                'estimated_cost' => (float) $survey->estimated_cost,
+                'actual_cost' => isset($stored['actual_cost']) ? round((float) $stored['actual_cost'], 2) : round($disbursed * $unit, 2),
+            ];
+        }
+
+        return $summary;
     }
 
     public function findByToken(string $token): ?Survey
@@ -659,7 +679,7 @@ class SurveyService
         $contact = $this->support->contactForPhone($survey->client, $groupIds, $mobile);
 
         // Rewards go only to the people the survey was sent to.
-        if ($survey->reward_enabled && ! $contact) {
+        if (EngagementSupport::rewardOn($survey) && ! $contact) {
             return $this->result(true, 'This number is not on the list for this survey.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
         }
 
@@ -699,7 +719,7 @@ class SurveyService
                 $rewardStatus = null;
                 $rewardMeta = null;
 
-                if ($locked->reward_enabled && is_array($locked->reward)) {
+                if (EngagementSupport::rewardOn($locked)) {
                     $needsBeneficiary = $this->support->rewardNeedsBeneficiary($locked->reward);
                     $canReward = ! $needsBeneficiary
                         || ($contact && $contact->beneficiary_status === \App\Models\Contact::BENEFICIARY_VERIFIED);
@@ -928,6 +948,11 @@ class SurveyService
      */
     protected function rewardFields(array $input, ?Survey $existing): array
     {
+        // Rewards are switched off for now: always save reward_enabled = false.
+        if (! EngagementSupport::REWARDS_ENABLED) {
+            return ['enabled' => false, 'snapshot' => null, 'reward_id' => null];
+        }
+
         $given = $this->support->rewardInput($input);
         $override = $input['estimated_cost'] ?? ($given['inline']['estimate_override'] ?? null);
 

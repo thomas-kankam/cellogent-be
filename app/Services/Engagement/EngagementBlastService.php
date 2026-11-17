@@ -263,7 +263,7 @@ class EngagementBlastService
      */
     public function vars(Model $item): array
     {
-        $reward = $item->reward_enabled && is_array($item->reward) ? $item->reward : null;
+        $reward = EngagementSupport::rewardOn($item) ? $item->reward : null;
         $vars = [];
 
         if ($reward) {

@@ -39,8 +39,9 @@ class StoreCampaignRequest extends ApiFormRequest
             'cta.value' => ['nullable', 'string', 'max:500'],
             'cta.url' => ['nullable', 'url', 'max:500'],
             'cta.label' => ['nullable', 'string', 'max:60'],
-            'cta.triggers_reward' => ['nullable', 'boolean'],
-            'reward_enabled' => ['nullable', 'boolean'],
+            // Rewards are switched off for now (EngagementSupport::REWARDS_ENABLED).
+            // 'cta.triggers_reward' => ['nullable', 'boolean'],
+            // 'reward_enabled' => ['nullable', 'boolean'],
             'reward_id' => ['nullable', 'integer', 'min:1'],
             'reward' => ['nullable', 'array'],
             'reward.enabled' => ['nullable', 'boolean'],
