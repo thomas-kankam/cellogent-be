@@ -59,7 +59,7 @@ class ApiKeyService
         }
 
         $plain = $this->makeToken();
-        $apiKey = ApiKey::create($this->keyAttributes($client, $plain));
+        $apiKey = $this->upsertSingleKey($client, $plain);
 
         $this->activity()->record('API key created', 'api_key', 'created', 'client', $client, $client, [
             'api_key_id' => $apiKey->id,
@@ -67,7 +67,7 @@ class ApiKeyService
 
         return $this->result(
             false,
-            'API key created. Copy it now; it will not be shown again.',
+            'API key created.',
             ApiCode::CREATED,
             ApiReason::CREATED,
             $this->present($apiKey, $plain),
@@ -75,41 +75,43 @@ class ApiKeyService
     }
 
     /**
-     * Deactivate every active key for the client, then create a new active key.
+     * Replace the client's existing API key record in-place with a new token.
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function regenerate(Client $client): array
     {
-        $current = $this->activeFor($client);
-
-        if (! $current) {
-            return $this->result(true, 'No active API key to regenerate. Create one first.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
-        }
-
         $plain = $this->makeToken();
-
-        $apiKey = DB::transaction(function () use ($client, $plain) {
-            ApiKey::query()
-                ->where('client_id', $client->id)
-                ->where('status', 'active')
-                ->update(['status' => 'inactive']);
-
-            return ApiKey::create($this->keyAttributes($client, $plain));
-        });
+        $apiKey = $this->upsertSingleKey($client, $plain);
 
         $this->activity()->record('API key regenerated', 'api_key', 'updated', 'client', $client, $client, [
             'api_key_id' => $apiKey->id,
-            'replaced_api_key_id' => $current->id,
         ]);
 
         return $this->result(
             false,
-            'API key regenerated. Copy it now; it will not be shown again. The previous key is inactive.',
+            'API key regenerated. The previous key has been replaced.',
             ApiCode::SUCCESS,
             ApiReason::SUCCESS,
             $this->present($apiKey, $plain),
         );
+    }
+
+    protected function upsertSingleKey(Client $client, string $plain): ApiKey
+    {
+        return DB::transaction(function () use ($client, $plain) {
+            $apiKey = ApiKey::updateOrCreate(
+                ['client_id' => $client->id],
+                $this->keyAttributes($client, $plain),
+            );
+
+            ApiKey::query()
+                ->where('client_id', $client->id)
+                ->where('id', '!=', $apiKey->id)
+                ->delete();
+
+            return $apiKey;
+        });
     }
 
     protected function makeToken(): string
@@ -127,6 +129,7 @@ class ApiKeyService
             'token' => $plain,
             'token_prefix' => substr($plain, 0, 12),
             'status' => 'active',
+            'last_used_at' => null,
         ];
     }
 }
