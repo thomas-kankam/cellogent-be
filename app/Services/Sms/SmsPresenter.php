@@ -52,12 +52,8 @@ class SmsPresenter
         $sent = (int) $inbox->submitted_count;
         $delivered = (int) $inbox->delivered_count;
         $failed = (int) $inbox->failed_count;
-        // Not in a final state yet (still sending, or submitted and waiting on DLR).
+        // Not in a final state yet (still sending, or submitted and waiting for delivery confirmation).
         $pending = max(0, $recipients - $delivered - $failed);
-        // Submitted but not yet delivered/failed via DLR (excludes submit-time failures).
-        $submitFailures = max(0, $recipients - $sent);
-        $dlrFailures = max(0, $failed - $submitFailures);
-        $awaitingDlr = max(0, $sent - $delivered - $dlrFailures);
 
         return [
             'id' => $inbox->id,
@@ -79,11 +75,10 @@ class SmsPresenter
             'units_before' => $inbox->previous_units !== null ? (int) $inbox->previous_units : null,
             'status' => $inbox->status,
             'delivery' => [
-                'sent' => $sent,                 // accepted by aggregator / network
-                'delivered' => $delivered,       // handset confirmed
-                'failed' => $failed,             // submit rejected or DLR undelivered/expired
-                'pending' => $pending,           // not final yet (includes awaiting DLR)
-                'awaiting_dlr' => $awaitingDlr,  // submitted, waiting for delivery report
+                'sent' => $sent,           // accepted by network
+                'delivered' => $delivered, // handset confirmed
+                'failed' => $failed,       // rejected or undelivered/expired
+                'pending' => $pending,     // still sending or awaiting handset confirmation
             ],
             'created_at' => optional($inbox->created_at)->toDateTimeString(),
             'completed_at' => optional($inbox->completed_at)->toDateTimeString(),

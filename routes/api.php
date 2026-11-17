@@ -212,7 +212,7 @@ Route::prefix('client')->group(function () {
 */
 Route::prefix('v1')->middleware(['auth.apikey', 'throttle:sms-api'])->group(function () {
     Route::get('balance', [ClientSmsController::class, 'balance']);
-    Route::get('units/history', [ClientSmsController::class, 'unitHistory']);
+    // Route::get('units/history', [ClientSmsController::class, 'unitHistory']);
 
     Route::post('sms/quick', [ClientSmsController::class, 'quick']);
     Route::post('sms/bulk', [ClientSmsController::class, 'bulk']);
