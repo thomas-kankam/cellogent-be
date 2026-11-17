@@ -57,14 +57,10 @@ class SmsPresenter
 
         return [
             'id' => $inbox->id,
-            'resource' => 'sms',
             'type' => $inbox->type,
             'request_type' => $inbox->request_type,
-            'mode' => $inbox->mode,
-            'parent_id' => $inbox->parent_id,
             'from' => $inbox->from,
             'to' => $inbox->isQuick() ? $inbox->recipients() : null,
-            'contact_group_ids' => $inbox->contact_group_ids,
             'contact_groups' => $this->presentGroups($inbox->contact_group_ids),
             'message' => $inbox->message,
             'message_id' => $inbox->message_id,
@@ -72,7 +68,6 @@ class SmsPresenter
             'recipients' => $recipients,
             'units_used' => (int) $inbox->units_used,
             'units_refunded' => (int) $inbox->units_refunded,
-            'units_before' => $inbox->previous_units !== null ? (int) $inbox->previous_units : null,
             'status' => $inbox->status,
             'delivery' => [
                 'sent' => $sent,           // accepted by network
@@ -93,6 +88,9 @@ class SmsPresenter
         return $this->forClient($inbox) + [
             'client_id' => $inbox->client_id,
             'admin_id' => $inbox->admin_id,
+            'mode' => $inbox->mode,
+            'parent_id' => $inbox->parent_id,
+            'units_before' => $inbox->previous_units !== null ? (int) $inbox->previous_units : null,
             'aggregator' => $inbox->aggregator,
             'is_global' => (bool) $inbox->is_global,
             'batches' => [
@@ -158,8 +156,6 @@ class SmsPresenter
             'message' => $sent->message,
             'type' => $sent->type,
             'request_type' => $sent->request_type,
-            'mode' => $inbox?->mode,
-            'parent_id' => $inbox?->parent_id,
             'message_id' => $sent->message_id,
             'status' => $sent->status,
             'failure_reason' => $this->failureReason($sent),
@@ -180,6 +176,8 @@ class SmsPresenter
     {
         return $this->recipientForClient($sent, $inbox, $contactGroups) + [
             'client_id' => $sent->client_id,
+            'mode' => $inbox?->mode,
+            'parent_id' => $inbox?->parent_id,
             'aggregator' => $sent->aggregator,
             'sequence_no' => $sent->sequence_no,
             'job_id' => $sent->job_id,
