@@ -24,21 +24,39 @@ class SmsUnitService
             return [
                 'units' => 0,
                 'plan_name' => null,
+                'plan_type' => null,
                 'status' => 'none',
+                'is_non_expiry' => false,
+                'is_expired' => false,
                 'expires_at' => null,
+                'expiry_message' => 'You do not have an active SMS package.',
                 'can_send' => false,
                 'chars_per_unit' => SmsParts::charsPerUnit(),
                 'message_max_length' => (int) config('sms.message_max_length', 1600),
             ];
         }
 
-        $expired = $subscription->ends_at && $subscription->ends_at->isPast();
+        $isNonExpiry = $subscription->type === 'non_expiry' || $subscription->ends_at === null;
+        $expired = ! $isNonExpiry && $subscription->ends_at->isPast();
+        $expiresAt = $isNonExpiry ? 'non_expiry' : $subscription->ends_at->toDateTimeString();
+
+        if ($isNonExpiry) {
+            $expiryMessage = 'You are on a non-expiry package; your SMS units do not expire.';
+        } elseif ($expired) {
+            $expiryMessage = "Your SMS package expired on {$expiresAt}.";
+        } else {
+            $expiryMessage = "Your SMS package expires on {$expiresAt}.";
+        }
 
         return [
             'units' => (int) $subscription->units,
             'plan_name' => $subscription->plan_name,
+            'plan_type' => $subscription->type ?? ($isNonExpiry ? 'non_expiry' : 'monthly'),
             'status' => $expired ? 'expired' : $subscription->status,
-            'expires_at' => optional($subscription->ends_at)->toDateTimeString(),
+            'is_non_expiry' => $isNonExpiry,
+            'is_expired' => $expired,
+            'expires_at' => $expiresAt,
+            'expiry_message' => $expiryMessage,
             'can_send' => ! $expired && $subscription->status === 'active' && $subscription->units > 0,
             'chars_per_unit' => SmsParts::charsPerUnit(),
             'message_max_length' => (int) config('sms.message_max_length', 1600),
