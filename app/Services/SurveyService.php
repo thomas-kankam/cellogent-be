@@ -892,10 +892,26 @@ class SurveyService
         $sendAt = $existing?->send_at;
 
         if (array_key_exists('send_at', $input)) {
-            $sendAt = $input['send_at'] ? Carbon::parse($input['send_at']) : null;
+            $rawSendAt = is_string($input['send_at']) ? trim($input['send_at']) : $input['send_at'];
 
-            if ($sendAt && $sendAt->isPast()) {
-                $errors['send_at'] = ['The send time must be in the future.'];
+            if (! $rawSendAt) {
+                $sendAt = null;
+            } elseif (is_string($rawSendAt) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawSendAt)) {
+                $parsedDate = Carbon::parse($rawSendAt);
+
+                if ($parsedDate->lt(now()->startOfDay())) {
+                    $errors['send_at'] = ['The send date cannot be in the past.'];
+                } elseif ($parsedDate->isToday()) {
+                    $sendAt = now();
+                } else {
+                    $sendAt = $parsedDate;
+                }
+            } else {
+                $sendAt = Carbon::parse($rawSendAt);
+
+                if ($sendAt->isPast()) {
+                    $errors['send_at'] = ['The send time must be in the future.'];
+                }
             }
         }
 

@@ -749,10 +749,36 @@ class CampaignService
             $sendAt = $existing?->send_at;
 
             if (array_key_exists('send_at', $input)) {
-                $sendAt = $input['send_at'] ? Carbon::parse($input['send_at']) : null;
+                $rawSendAt = is_string($input['send_at']) ? trim($input['send_at']) : $input['send_at'];
+                $sendTime = trim((string) ($input['send_time'] ?? ''));
 
-                if ($sendAt && $sendAt->isPast()) {
-                    $errors['send_at'] = ['The send time must be in the future.'];
+                if (! $rawSendAt) {
+                    $sendAt = null;
+                } elseif (is_string($rawSendAt) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawSendAt)) {
+                    if ($sendTime !== '' && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $sendTime)) {
+                        $sendAt = Carbon::parse($rawSendAt.' '.$sendTime);
+
+                        if ($sendAt->isPast()) {
+                            $errors['send_at'] = ['The send time must be in the future.'];
+                        }
+                    } else {
+                        $parsedDate = Carbon::parse($rawSendAt);
+
+                        if ($parsedDate->lt(now()->startOfDay())) {
+                            $errors['send_at'] = ['The send date cannot be in the past.'];
+                        } elseif ($parsedDate->isToday()) {
+                            // Same-day date with no time specified: allow immediate send on activation.
+                            $sendAt = now();
+                        } else {
+                            $sendAt = $parsedDate;
+                        }
+                    }
+                } else {
+                    $sendAt = Carbon::parse($rawSendAt);
+
+                    if ($sendAt->isPast()) {
+                        $errors['send_at'] = ['The send time must be in the future.'];
+                    }
                 }
             }
 
