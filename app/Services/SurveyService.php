@@ -1082,28 +1082,46 @@ class SurveyService
      *
      * @param  list<array<string, mixed>>  $rows
      */
+
     protected function syncQuestions(Survey $survey, array $rows): void
     {
         $existing = $survey->questions()->get()->keyBy('id');
+
         $keep = [];
 
         foreach ($rows as $row) {
             $id = $row['id'] ?? null;
+
             unset($row['id']);
 
-            if ($id && $existing->has($id)) {
+            if ($id !== null) {
+                if (! $existing->has($id)) {
+                    throw ValidationException::withMessages([
+                        'questions' => [
+                            "Question ID {$id} does not belong to this survey."
+                        ],
+                    ]);
+                }
+
                 $existing[$id]->update($row);
+
                 $keep[] = $id;
 
                 continue;
             }
 
-            $keep[] = $survey->questions()->create($row)->id;
+            $question = $survey->questions()->create($row);
+
+            $keep[] = $question->id;
         }
 
-        $survey->questions()->whereNotIn('id', $keep)->delete();
+        $survey->questions()
+            ->whereNotIn('id', $keep)
+            ->delete();
+
         $survey->unsetRelation('questions');
     }
+
 
     /**
      * Check answers against the questions and return a clean, self-describing list.
