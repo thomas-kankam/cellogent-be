@@ -20,9 +20,16 @@ class CampaignController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = $this->campaigns->index($request->user(), $request->only(['status', 'type', 'search']));
+        $query = $this->campaigns->index($request->user(), $request->only(['status', 'type', 'search', 'trashed', 'only_trashed', 'with_trashed']));
 
         return $this->paginatedApiResponse('Campaigns loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (Campaign $campaign) => $this->campaigns->present($campaign));
+    }
+
+    public function trashed(Request $request): JsonResponse
+    {
+        $query = $this->campaigns->trashed($request->user(), $request->only(['status', 'type', 'search']));
+
+        return $this->paginatedApiResponse('Deleted campaigns loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (Campaign $campaign) => $this->campaigns->present($campaign));
     }
 
     public function show(Request $request, Campaign $campaign): JsonResponse
@@ -43,6 +50,16 @@ class CampaignController extends Controller
     public function destroy(Request $request, Campaign $campaign): JsonResponse
     {
         return $this->owned($request, $campaign) ?? $this->respondFrom($this->campaigns->delete($request->user(), $campaign));
+    }
+
+    public function restore(Request $request, Campaign $campaign): JsonResponse
+    {
+        return $this->owned($request, $campaign) ?? $this->respondFrom($this->campaigns->restore($request->user(), $campaign));
+    }
+
+    public function forceDestroy(Request $request, Campaign $campaign): JsonResponse
+    {
+        return $this->owned($request, $campaign) ?? $this->respondFrom($this->campaigns->forceDelete($request->user(), $campaign));
     }
 
     public function fund(FundRequest $request, Campaign $campaign): JsonResponse

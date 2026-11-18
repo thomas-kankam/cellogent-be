@@ -9,6 +9,7 @@ use App\Models\Campaign;
 use App\Models\CampaignEvent;
 use App\Models\Client;
 use App\Models\Inbox;
+use App\Models\RewardDisbursement;
 use App\Services\Engagement\EngagementSupport;
 use App\Services\Payments\CheckoutService;
 use App\Support\ApiCode;
@@ -44,11 +45,21 @@ class CampaignService
     ) {}
 
     /**
-     * @param  array<string, mixed>  $filters  status, type, search
+     * @param  array<string, mixed>  $filters  status, type, search, trashed
      */
     public function index(Client $client, array $filters = []): Builder
     {
-        $query = Campaign::query()->where('client_id', $client->id)->latest('id');
+        $query = Campaign::query()->where('client_id', $client->id);
+
+        $trashed = strtolower(trim((string) ($filters['trashed'] ?? '')));
+
+        if ($trashed === 'only' || filter_var($filters['only_trashed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query->onlyTrashed()->latest('deleted_at');
+        } elseif ($trashed === 'with' || filter_var($filters['with_trashed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query->withTrashed()->latest('id');
+        } else {
+            $query->latest('id');
+        }
 
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
@@ -63,6 +74,16 @@ class CampaignService
         }
 
         return $query;
+    }
+
+    /**
+     * Soft-deleted campaigns for this client.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function trashed(Client $client, array $filters = []): Builder
+    {
+        return $this->index($client, $filters + ['trashed' => 'only']);
     }
 
     /**
@@ -103,6 +124,8 @@ class CampaignService
             'activated_at' => optional($campaign->activated_at)->toDateTimeString(),
             'completed_at' => optional($campaign->completed_at)->toDateTimeString(),
             'cancelled_at' => optional($campaign->cancelled_at)->toDateTimeString(),
+            'is_deleted' => $campaign->trashed(),
+            'deleted_at' => optional($campaign->deleted_at)->toDateTimeString(),
             'created_at' => optional($campaign->created_at)->toDateTimeString(),
             'updated_at' => optional($campaign->updated_at)->toDateTimeString(),
         ];
@@ -234,14 +257,14 @@ class CampaignService
     }
 
     /**
-     * Draft, funded, cancelled and completed campaigns can be removed; reserved money is released.
+     * Soft-delete a campaign (releases any reserved funds).
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function delete(Client $client, Campaign $campaign): array
     {
-        if (! in_array($campaign->status, [Campaign::STATUS_DRAFT, Campaign::STATUS_FUNDED, Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
-            return $this->result(true, 'Cancel or complete this campaign before deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if (! in_array($campaign->status, [Campaign::STATUS_DRAFT, Campaign::STATUS_FUNDED, Campaign::STATUS_PAUSED, Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
+            return $this->result(true, 'Pause, cancel or complete this campaign before deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $this->support->releaseHold($campaign);
@@ -252,6 +275,55 @@ class CampaignService
         ]);
 
         return $this->result(false, 'Campaign deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+    }
+
+    /**
+     * Restore a soft-deleted campaign.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function restore(Client $client, Campaign $campaign): array
+    {
+        if (! $campaign->trashed()) {
+            return $this->result(true, 'This campaign is not deleted.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $campaign->restore();
+
+        $this->activity()->record('Campaign restored', 'campaign', 'restored', 'client', $client, $client, [
+            'campaign_id' => $campaign->id,
+        ]);
+
+        return $this->result(false, 'Campaign restored.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($campaign->fresh()));
+    }
+
+    /**
+     * Permanently delete a campaign and all its associated records (events, reward disbursements, wallet holds).
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function forceDelete(Client $client, Campaign $campaign): array
+    {
+        $campaignId = $campaign->id;
+
+        DB::transaction(function () use ($campaign) {
+            $this->support->releaseHold($campaign);
+
+            CampaignEvent::query()->where('campaign_id', $campaign->id)->delete();
+            RewardDisbursement::query()
+                ->where('source_type', RewardDisbursement::SOURCE_CAMPAIGN)
+                ->where('source_id', $campaign->id)
+                ->delete();
+            $campaign->walletHolds()->delete();
+
+            $campaign->forceDelete();
+        }, 3);
+
+        $this->activity()->record('Campaign permanently deleted', 'campaign', 'force_deleted', 'client', $client, $client, [
+            'campaign_id' => $campaignId,
+        ]);
+
+        return $this->result(false, 'Campaign and its associated records permanently deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
     }
 
     /**
@@ -425,7 +497,7 @@ class CampaignService
         return $this->transition(
             $client,
             $campaign,
-            [Campaign::STATUS_ACTIVE, Campaign::STATUS_SCHEDULED, Campaign::STATUS_PAUSED],
+            [Campaign::STATUS_DRAFT, Campaign::STATUS_FUNDED, Campaign::STATUS_ACTIVE, Campaign::STATUS_SCHEDULED, Campaign::STATUS_PAUSED],
             Campaign::STATUS_COMPLETED,
             'completed',
             'Campaign completed.',

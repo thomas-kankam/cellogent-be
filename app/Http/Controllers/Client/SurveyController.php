@@ -21,9 +21,16 @@ class SurveyController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = $this->surveys->index($request->user(), $request->only(['status', 'search']));
+        $query = $this->surveys->index($request->user(), $request->only(['status', 'search', 'trashed', 'only_trashed', 'with_trashed']));
 
         return $this->paginatedApiResponse('Surveys loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (Survey $survey) => $this->surveys->present($survey));
+    }
+
+    public function trashed(Request $request): JsonResponse
+    {
+        $query = $this->surveys->trashed($request->user(), $request->only(['status', 'search']));
+
+        return $this->paginatedApiResponse('Deleted surveys loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (Survey $survey) => $this->surveys->present($survey));
     }
 
     public function show(Request $request, Survey $survey): JsonResponse
@@ -44,6 +51,16 @@ class SurveyController extends Controller
     public function destroy(Request $request, Survey $survey): JsonResponse
     {
         return $this->owned($request, $survey) ?? $this->respondFrom($this->surveys->delete($request->user(), $survey));
+    }
+
+    public function restore(Request $request, Survey $survey): JsonResponse
+    {
+        return $this->owned($request, $survey) ?? $this->respondFrom($this->surveys->restore($request->user(), $survey));
+    }
+
+    public function forceDestroy(Request $request, Survey $survey): JsonResponse
+    {
+        return $this->owned($request, $survey) ?? $this->respondFrom($this->surveys->forceDelete($request->user(), $survey));
     }
 
     public function questions(Request $request, Survey $survey): JsonResponse

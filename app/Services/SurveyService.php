@@ -6,6 +6,7 @@ use App\Concerns\LogsActivity;
 use App\Concerns\ReturnsServiceResult;
 use App\Jobs\DispatchEngagementBlastJob;
 use App\Models\Client;
+use App\Models\RewardDisbursement;
 use App\Models\Survey;
 use App\Models\SurveyQuestion;
 use App\Models\SurveyResponse;
@@ -41,11 +42,21 @@ class SurveyService
     ) {}
 
     /**
-     * @param  array<string, mixed>  $filters  status, search
+     * @param  array<string, mixed>  $filters  status, search, trashed
      */
     public function index(Client $client, array $filters = []): Builder
     {
-        $query = Survey::query()->withCount('questions')->where('client_id', $client->id)->latest('id');
+        $query = Survey::query()->withCount('questions')->where('client_id', $client->id);
+
+        $trashed = strtolower(trim((string) ($filters['trashed'] ?? '')));
+
+        if ($trashed === 'only' || filter_var($filters['only_trashed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query->onlyTrashed()->latest('deleted_at');
+        } elseif ($trashed === 'with' || filter_var($filters['with_trashed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query->withTrashed()->latest('id');
+        } else {
+            $query->latest('id');
+        }
 
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
@@ -56,6 +67,16 @@ class SurveyService
         }
 
         return $query;
+    }
+
+    /**
+     * Soft-deleted surveys for this client.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function trashed(Client $client, array $filters = []): Builder
+    {
+        return $this->index($client, $filters + ['trashed' => 'only']);
     }
 
     /**
@@ -90,6 +111,8 @@ class SurveyService
             'activated_at' => optional($survey->activated_at)->toDateTimeString(),
             'completed_at' => optional($survey->completed_at)->toDateTimeString(),
             'cancelled_at' => optional($survey->cancelled_at)->toDateTimeString(),
+            'is_deleted' => $survey->trashed(),
+            'deleted_at' => optional($survey->deleted_at)->toDateTimeString(),
             'created_at' => optional($survey->created_at)->toDateTimeString(),
             'updated_at' => optional($survey->updated_at)->toDateTimeString(),
         ];
@@ -295,12 +318,14 @@ class SurveyService
     }
 
     /**
+     * Soft-delete a survey (releases any reserved funds).
+     *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function delete(Client $client, Survey $survey): array
     {
-        if (!in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
-            return $this->result(true, 'Cancel or complete this survey before deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if (!in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_PAUSED, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
+            return $this->result(true, 'Pause, cancel or complete this survey before deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $this->support->releaseHold($survey);
@@ -311,6 +336,56 @@ class SurveyService
         ]);
 
         return $this->result(false, 'Survey deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
+    }
+
+    /**
+     * Restore a soft-deleted survey.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function restore(Client $client, Survey $survey): array
+    {
+        if (!$survey->trashed()) {
+            return $this->result(true, 'This survey is not deleted.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $survey->restore();
+
+        $this->activity()->record('Survey restored', 'survey', 'restored', 'client', $client, $client, [
+            'survey_id' => $survey->id,
+        ]);
+
+        return $this->result(false, 'Survey restored.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey->fresh()));
+    }
+
+    /**
+     * Permanently delete a survey and all its associated records (questions, responses, reward disbursements, wallet holds).
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function forceDelete(Client $client, Survey $survey): array
+    {
+        $surveyId = $survey->id;
+
+        DB::transaction(function () use ($survey) {
+            $this->support->releaseHold($survey);
+
+            SurveyQuestion::query()->where('survey_id', $survey->id)->delete();
+            SurveyResponse::query()->where('survey_id', $survey->id)->delete();
+            RewardDisbursement::query()
+                ->where('source_type', RewardDisbursement::SOURCE_SURVEY)
+                ->where('source_id', $survey->id)
+                ->delete();
+            $survey->walletHolds()->delete();
+
+            $survey->forceDelete();
+        }, 3);
+
+        $this->activity()->record('Survey permanently deleted', 'survey', 'force_deleted', 'client', $client, $client, [
+            'survey_id' => $surveyId,
+        ]);
+
+        return $this->result(false, 'Survey and its associated records permanently deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
     }
 
     /**
@@ -483,7 +558,7 @@ class SurveyService
         return $this->transition(
             $client,
             $survey,
-            [Survey::STATUS_ACTIVE, Survey::STATUS_SCHEDULED, Survey::STATUS_PAUSED],
+            [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_ACTIVE, Survey::STATUS_SCHEDULED, Survey::STATUS_PAUSED],
             Survey::STATUS_COMPLETED,
             'completed',
             'Survey completed.',

@@ -152,11 +152,14 @@ Route::prefix('client')->group(function () {
         // Route::get('reward-disbursements/{disbursement}', [ClientRewardDisbursementController::class, 'show'])->whereNumber('disbursement');
 
         Route::get('campaigns', [ClientCampaignController::class, 'index']);
+        Route::get('campaigns/trashed', [ClientCampaignController::class, 'trashed']);
         Route::post('campaigns', [ClientCampaignController::class, 'store']);
         Route::whereNumber('campaign')->group(function () {
-            Route::get('campaigns/{campaign}', [ClientCampaignController::class, 'show']);
+            Route::get('campaigns/{campaign}', [ClientCampaignController::class, 'show'])->withTrashed();
             Route::put('campaigns/{campaign}', [ClientCampaignController::class, 'update']);
             Route::delete('campaigns/{campaign}', [ClientCampaignController::class, 'destroy']);
+            Route::post('campaigns/{campaign}/restore', [ClientCampaignController::class, 'restore'])->withTrashed();
+            Route::delete('campaigns/{campaign}/force', [ClientCampaignController::class, 'forceDestroy'])->withTrashed();
             // Funding is only for rewards, which are switched off for now.
             // Route::post('campaigns/{campaign}/fund', [ClientCampaignController::class, 'fund'])->middleware('throttle:checkout');
             Route::post('campaigns/{campaign}/activate', [ClientCampaignController::class, 'activate']);
@@ -164,18 +167,21 @@ Route::prefix('client')->group(function () {
             Route::post('campaigns/{campaign}/resume', [ClientCampaignController::class, 'resume']);
             Route::post('campaigns/{campaign}/complete', [ClientCampaignController::class, 'complete']);
             Route::post('campaigns/{campaign}/cancel', [ClientCampaignController::class, 'cancel']);
-            Route::get('campaigns/{campaign}/analytics', [ClientCampaignController::class, 'analytics']);
-            Route::get('campaigns/{campaign}/events', [ClientCampaignController::class, 'events']);
+            Route::get('campaigns/{campaign}/analytics', [ClientCampaignController::class, 'analytics'])->withTrashed();
+            Route::get('campaigns/{campaign}/events', [ClientCampaignController::class, 'events'])->withTrashed();
             Route::post('campaigns/{campaign}/events', [ClientCampaignController::class, 'recordEvent']);
         });
 
         Route::get('surveys', [ClientSurveyController::class, 'index']);
+        Route::get('surveys/trashed', [ClientSurveyController::class, 'trashed']);
         Route::post('surveys', [ClientSurveyController::class, 'store']);
         Route::whereNumber('survey')->group(function () {
-            Route::get('surveys/{survey}', [ClientSurveyController::class, 'show']);
+            Route::get('surveys/{survey}', [ClientSurveyController::class, 'show'])->withTrashed();
             Route::put('surveys/{survey}', [ClientSurveyController::class, 'update']);
             Route::delete('surveys/{survey}', [ClientSurveyController::class, 'destroy']);
-            Route::get('surveys/{survey}/questions', [ClientSurveyController::class, 'questions']);
+            Route::post('surveys/{survey}/restore', [ClientSurveyController::class, 'restore'])->withTrashed();
+            Route::delete('surveys/{survey}/force', [ClientSurveyController::class, 'forceDestroy'])->withTrashed();
+            Route::get('surveys/{survey}/questions', [ClientSurveyController::class, 'questions'])->withTrashed();
             Route::put('surveys/{survey}/questions', [ClientSurveyController::class, 'syncQuestions']);
             // Funding is only for rewards, which are switched off for now.
             // Route::post('surveys/{survey}/fund', [ClientSurveyController::class, 'fund'])->middleware('throttle:checkout');
@@ -184,8 +190,8 @@ Route::prefix('client')->group(function () {
             Route::post('surveys/{survey}/resume', [ClientSurveyController::class, 'resume']);
             Route::post('surveys/{survey}/complete', [ClientSurveyController::class, 'complete']);
             Route::post('surveys/{survey}/cancel', [ClientSurveyController::class, 'cancel']);
-            Route::get('surveys/{survey}/analytics', [ClientSurveyController::class, 'analytics']);
-            Route::get('surveys/{survey}/responses', [ClientSurveyController::class, 'responses']);
+            Route::get('surveys/{survey}/analytics', [ClientSurveyController::class, 'analytics'])->withTrashed();
+            Route::get('surveys/{survey}/responses', [ClientSurveyController::class, 'responses'])->withTrashed();
         });
 
         Route::get('utilities/catalog', [ClientUtilityController::class, 'catalog']);
