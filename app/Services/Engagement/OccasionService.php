@@ -147,7 +147,7 @@ class OccasionService
         $delivery = $this->blasts->deliver(
             $client,
             (string) $campaign->sender,
-            (string) $campaign->body,
+            $this->blasts->template($campaign),
             $mine,
             $this->blasts->vars($campaign),
         );

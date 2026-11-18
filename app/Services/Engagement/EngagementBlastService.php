@@ -286,7 +286,8 @@ class EngagementBlastService
 
         if ($item instanceof Campaign) {
             $cta = is_array($item->cta) ? $item->cta : [];
-            $vars['link'] = (string) ($cta['url'] ?? $cta['value'] ?? '');
+            $ctaEnabled = $cta !== [] && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            $vars['link'] = $ctaEnabled ? trim((string) ($cta['url'] ?? $cta['value'] ?? '')) : '';
             $vars['ctaurl'] = $vars['link'];
         }
 
@@ -299,9 +300,10 @@ class EngagementBlastService
     }
 
     /**
-     * The SMS text. Surveys always carry their link, even when the text has no {surveyUrl}.
+     * The SMS text. Surveys always carry their link, and campaigns with an enabled CTA
+     * automatically include it when the body has no {link} / {ctaUrl} placeholder.
      */
-    protected function template(Model $item): string
+    public function template(Model $item): string
     {
         if ($item instanceof Survey) {
             $text = trim((string) ($item->body ?: $item->intro ?: $item->name));
@@ -309,7 +311,24 @@ class EngagementBlastService
             return preg_match('/\{\s*survey_?url\s*\}/i', $text) ? $text : $text.' {surveyUrl}';
         }
 
-        return (string) $item->body;
+        $text = trim((string) $item->body);
+
+        if ($item instanceof Campaign) {
+            $cta = is_array($item->cta) ? $item->cta : [];
+            $ctaEnabled = $cta !== [] && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            $ctaValue = $ctaEnabled ? trim((string) ($cta['url'] ?? $cta['value'] ?? '')) : '';
+
+            if ($ctaValue !== ''
+                && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $text)
+                && ! str_contains($text, $ctaValue)) {
+                $label = trim((string) ($cta['label'] ?? ''));
+                $suffix = $label !== '' ? "{$label}: {ctaUrl}" : '{ctaUrl}';
+
+                return $text !== '' ? $text.' '.$suffix : $suffix;
+            }
+        }
+
+        return $text;
     }
 
     /*

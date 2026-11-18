@@ -829,6 +829,20 @@ class CampaignService
         $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false) : $audience;
         $eligible = $audience['eligible'];
 
+        $smsText = $body;
+
+        if (is_array($cta) && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
+            $ctaValue = trim((string) ($cta['url'] ?? $cta['value'] ?? ''));
+
+            if ($ctaValue !== ''
+                && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $smsText)
+                && ! str_contains($smsText, $ctaValue)) {
+                $label = trim((string) ($cta['label'] ?? ''));
+                $suffix = $label !== '' ? "{$label}: {$ctaValue}" : $ctaValue;
+                $smsText = $smsText !== '' ? $smsText.' '.$suffix : $suffix;
+            }
+        }
+
         return $fields + [
             'name' => $name,
             'type' => $type,
@@ -844,7 +858,7 @@ class CampaignService
             'estimated_cost' => $reward['enabled']
                 ? $this->support->estimate($reward['snapshot'], $eligible, $reward['snapshot']['estimate_override'] ?? null)
                 : 0,
-            'estimated_cost_units' => SmsParts::count($body) * $smsAudience['eligible'],
+            'estimated_cost_units' => SmsParts::count($smsText) * $smsAudience['eligible'],
         ];
     }
 
