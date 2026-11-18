@@ -151,6 +151,8 @@ class OccasionService
             $template,
             $mine,
             $this->blasts->vars($campaign),
+            null,
+            $campaign,
         );
 
         // Not sent (no units, sender problem…): give the claim back so the next run tries again today.
@@ -180,6 +182,8 @@ class OccasionService
 
             $analytics['sent'] = (int) ($analytics['sent'] ?? 0) + $sent;
             $analytics['last_occasion_run_at'] = now()->toDateTimeString();
+            $existingInboxes = is_array($analytics['blast_inbox_ids'] ?? null) ? $analytics['blast_inbox_ids'] : [];
+            $analytics['blast_inbox_ids'] = array_values(array_unique(array_map('intval', array_merge($existingInboxes, $delivery['inbox_ids']))));
 
             if ($delivery['failed'] !== []) {
                 $analytics['blast_error'] = Str::limit((string) $delivery['failed'][0]['reason'], 250, '');

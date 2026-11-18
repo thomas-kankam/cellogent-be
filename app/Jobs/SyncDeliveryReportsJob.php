@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\CampaignEvent;
 use App\Models\Sent;
 use App\Services\Sms\KairosClient;
 use App\Services\Sms\SmsUnitService;
@@ -38,7 +39,7 @@ class SyncDeliveryReportsJob implements ShouldQueue
         $rows = Sent::query()
             ->whereIn('id', $this->sentIds)
             ->where('status', Sent::SUBMITTED)
-            ->get(['id', 'inbox_id', 'client_id', 'sequence_no', 'units_used', 'dlr_attempts']);
+            ->get(['id', 'inbox_id', 'client_id', 'to', 'sequence_no', 'units_used', 'dlr_attempts']);
 
         $delivered = [];
         $failed = [];      // dlr status => ids
@@ -85,13 +86,17 @@ class SyncDeliveryReportsJob implements ShouldQueue
 
         $now = now();
         $byId = $rows->keyBy('id');
+        $deliveredRows = [];
+        $failedRows = [];
 
-        DB::transaction(function () use ($delivered, $failed, $retry, $stop, &$inboxDelivered, &$inboxFailed, &$refunds, $backoff, $now, $byId) {
+        DB::transaction(function () use ($delivered, $failed, $retry, $stop, &$inboxDelivered, &$inboxFailed, &$refunds, &$deliveredRows, &$failedRows, $backoff, $now, $byId) {
             // Each row is flipped only if it is still submitted, so an overlapping job
             // (lease expired, retry) can never count or refund the same message twice.
             $inboxDelivered = [];
             $inboxFailed = [];
             $refunds = [];
+            $deliveredRows = [];
+            $failedRows = [];
 
             foreach ($delivered as $id) {
                 $changed = Sent::query()->whereKey($id)->where('status', Sent::SUBMITTED)->update([
@@ -102,7 +107,9 @@ class SyncDeliveryReportsJob implements ShouldQueue
                 ]);
 
                 if ($changed) {
-                    $this->bump($inboxDelivered, $byId[$id]->inbox_id);
+                    $row = $byId[$id];
+                    $this->bump($inboxDelivered, $row->inbox_id);
+                    $deliveredRows[] = $row;
                 }
             }
 
@@ -121,6 +128,7 @@ class SyncDeliveryReportsJob implements ShouldQueue
 
                     $row = $byId[$id];
                     $this->bump($inboxFailed, $row->inbox_id);
+                    $failedRows[] = ['row' => $row, 'dlr_status' => $status];
 
                     if ($row->client_id) {
                         $key = $row->client_id.':'.($row->inbox_id ?? 0);
@@ -149,9 +157,93 @@ class SyncDeliveryReportsJob implements ShouldQueue
             }
         }, 3);
 
+        $this->recordCampaignDeliveryEvents($deliveredRows, $failedRows, $now);
+
         foreach ($refunds as $key => $amount) {
             [$clientId, $inboxId] = array_map('intval', explode(':', $key));
             $units->refund($clientId, $amount, $inboxId ?: null, 'Refund for undelivered messages');
+        }
+    }
+
+    /**
+     * Mirror SMS delivery receipts into `campaign_events` for any inbox belonging to a campaign.
+     *
+     * @param  list<Sent>  $deliveredRows
+     * @param  list<array{row: Sent, dlr_status: string}>  $failedRows
+     */
+    protected function recordCampaignDeliveryEvents(array $deliveredRows, array $failedRows, mixed $now): void
+    {
+        $inboxIds = array_values(array_unique(array_filter(array_merge(
+            array_map(fn (Sent $r) => (int) $r->inbox_id, $deliveredRows),
+            array_map(fn (array $item) => (int) $item['row']->inbox_id, $failedRows),
+        ))));
+
+        if ($inboxIds === []) {
+            return;
+        }
+
+        // Map (inbox_id, phone) → sent campaign_event (campaign_id, contact_id) created during blast.
+        $sentEvents = CampaignEvent::query()
+            ->where('event', CampaignEvent::SENT)
+            ->whereIn('meta->inbox_id', $inboxIds)
+            ->get(['campaign_id', 'contact_id', 'phone', 'meta']);
+
+        if ($sentEvents->isEmpty()) {
+            return;
+        }
+
+        $lookup = [];
+
+        foreach ($sentEvents as $event) {
+            $inboxId = (int) ($event->meta['inbox_id'] ?? 0);
+
+            if ($inboxId > 0 && $event->phone) {
+                $lookup[$inboxId.':'.$event->phone] = [
+                    'campaign_id' => $event->campaign_id,
+                    'contact_id' => $event->contact_id,
+                ];
+            }
+        }
+
+        $inserts = [];
+
+        foreach ($deliveredRows as $row) {
+            $match = $lookup[(int) $row->inbox_id.':'.$row->to] ?? null;
+
+            if (! $match) {
+                continue;
+            }
+
+            $inserts[] = [
+                'campaign_id' => $match['campaign_id'],
+                'contact_id' => $match['contact_id'],
+                'phone' => (string) $row->to,
+                'event' => CampaignEvent::DELIVERED,
+                'meta' => json_encode(['inbox_id' => (int) $row->inbox_id, 'dlr_status' => 'DELIVERED']),
+                'created_at' => $now,
+            ];
+        }
+
+        foreach ($failedRows as $item) {
+            $row = $item['row'];
+            $match = $lookup[(int) $row->inbox_id.':'.$row->to] ?? null;
+
+            if (! $match) {
+                continue;
+            }
+
+            $inserts[] = [
+                'campaign_id' => $match['campaign_id'],
+                'contact_id' => $match['contact_id'],
+                'phone' => (string) $row->to,
+                'event' => CampaignEvent::FAILED,
+                'meta' => json_encode(['inbox_id' => (int) $row->inbox_id, 'dlr_status' => $item['dlr_status']]),
+                'created_at' => $now,
+            ];
+        }
+
+        foreach (array_chunk($inserts, 500) as $chunk) {
+            CampaignEvent::query()->insertOrIgnore($chunk);
         }
     }
 

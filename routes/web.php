@@ -1,12 +1,22 @@
 <?php
 
 use App\Http\Controllers\ApiDocsController;
+use App\Http\Controllers\CampaignLinkController;
 use App\Http\Controllers\PaymentReturnController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+/*
+| Wrapped campaign CTA redirect: records the click, then sends the recipient to the client's link.
+*/
+Route::get('c/{campaign}/{code?}', [CampaignLinkController::class, 'redirect'])
+    ->whereNumber('campaign')
+    ->where('code', '[A-Za-z0-9_-]+')
+    ->middleware('throttle:120,1')
+    ->name('campaigns.cta.redirect');
 
 /*
 | After Paystack checkout the browser hits GET /api/callbacks/paystack,

@@ -10,6 +10,7 @@ use App\Models\Contact;
 use App\Models\Survey;
 use App\Services\RewardDisbursementService;
 use App\Services\Sms\SmsService;
+use App\Support\CampaignLink;
 use App\Support\ContactPlaceholders;
 use App\Support\GhanaPhone;
 use Illuminate\Database\Eloquent\Model;
@@ -129,6 +130,7 @@ class EngagementBlastService
                 $this->sms->audience($client->id, $groupIds, $template)->orderBy('id')->cursor(),
                 $vars,
                 $groupIds,
+                $item instanceof Campaign ? $item : null,
             );
         } catch (Throwable $e) {
             report($e);
@@ -161,9 +163,11 @@ class EngagementBlastService
      * @param  list<int>|null  $bulkGroupIds
      * @return array{sent: list<array{phone: string, contact_id: int|null, inbox_id: int|null}>, failed: list<array{phone: string, contact_id: int|null, reason: string}>, inbox_ids: list<int>}
      */
-    public function deliver(Client $client, string $sender, string $template, iterable $contacts, array $vars, ?array $bulkGroupIds = null): array
+    public function deliver(Client $client, string $sender, string $template, iterable $contacts, array $vars, ?array $bulkGroupIds = null, ?Campaign $campaign = null): array
     {
-        $personal = $this->isPersonal($template);
+        $hasContactPlaceholders = $this->isPersonal($template);
+        $wrapCtaLink = $campaign !== null && CampaignLink::shouldWrap(is_array($campaign->cta) ? $campaign->cta : null);
+        $personal = $hasContactPlaceholders || $wrapCtaLink;
         $seen = [];
         $buckets = [];
 
@@ -174,12 +178,20 @@ class EngagementBlastService
                 continue;
             }
 
-            if ($personal && ! ContactPlaceholders::hasAllRequired($contact, $template)) {
+            if ($hasContactPlaceholders && ! ContactPlaceholders::hasAllRequired($contact, $template)) {
                 continue;
             }
 
             $seen[$phone] = true;
-            $message = $this->render($template, $contact, $client, $vars);
+            $contactVars = $vars;
+
+            if ($wrapCtaLink) {
+                $wrapped = CampaignLink::url($campaign, $contact->id);
+                $contactVars['link'] = $wrapped;
+                $contactVars['ctaurl'] = $wrapped;
+            }
+
+            $message = $this->render($template, $contact, $client, $contactVars);
             $key = $personal ? md5($message) : 'all';
 
             $buckets[$key]['message'] = $message;
@@ -277,7 +289,9 @@ class EngagementBlastService
         if ($item instanceof Campaign) {
             $cta = is_array($item->cta) ? $item->cta : [];
             $ctaEnabled = $cta !== [] && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
-            $vars['link'] = $ctaEnabled ? trim((string) ($cta['url'] ?? $cta['value'] ?? '')) : '';
+            $vars['link'] = CampaignLink::shouldWrap($cta)
+                ? CampaignLink::url($item)
+                : ($ctaEnabled ? trim((string) ($cta['url'] ?? $cta['value'] ?? '')) : '');
             $vars['ctaurl'] = $vars['link'];
         }
 
@@ -291,7 +305,7 @@ class EngagementBlastService
 
     /**
      * The SMS text. Surveys always carry their link, and campaigns with an enabled CTA
-     * automatically include it when the body has no {link} / {ctaUrl} placeholder.
+     * automatically include it (wrapped for click tracking when it is a link).
      */
     public function template(Model $item): string
     {
@@ -308,13 +322,18 @@ class EngagementBlastService
             $ctaEnabled = $cta !== [] && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
             $ctaValue = $ctaEnabled ? trim((string) ($cta['url'] ?? $cta['value'] ?? '')) : '';
 
-            if ($ctaValue !== ''
-                && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $text)
-                && ! str_contains($text, $ctaValue)) {
-                $label = trim((string) ($cta['label'] ?? ''));
-                $suffix = $label !== '' ? "{$label}: {ctaUrl}" : '{ctaUrl}';
+            if ($ctaValue !== '' && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $text)) {
+                // If the client pasted the raw CTA link directly into the body, swap it for the tracked wrapper.
+                if (CampaignLink::shouldWrap($cta) && str_contains($text, $ctaValue)) {
+                    return str_replace($ctaValue, '{ctaUrl}', $text);
+                }
 
-                return $text !== '' ? $text.' '.$suffix : $suffix;
+                if (! str_contains($text, $ctaValue)) {
+                    $label = trim((string) ($cta['label'] ?? ''));
+                    $suffix = $label !== '' ? "{$label}: {ctaUrl}" : '{ctaUrl}';
+
+                    return $text !== '' ? $text.' '.$suffix : $suffix;
+                }
             }
         }
 

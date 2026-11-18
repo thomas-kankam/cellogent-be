@@ -8,10 +8,12 @@ use App\Jobs\DispatchEngagementBlastJob;
 use App\Models\Campaign;
 use App\Models\CampaignEvent;
 use App\Models\Client;
+use App\Models\Inbox;
 use App\Services\Engagement\EngagementSupport;
 use App\Services\Payments\CheckoutService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
+use App\Support\CampaignLink;
 use App\Support\GhanaPhone;
 use App\Support\SmsParts;
 use Illuminate\Database\Eloquent\Builder;
@@ -88,7 +90,9 @@ class CampaignService
             'body' => $campaign->body,
             'send_at' => optional($campaign->send_at)->toDateTimeString(),
             'cta' => $campaign->cta,
-            'tracking_url' => url('/api/public/campaigns/'.$campaign->id.'/click'),
+            'tracking_url' => CampaignLink::shouldWrap(is_array($campaign->cta) ? $campaign->cta : null)
+                ? CampaignLink::url($campaign)
+                : null,
             'audience' => [
                 'eligible_recipients' => (int) $campaign->eligible_recipients,
                 'not_eligible' => (int) $campaign->not_eligible,
@@ -471,18 +475,50 @@ class CampaignService
             ->groupBy('event')
             ->pluck('total', 'event');
 
-        $uniqueClicks = (int) CampaignEvent::query()
+        $uniquePhoneClicks = (int) CampaignEvent::query()
             ->where('campaign_id', $campaign->id)
             ->where('event', CampaignEvent::CLICK)
             ->whereNotNull('phone')
             ->distinct()
             ->count('phone');
 
+        $uniqueAnonClicks = (int) CampaignEvent::query()
+            ->where('campaign_id', $campaign->id)
+            ->where('event', CampaignEvent::CLICK)
+            ->whereNull('phone')
+            ->whereNotNull('meta->ip')
+            ->distinct()
+            ->count('meta->ip');
+
+        $uniqueClicks = $uniquePhoneClicks + $uniqueAnonClicks;
+
+        // Pull live delivery & failure totals from every SMS inbox created by this campaign.
+        $inboxIds = array_values(array_unique(array_filter(array_map('intval', array_merge(
+            $campaign->inbox_id ? [$campaign->inbox_id] : [],
+            is_array($stored['blast_inbox_ids'] ?? null) ? $stored['blast_inbox_ids'] : [],
+        )))));
+
+        $inboxSubmitted = 0;
+        $inboxDelivered = 0;
+        $inboxFailed = 0;
+
+        if ($inboxIds !== []) {
+            $totals = Inbox::query()
+                ->whereIn('id', $inboxIds)
+                ->selectRaw('COALESCE(SUM(submitted_count), 0) as submitted, COALESCE(SUM(delivered_count), 0) as delivered, COALESCE(SUM(failed_count), 0) as failed')
+                ->first();
+
+            $inboxSubmitted = (int) ($totals->submitted ?? 0);
+            $inboxDelivered = (int) ($totals->delivered ?? 0);
+            $inboxFailed = (int) ($totals->failed ?? 0);
+        }
+
         $merge = fn (string $event, string $key) => max((int) ($stored[$key] ?? 0), (int) ($counts[$event] ?? 0));
 
-        $sent = $merge(CampaignEvent::SENT, 'sent');
-        $delivered = $merge(CampaignEvent::DELIVERED, 'delivered');
-        $failed = $merge(CampaignEvent::FAILED, 'failed');
+        $sent = max($merge(CampaignEvent::SENT, 'sent'), $inboxSubmitted);
+        $delivered = max($merge(CampaignEvent::DELIVERED, 'delivered'), $inboxDelivered);
+        $failed = max($merge(CampaignEvent::FAILED, 'failed'), $inboxFailed);
+        $smsPending = max(0, $sent - $delivered - $failed);
         $clicks = $merge(CampaignEvent::CLICK, 'clicks');
         $disbursed = $merge(CampaignEvent::REWARD_DISBURSED, 'rewards_disbursed');
         $rewardsFailed = $merge(CampaignEvent::REWARD_FAILED, 'rewards_failed');
@@ -493,15 +529,17 @@ class CampaignService
 
         $unit = EngagementSupport::unitCost(is_array($campaign->reward) ? $campaign->reward : null);
         $actual = isset($stored['actual_cost']) ? round((float) $stored['actual_cost'], 2) : round($disbursed * $unit, 2);
+        $clickBase = $delivered > 0 ? $delivered : $sent;
 
         $summary = [
             'sent' => $sent,
             'delivered' => $delivered,
             'failed' => $failed,
+            'pending' => $smsPending,
             'clicks' => $clicks,
             'unique_clicks' => max($uniqueClicks, (int) ($stored['unique_clicks'] ?? 0)),
             'delivery_rate' => $sent > 0 ? round($delivered / $sent * 100, 2) : 0.0,
-            'click_rate' => $delivered > 0 ? round($clicks / $delivered * 100, 2) : 0.0,
+            'click_rate' => $clickBase > 0 ? round($clicks / $clickBase * 100, 2) : 0.0,
             'eligible_recipients' => (int) $campaign->eligible_recipients,
         ];
 
@@ -560,15 +598,16 @@ class CampaignService
     /**
      * Public link click. Only campaigns that have gone out can be tracked.
      *
+     * @param  array<string, mixed>  $meta
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function click(Campaign $campaign, ?string $phone = null): array
+    public function click(Campaign $campaign, ?string $phone = null, array $meta = []): array
     {
         if (! in_array($campaign->status, [Campaign::STATUS_ACTIVE, Campaign::STATUS_PAUSED, Campaign::STATUS_COMPLETED], true)) {
             return $this->result(true, 'Campaign not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        $result = $this->recordEvent($campaign, CampaignEvent::CLICK, $phone);
+        $result = $this->recordEvent($campaign, CampaignEvent::CLICK, $phone, $meta);
 
         if ($result['in_error']) {
             return $result;
@@ -833,13 +872,18 @@ class CampaignService
 
         if (is_array($cta) && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
             $ctaValue = trim((string) ($cta['url'] ?? $cta['value'] ?? ''));
+            $renderedCta = CampaignLink::shouldWrap($cta)
+                ? ($existing ? CampaignLink::url($existing, 999999) : CampaignLink::sampleUrl())
+                : $ctaValue;
 
-            if ($ctaValue !== ''
-                && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $smsText)
-                && ! str_contains($smsText, $ctaValue)) {
-                $label = trim((string) ($cta['label'] ?? ''));
-                $suffix = $label !== '' ? "{$label}: {$ctaValue}" : $ctaValue;
-                $smsText = $smsText !== '' ? $smsText.' '.$suffix : $suffix;
+            if ($ctaValue !== '' && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $smsText)) {
+                if (CampaignLink::shouldWrap($cta) && str_contains($smsText, $ctaValue)) {
+                    $smsText = str_replace($ctaValue, $renderedCta, $smsText);
+                } elseif (! str_contains($smsText, $ctaValue)) {
+                    $label = trim((string) ($cta['label'] ?? ''));
+                    $suffix = $label !== '' ? "{$label}: {$renderedCta}" : $renderedCta;
+                    $smsText = $smsText !== '' ? $smsText.' '.$suffix : $suffix;
+                }
             }
         }
 
