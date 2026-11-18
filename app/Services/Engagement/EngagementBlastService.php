@@ -10,6 +10,7 @@ use App\Models\Contact;
 use App\Models\Survey;
 use App\Services\RewardDisbursementService;
 use App\Services\Sms\SmsService;
+use App\Support\ContactPlaceholders;
 use App\Support\GhanaPhone;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -125,7 +126,7 @@ class EngagementBlastService
                 $client,
                 (string) $item->sender,
                 $template,
-                $this->sms->audience($client->id, $groupIds)->orderBy('id')->cursor(),
+                $this->sms->audience($client->id, $groupIds, $template)->orderBy('id')->cursor(),
                 $vars,
                 $groupIds,
             );
@@ -170,6 +171,10 @@ class EngagementBlastService
             $phone = GhanaPhone::toMobile((string) $contact->phone_number);
 
             if (! $phone || isset($seen[$phone])) {
+                continue;
+            }
+
+            if ($personal && ! ContactPlaceholders::hasAllRequired($contact, $template)) {
                 continue;
             }
 
@@ -227,7 +232,7 @@ class EngagementBlastService
      */
     public function isPersonal(string $template): bool
     {
-        return (bool) preg_match('/\{\s*(first_?name|last_?name|name|full_?name)\s*\}/i', $template);
+        return ContactPlaceholders::hasContactPlaceholders($template);
     }
 
     /**
@@ -235,25 +240,10 @@ class EngagementBlastService
      */
     public function render(string $template, Contact $contact, Client $client, array $vars): string
     {
-        $first = trim((string) $contact->first_name);
-        $last = trim((string) $contact->last_name);
+        // Known campaign/survey placeholders with nothing to show (no reward, no link…) disappear instead of being texted as {braces}.
+        $extra = $vars + array_fill_keys(['rewardamount', 'rewardname', 'rewardtype', 'bundlesize', 'link', 'ctaurl', 'surveyurl'], '');
 
-        // Known placeholders with nothing to show (no reward, no link…) disappear instead of being texted as {braces}.
-        $values = $vars + array_fill_keys(['rewardamount', 'rewardname', 'rewardtype', 'bundlesize', 'link', 'ctaurl', 'surveyurl'], '') + [
-            'firstname' => $first !== '' ? $first : 'there',
-            'lastname' => $last,
-            'name' => $first !== '' ? trim($first.' '.$last) : 'there',
-            'fullname' => $first !== '' ? trim($first.' '.$last) : 'there',
-            'businessname' => (string) ($client->business_name ?: trim($client->first_name.' '.$client->last_name)),
-        ];
-
-        $text = preg_replace_callback('/\{\s*([A-Za-z_]+)\s*\}/', function (array $m) use ($values) {
-            $key = strtolower(str_replace('_', '', $m[1]));
-
-            return array_key_exists($key, $values) ? (string) $values[$key] : $m[0];
-        }, $template) ?? $template;
-
-        return trim(preg_replace('/[ \t]{2,}/', ' ', $text) ?? $text);
+        return ContactPlaceholders::render($template, $contact, $client, $extra);
     }
 
     /**

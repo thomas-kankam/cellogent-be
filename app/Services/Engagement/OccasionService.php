@@ -94,7 +94,8 @@ class OccasionService
         }
 
         $groupIds = array_map('intval', $campaign->contact_group_ids ?? []);
-        $contacts = $this->sms->audience($client->id, $groupIds);
+        $template = $this->blasts->template($campaign);
+        $contacts = $this->sms->audience($client->id, $groupIds, $template);
 
         if ($campaign->occasion_type === 'birthday') {
             if (! $campaign->repeat_yearly) {
@@ -147,7 +148,7 @@ class OccasionService
         $delivery = $this->blasts->deliver(
             $client,
             (string) $campaign->sender,
-            $this->blasts->template($campaign),
+            $template,
             $mine,
             $this->blasts->vars($campaign),
         );

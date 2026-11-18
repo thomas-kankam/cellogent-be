@@ -599,8 +599,8 @@ class CampaignService
 
         $snapshot = is_array($campaign->reward) ? $campaign->reward : null;
         $needsBeneficiary = $campaign->reward_enabled && $this->support->rewardNeedsBeneficiary($snapshot);
-        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary);
-        $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false) : $audience;
+        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary, (string) $campaign->body);
+        $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false, (string) $campaign->body) : $audience;
 
         if ($snapshot && is_numeric($override) && (float) $override > 0 && ($snapshot['type'] ?? null) === 'data') {
             $snapshot['estimate_override'] = round((float) $override, 2);
@@ -824,9 +824,9 @@ class CampaignService
         }
 
         $needsBeneficiary = $reward['enabled'] && $this->support->rewardNeedsBeneficiary($reward['snapshot'] ?? null);
-        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary);
+        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary, $body);
         // SMS can still go to the full reachable list; reward cost uses verified-only when required.
-        $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false) : $audience;
+        $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false, $body) : $audience;
         $eligible = $audience['eligible'];
 
         $smsText = $body;

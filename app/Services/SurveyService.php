@@ -16,8 +16,8 @@ use App\Support\ApiReason;
 use App\Support\GhanaPhone;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -47,12 +47,12 @@ class SurveyService
     {
         $query = Survey::query()->withCount('questions')->where('client_id', $client->id)->latest('id');
 
-        if (! empty($filters['status'])) {
+        if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
-        if (! empty($filters['search'])) {
-            $query->where('name', 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], (string) $filters['search']).'%');
+        if (!empty($filters['search'])) {
+            $query->where('name', 'like', '%' . str_replace(['%', '_'], ['\%', '\_'], (string) $filters['search']) . '%');
         }
 
         return $query;
@@ -81,7 +81,7 @@ class SurveyService
             'send_at' => optional($survey->send_at)->toDateTimeString(),
             'public_token' => $survey->public_token,
             'survey_url' => $this->surveyUrl($survey),
-            'questions' => $survey->questions->map(fn (SurveyQuestion $q) => $this->presentQuestion($q))->values()->all(),
+            'questions' => $survey->questions->map(fn(SurveyQuestion $q) => $this->presentQuestion($q))->values()->all(),
             'audience' => [
                 'eligible_recipients' => (int) $survey->eligible_recipients,
                 'not_eligible' => (int) $survey->not_eligible,
@@ -143,7 +143,7 @@ class SurveyService
             'intro' => $survey->intro,
             'status' => $survey->status,
             'accepting_responses' => $survey->status === Survey::STATUS_ACTIVE,
-            'questions' => $survey->questions->map(fn (SurveyQuestion $q) => $this->presentQuestion($q))->values()->all(),
+            'questions' => $survey->questions->map(fn(SurveyQuestion $q) => $this->presentQuestion($q))->values()->all(),
             'reward' => $reward ? [
                 'name' => $reward['name'] ?? null,
                 'type' => $reward['type'] ?? null,
@@ -227,7 +227,7 @@ class SurveyService
      */
     public function update(Client $client, Survey $survey, array $input): array
     {
-        if (! in_array($survey->status, Survey::EDITABLE, true)) {
+        if (!in_array($survey->status, Survey::EDITABLE, true)) {
             return $this->result(true, 'Only draft, funded or paused surveys can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
@@ -257,7 +257,7 @@ class SurveyService
         if ($survey->wallet_hold_id) {
             $needsMore = $attributes['reward_enabled'] && (float) $attributes['estimated_cost'] > $reserved + 0.00001;
 
-            if (! $attributes['reward_enabled'] || $needsMore) {
+            if (!$attributes['reward_enabled'] || $needsMore) {
                 if ($survey->status === Survey::STATUS_PAUSED && $needsMore) {
                     return $this->result(true, 'The new audience or reward costs more than the reserved funds. Cancel this survey and create a new one.', ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
                         'reserved' => $reserved,
@@ -299,7 +299,7 @@ class SurveyService
      */
     public function delete(Client $client, Survey $survey): array
     {
-        if (! in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
+        if (!in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
             return $this->result(true, 'Cancel or complete this survey before deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
@@ -321,13 +321,13 @@ class SurveyService
     {
         $method = (string) ($input['method'] ?? 'wallet');
 
-        if (! in_array($method, self::FUND_METHODS, true)) {
+        if (!in_array($method, self::FUND_METHODS, true)) {
             return $this->result(true, 'Choose a valid payment method.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
-                'method' => ['Allowed: '.implode(', ', self::FUND_METHODS)],
+                'method' => ['Allowed: ' . implode(', ', self::FUND_METHODS)],
             ]);
         }
 
-        if (! EngagementSupport::rewardOn($survey)) {
+        if (!EngagementSupport::rewardOn($survey)) {
             return $this->result(false, 'This survey has no reward, so no funding is needed. You can activate it.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey));
         }
 
@@ -354,11 +354,11 @@ class SurveyService
                 'phone_number' => $input['phone_number'] ?? null,
                 'network' => $input['network'] ?? null,
                 'amount' => $required,
-                'name' => 'Survey funding: '.$survey->name,
+                'name' => 'Survey funding: ' . $survey->name,
                 'survey_id' => $survey->id,
             ]);
 
-            if (! $started['in_error']) {
+            if (!$started['in_error']) {
                 $survey->update(['funding_method' => $method, 'payment_id' => $started['data']['id'] ?? null]);
                 $started['data']['survey_id'] = $survey->id;
             }
@@ -369,7 +369,7 @@ class SurveyService
         $outcome = DB::transaction(function () use ($client, $survey, $required) {
             $locked = Survey::query()->lockForUpdate()->find($survey->id);
 
-            if (! $locked || $locked->status !== Survey::STATUS_DRAFT || $locked->wallet_hold_id) {
+            if (!$locked || $locked->status !== Survey::STATUS_DRAFT || $locked->wallet_hold_id) {
                 return $this->result(true, 'Only unfunded draft surveys can be funded.', ApiCode::BAD_REQUEST, ApiReason::ALREADY_PROCESSED);
             }
 
@@ -408,10 +408,10 @@ class SurveyService
     public function activate(Client $client, Survey $survey): array
     {
         $hasReward = EngagementSupport::rewardOn($survey);
-        $ready = $survey->status === Survey::STATUS_FUNDED
-            || ($survey->status === Survey::STATUS_DRAFT && ! $hasReward);
+        $ready = $survey->status === Survey::STATUS_FUNDED ||
+            ($survey->status === Survey::STATUS_DRAFT && !$hasReward);
 
-        if (! $ready) {
+        if (!$ready) {
             $message = $survey->status === Survey::STATUS_DRAFT && $hasReward
                 ? 'Fund this survey before activating it.'
                 : 'Only draft surveys can be activated.';
@@ -419,11 +419,11 @@ class SurveyService
             return $this->result(true, $message, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        if ($hasReward && ! $this->support->isFunded($survey)) {
+        if ($hasReward && !$this->support->isFunded($survey)) {
             return $this->result(true, 'The reserved funds for this survey are no longer available. Fund it again.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
-        if (! $survey->questions()->exists()) {
+        if (!$survey->questions()->exists()) {
             return $this->result(true, 'Add at least one question before activating.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
@@ -468,7 +468,7 @@ class SurveyService
      */
     public function resume(Client $client, Survey $survey): array
     {
-        if (EngagementSupport::rewardOn($survey) && ! $this->support->isFunded($survey)) {
+        if (EngagementSupport::rewardOn($survey) && !$this->support->isFunded($survey)) {
             return $this->result(true, 'The reserved funds for this survey are no longer available.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
@@ -586,7 +586,7 @@ class SurveyService
     {
         $survey = $this->findByToken($token);
 
-        if (! $survey || ! $this->isVisible($survey)) {
+        if (!$survey || !$this->isVisible($survey)) {
             return $this->result(true, 'Survey not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
@@ -602,7 +602,7 @@ class SurveyService
     {
         $survey = $this->findByToken($token);
 
-        if (! $survey || ! $this->isVisible($survey)) {
+        if (!$survey || !$this->isVisible($survey)) {
             return $this->result(true, 'Survey not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
@@ -619,7 +619,7 @@ class SurveyService
                     ->lockForUpdate()
                     ->first();
 
-                if (! $response) {
+                if (!$response) {
                     $contact = $this->support->contactForPhone($survey->client, array_map('intval', $survey->contact_group_ids ?? []), $mobile);
 
                     try {
@@ -632,7 +632,7 @@ class SurveyService
                     } catch (UniqueConstraintViolationException) {
                         $firstClick = false;
                     }
-                } elseif (! $response->clicked_at) {
+                } elseif (!$response->clicked_at) {
                     $response->update(['clicked_at' => now()]);
                 } else {
                     $firstClick = false;
@@ -659,7 +659,7 @@ class SurveyService
     {
         $survey = $this->findByToken($token);
 
-        if (! $survey || ! $this->isVisible($survey)) {
+        if (!$survey || !$this->isVisible($survey)) {
             return $this->result(true, 'Survey not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
@@ -669,7 +669,7 @@ class SurveyService
 
         $mobile = GhanaPhone::toMobile($phone);
 
-        if (! $mobile) {
+        if (!$mobile) {
             return $this->result(true, 'Enter a valid phone number.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
                 'phone' => ['Enter a valid phone number.'],
             ]);
@@ -679,7 +679,7 @@ class SurveyService
         $contact = $this->support->contactForPhone($survey->client, $groupIds, $mobile);
 
         // Rewards go only to the people the survey was sent to.
-        if (EngagementSupport::rewardOn($survey) && ! $contact) {
+        if (EngagementSupport::rewardOn($survey) && !$contact) {
             return $this->result(true, 'This number is not on the list for this survey.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
         }
 
@@ -693,7 +693,7 @@ class SurveyService
             $outcome = DB::transaction(function () use ($survey, $mobile, $contact, $clean) {
                 $locked = Survey::query()->lockForUpdate()->find($survey->id);
 
-                if (! $locked || $locked->status !== Survey::STATUS_ACTIVE) {
+                if (!$locked || $locked->status !== Survey::STATUS_ACTIVE) {
                     return $this->result(true, 'This survey is not accepting responses.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
                 }
 
@@ -709,7 +709,7 @@ class SurveyService
 
                 $analytics = is_array($locked->analytics) ? $locked->analytics : [];
 
-                if (! $response || ! $response->clicked_at) {
+                if (!$response || !$response->clicked_at) {
                     $analytics['clicks'] = (int) ($analytics['clicks'] ?? 0) + 1;
                     $locked->update(['analytics' => $analytics]);
                 }
@@ -721,8 +721,8 @@ class SurveyService
 
                 if (EngagementSupport::rewardOn($locked)) {
                     $needsBeneficiary = $this->support->rewardNeedsBeneficiary($locked->reward);
-                    $canReward = ! $needsBeneficiary
-                        || ($contact && $contact->beneficiary_status === \App\Models\Contact::BENEFICIARY_VERIFIED);
+                    $canReward = !$needsBeneficiary ||
+                        ($contact && $contact->beneficiary_status === \App\Models\Contact::BENEFICIARY_VERIFIED);
 
                     $unit = EngagementSupport::unitCost($locked->reward);
                     $committed = (float) SurveyResponse::query()
@@ -731,7 +731,7 @@ class SurveyService
                         ->count() * $unit;
                     $room = $this->support->holdRemaining($locked) - $committed;
 
-                    $rewardStatus = ! $canReward
+                    $rewardStatus = !$canReward
                         ? 'ineligible'
                         : ($unit > 0 && $room + 0.00001 >= $unit ? 'pending' : 'exhausted');
                     $rewardMeta = [
@@ -787,11 +787,13 @@ class SurveyService
         }
 
         $snapshot = is_array($survey->reward) ? $survey->reward : null;
+        $surveyText = trim((string) ($survey->body ?: $survey->intro ?: $survey->name));
         $audience = $this->support->audience(
             $client,
             $groups,
             true,
             $survey->reward_enabled && $this->support->rewardNeedsBeneficiary($snapshot),
+            $surveyText,
         );
 
         if ($snapshot && is_numeric($override) && (float) $override > 0 && ($snapshot['type'] ?? null) === 'data') {
@@ -822,7 +824,7 @@ class SurveyService
     {
         $base = rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/');
 
-        return $base.'/surveys/'.$survey->public_token;
+        return $base . '/surveys/' . $survey->public_token;
     }
 
     protected function newToken(): string
@@ -844,7 +846,7 @@ class SurveyService
         $moved = DB::transaction(function () use ($survey, $from, $to, $extra, $release) {
             $locked = Survey::query()->lockForUpdate()->find($survey->id);
 
-            if (! $locked || ! in_array($locked->status, $from, true)) {
+            if (!$locked || !in_array($locked->status, $from, true)) {
                 return false;
             }
 
@@ -857,11 +859,11 @@ class SurveyService
             return true;
         }, 3);
 
-        if (! $moved) {
-            return $this->result(true, 'This action is not available for a '.$survey->fresh()->status.' survey.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if (!$moved) {
+            return $this->result(true, 'This action is not available for a ' . $survey->fresh()->status . ' survey.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        $this->activity()->record('Survey '.$action, 'survey', $action, 'client', $client, $client, [
+        $this->activity()->record('Survey ' . $action, 'survey', $action, 'client', $client, $client, [
             'survey_id' => $survey->id,
         ]);
 
@@ -894,7 +896,7 @@ class SurveyService
         if (array_key_exists('send_at', $input)) {
             $rawSendAt = is_string($input['send_at']) ? trim($input['send_at']) : $input['send_at'];
 
-            if (! $rawSendAt) {
+            if (!$rawSendAt) {
                 $sendAt = null;
             } elseif (is_string($rawSendAt) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawSendAt)) {
                 $parsedDate = Carbon::parse($rawSendAt);
@@ -938,7 +940,8 @@ class SurveyService
         }
 
         $needsBeneficiary = $reward['enabled'] && $this->support->rewardNeedsBeneficiary($reward['snapshot'] ?? null);
-        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary);
+        $surveyText = trim((string) ($get('body') ?: $get('intro') ?: $name));
+        $audience = $this->support->audience($client, $groups, true, $needsBeneficiary, $surveyText);
 
         return [
             'name' => $name,
@@ -965,18 +968,18 @@ class SurveyService
     protected function rewardFields(array $input, ?Survey $existing): array
     {
         // Rewards are switched off for now: always save reward_enabled = false.
-        if (! EngagementSupport::REWARDS_ENABLED) {
+        if (!EngagementSupport::REWARDS_ENABLED) {
             return ['enabled' => false, 'snapshot' => null, 'reward_id' => null];
         }
 
         $given = $this->support->rewardInput($input);
         $override = $input['estimated_cost'] ?? ($given['inline']['estimate_override'] ?? null);
 
-        if (! $given['present']) {
+        if (!$given['present']) {
             $snapshot = $existing && is_array($existing->reward) ? $existing->reward : null;
             $enabled = (bool) ($existing?->reward_enabled ?? false);
             $id = $existing?->reward_id;
-        } elseif (! $given['enabled']) {
+        } elseif (!$given['enabled']) {
             return ['enabled' => false, 'snapshot' => null, 'reward_id' => null];
         } elseif ($given['reward_id']) {
             $reward = $this->support->reward($given['reward_id']);
@@ -1021,12 +1024,12 @@ class SurveyService
      */
     protected function questionRows(mixed $questions): array
     {
-        if (! is_array($questions)) {
+        if (!is_array($questions)) {
             return $this->invalid(['questions' => ['Questions must be a list.']]);
         }
 
         if (count($questions) > self::MAX_QUESTIONS) {
-            return $this->invalid(['questions' => ['A survey can have at most '.self::MAX_QUESTIONS.' questions.']]);
+            return $this->invalid(['questions' => ['A survey can have at most ' . self::MAX_QUESTIONS . ' questions.']]);
         }
 
         $rows = [];
@@ -1042,12 +1045,12 @@ class SurveyService
                 $errors["questions.{$index}.prompt"] = ['The question is required.'];
             }
 
-            if (! in_array($type, Survey::QUESTION_TYPES, true)) {
-                $errors["questions.{$index}.type"] = ['Allowed: '.implode(', ', Survey::QUESTION_TYPES)];
+            if (!in_array($type, Survey::QUESTION_TYPES, true)) {
+                $errors["questions.{$index}.type"] = ['Allowed: ' . implode(', ', Survey::QUESTION_TYPES)];
             } elseif (in_array($type, ['single_choice', 'multiple_choice'], true)) {
                 $options = collect($question['options'] ?? [])
-                    ->filter(fn ($option) => is_scalar($option) && trim((string) $option) !== '')
-                    ->map(fn ($option) => trim((string) $option))
+                    ->filter(fn($option) => is_scalar($option) && trim((string) $option) !== '')
+                    ->map(fn($option) => trim((string) $option))
                     ->unique()
                     ->values()
                     ->all();
@@ -1085,7 +1088,7 @@ class SurveyService
         $keep = [];
 
         foreach ($rows as $row) {
-            $id = $row['id'];
+            $id = $row['id'] ?? null;
             unset($row['id']);
 
             if ($id && $existing->has($id)) {
@@ -1173,7 +1176,7 @@ class SurveyService
             case 'single_choice':
                 return is_scalar($value) && in_array((string) $value, $options, true) ? ['value' => (string) $value] : null;
             case 'multiple_choice':
-                if (! is_array($value)) {
+                if (!is_array($value)) {
                     return null;
                 }
 

@@ -15,6 +15,7 @@ use App\Services\Utilities\SwiftCatalog;
 use App\Services\WalletService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
+use App\Support\ContactPlaceholders;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -115,12 +116,13 @@ class EngagementSupport
 
     /**
      * Distinct phones reachable in the groups. Phones marked DND in any selected group are excluded.
+     * When `$template` uses contact placeholders, contacts missing any required field are also excluded.
      * When $requireBeneficiary is true (YELLO/MTN SME data rewards), only verified beneficiaries count as eligible.
      *
      * @param  list<int>  $groupIds
      * @return array{eligible: int, not_eligible: int, total: int, verified: int|null, requires_beneficiary: bool}
      */
-    public function audience(Client $client, array $groupIds, bool $excludeDnd = true, bool $requireBeneficiary = false): array
+    public function audience(Client $client, array $groupIds, bool $excludeDnd = true, bool $requireBeneficiary = false, ?string $template = null): array
     {
         $base = fn () => Contact::query()
             ->where('client_id', $client->id)
@@ -133,6 +135,10 @@ class EngagementSupport
 
         if ($excludeDnd) {
             $reachable->whereNotIn('phone_number', $base()->where('dnd_status', 'active')->select('phone_number'));
+        }
+
+        if ($template !== null && ContactPlaceholders::hasContactPlaceholders($template)) {
+            ContactPlaceholders::applyRequiredFilter($reachable, $template);
         }
 
         $reachableCount = (int) (clone $reachable)->distinct()->count('phone_number');

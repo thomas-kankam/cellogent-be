@@ -2,12 +2,15 @@
 
 namespace App\Jobs;
 
+use App\Models\Client;
+use App\Models\Contact;
 use App\Models\Inbox;
 use App\Models\Outbox;
 use App\Models\Sent;
 use App\Services\Sms\SmsInboxProgress;
 use App\Services\Sms\SmsService;
 use App\Services\Sms\SmsUnitService;
+use App\Support\ContactPlaceholders;
 use App\Support\LongQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -71,11 +74,23 @@ class PrepareBulkSmsJob implements ShouldQueue
             'updated_at' => $now,
         ];
 
-        $collect = function ($rows, string $column) use ($base, &$remaining) {
+        $personalized = ContactPlaceholders::hasContactPlaceholders($inbox->message);
+        $client = ($personalized && $inbox->client_id) ? Client::query()->find($inbox->client_id) : null;
+
+        $collect = function ($rows, string $column, ?callable $messageFor = null) use ($base, &$remaining) {
             $buffer = [];
 
             foreach ($rows as $row) {
-                $buffer[] = $base + ['to' => (string) $row->{$column}];
+                $message = $messageFor ? $messageFor($row) : $base['message'];
+
+                if ($message === null) {
+                    continue;
+                }
+
+                $buffer[] = $base + [
+                    'to' => (string) $row->{$column},
+                    'message' => $message,
+                ];
             }
 
             while ($buffer !== [] && $remaining > 0) {
@@ -89,13 +104,48 @@ class PrepareBulkSmsJob implements ShouldQueue
         if ($inbox->mode === 'reblast') {
             DB::table('sents')
                 ->where('retry_inbox_id', $inbox->id)
-                ->select(['id', 'to'])
-                ->chunkById(self::READ_CHUNK, fn ($rows) => $collect($rows, 'to'));
+                ->select(['id', 'to', 'message'])
+                ->chunkById(self::READ_CHUNK, function ($rows) use ($collect, $personalized, $inbox, $client) {
+                    if (! $personalized || ! $inbox->client_id) {
+                        return $collect($rows, 'to');
+                    }
+
+                    $phones = $rows->pluck('to')->map(fn ($p) => (string) $p)->unique()->all();
+                    $contacts = ContactPlaceholders::applyRequiredFilter(
+                        Contact::query()
+                            ->visible()
+                            ->where('client_id', $inbox->client_id)
+                            ->whereIn('phone_number', $phones),
+                        $inbox->message,
+                    )
+                        ->orderBy('id')
+                        ->get()
+                        ->keyBy(fn (Contact $c) => (string) $c->phone_number);
+
+                    return $collect($rows, 'to', function ($row) use ($contacts, $inbox, $client) {
+                        $contact = $contacts->get((string) $row->to);
+
+                        return $contact ? ContactPlaceholders::render($inbox->message, $contact, $client) : null;
+                    });
+                });
         } else {
-            $sms->audience((int) $inbox->client_id, $inbox->contact_group_ids ?? [])
+            $columns = $personalized
+                ? array_merge(['contacts.id'], array_map(fn (string $c) => "contacts.{$c}", ContactPlaceholders::CONTACT_COLUMNS))
+                : ['contacts.id', 'contacts.phone_number'];
+
+            $sms->audience((int) $inbox->client_id, $inbox->contact_group_ids ?? [], $inbox->message)
                 ->toBase()
-                ->select(['contacts.id', 'contacts.phone_number'])
-                ->chunkById(self::READ_CHUNK, fn ($rows) => $collect($rows, 'phone_number'), 'contacts.id', 'id');
+                ->select($columns)
+                ->chunkById(
+                    self::READ_CHUNK,
+                    fn ($rows) => $collect(
+                        $rows,
+                        'phone_number',
+                        $personalized ? fn ($row) => ContactPlaceholders::render($inbox->message, $row, $client) : null,
+                    ),
+                    'contacts.id',
+                    'id',
+                );
         }
 
         $inserted = DB::table('sents')->where('inbox_id', $inbox->id)->count();

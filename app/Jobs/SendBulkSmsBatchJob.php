@@ -48,13 +48,14 @@ class SendBulkSmsBatchJob implements ShouldQueue
         foreach (array_chunk($this->queuedRecipients(), $size) as $chunk) {
             SmsThrottle::await('bulk', count($chunk));
 
-            $response = $kairos->bulk(array_map(fn (string $to) => [
-                'to' => $to,
+            $response = $kairos->bulk(array_map(fn (array $row) => [
+                'to' => $row['to'],
                 'from' => $inbox->from,
-                'message' => $inbox->message,
+                'message' => $row['message'],
             ], $chunk), $inbox->id);
 
-            [$submitted, $failed] = $writer->apply($inbox->id, $chunk, $response);
+            $phones = array_column($chunk, 'to');
+            [$submitted, $failed] = $writer->apply($inbox->id, $phones, $response);
             $progress->recordSubmission($inbox, $submitted, $failed);
 
             // Surface a reference message_id on the inbox as soon as the first batch succeeds.
@@ -81,7 +82,7 @@ class SendBulkSmsBatchJob implements ShouldQueue
             return;
         }
 
-        $left = $this->queuedRecipients();
+        $left = array_column($this->queuedRecipients(), 'to');
 
         if ($left !== []) {
             app(SentWriter::class)->markFailed($inbox->id, $left, 'Not sent');
@@ -92,7 +93,7 @@ class SendBulkSmsBatchJob implements ShouldQueue
     }
 
     /**
-     * @return list<string>
+     * @return list<array{to: string, message: string}>
      */
     protected function queuedRecipients(): array
     {
@@ -100,8 +101,11 @@ class SendBulkSmsBatchJob implements ShouldQueue
             ->where('inbox_id', $this->inboxId)
             ->whereBetween('id', [$this->fromId, $this->toId])
             ->where('status', Sent::QUEUED)
-            ->pluck('to')
-            ->map(fn ($to) => (string) $to)
+            ->get(['to', 'message'])
+            ->map(fn ($row) => [
+                'to' => (string) $row->to,
+                'message' => (string) $row->message,
+            ])
             ->all();
     }
 }

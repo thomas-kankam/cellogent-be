@@ -17,6 +17,7 @@ use App\Models\SenderIdBlacklist;
 use App\Models\Sent;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
+use App\Support\ContactPlaceholders;
 use App\Support\GhanaPhone;
 use App\Support\SmsParts;
 use Illuminate\Database\Eloquent\Builder;
@@ -52,6 +53,40 @@ class SmsService
             ]);
         }
 
+        $message = $input['message'];
+        $valid = $recipients['valid'];
+
+        if (ContactPlaceholders::hasContactPlaceholders($message)) {
+            $eligiblePhones = ContactPlaceholders::applyRequiredFilter(
+                Contact::query()
+                    ->visible()
+                    ->where('client_id', $client->id)
+                    ->whereIn('phone_number', $valid)
+                    ->where(fn ($q) => $q->whereNull('dnd_status')->orWhere('dnd_status', '!=', 'active')),
+                $message,
+            )
+                ->distinct()
+                ->pluck('phone_number')
+                ->map(fn ($phone) => (string) $phone)
+                ->all();
+
+            $eligibleSet = array_flip($eligiblePhones);
+            $valid = array_values(array_filter($valid, fn (string $phone) => isset($eligibleSet[$phone])));
+
+            if ($valid === []) {
+                $fields = implode(', ', ContactPlaceholders::requiredPlaceholders($message));
+
+                return $this->result(
+                    true,
+                    "None of the selected recipients have all required placeholder fields ({$fields}).",
+                    ApiCode::BAD_REQUEST,
+                    ApiReason::INVALID,
+                );
+            }
+        } elseif (ContactPlaceholders::hasClientPlaceholders($message)) {
+            $message = ContactPlaceholders::renderClientOnly($message, $client);
+        }
+
         return $this->queue(
             client: $client,
             admin: null,
@@ -59,10 +94,10 @@ class SmsService
                 'type' => 'quick',
                 'request_type' => $requestType,
                 'from' => $sender,
-                'to' => implode(',', $recipients['valid']),
-                'message' => $input['message'],
+                'to' => implode(',', $valid),
+                'message' => $message,
             ],
-            recipients: count($recipients['valid']),
+            recipients: count($valid),
         );
     }
 
@@ -93,10 +128,20 @@ class SmsService
             ]);
         }
 
-        $audience = (int) $this->audience($client->id, $groupIds)->distinct()->count('phone_number');
+        $message = $input['message'];
+
+        if (! ContactPlaceholders::hasContactPlaceholders($message) && ContactPlaceholders::hasClientPlaceholders($message)) {
+            $message = ContactPlaceholders::renderClientOnly($message, $client);
+        }
+
+        $audience = (int) $this->audience($client->id, $groupIds, $message)->distinct()->count('phone_number');
 
         if ($audience === 0) {
-            return $this->result(true, 'These contact groups have no contacts that can receive SMS.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            $error = ContactPlaceholders::hasContactPlaceholders($message)
+                ? 'No contacts in the selected groups have all required placeholder fields ('.implode(', ', ContactPlaceholders::requiredPlaceholders($message)).').'
+                : 'These contact groups have no contacts that can receive SMS.';
+
+            return $this->result(true, $error, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         return $this->queue(
@@ -107,7 +152,7 @@ class SmsService
                 'request_type' => $requestType,
                 'from' => $sender,
                 'contact_group_ids' => $groupIds,
-                'message' => $input['message'],
+                'message' => $message,
             ],
             recipients: $audience,
         );
@@ -253,17 +298,24 @@ class SmsService
     }
 
     /**
-     * Contacts in the groups that can receive SMS (not DND, not in an upload being deleted).
+     * Contacts in the groups that can receive SMS (not DND, not in an upload being deleted,
+     * and having every contact placeholder referenced in `$template` populated).
      *
      * @param  list<int>  $groupIds
      */
-    public function audience(int $clientId, array $groupIds): Builder
+    public function audience(int $clientId, array $groupIds, ?string $template = null): Builder
     {
-        return Contact::query()
+        $query = Contact::query()
             ->visible()
             ->where('client_id', $clientId)
             ->whereIn('contact_group_id', $groupIds)
             ->where(fn ($q) => $q->whereNull('dnd_status')->orWhere('dnd_status', '!=', 'active'));
+
+        if ($template !== null && ContactPlaceholders::hasContactPlaceholders($template)) {
+            ContactPlaceholders::applyRequiredFilter($query, $template);
+        }
+
+        return $query;
     }
 
     public static function dispatch(Inbox $inbox): void
