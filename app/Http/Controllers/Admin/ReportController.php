@@ -30,7 +30,12 @@ class ReportController extends Controller
             return $this->apiResponse(true, 'Report not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        return $this->respondFrom($this->reports->run($report, $this->clientId($request), $request->only(self::FILTERS)));
+        $clientId = $this->clientId($request);
+        if ($clientId === false) {
+            return $this->apiResponse(true, 'client_id must be a positive integer.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, ['client_id' => ['Must be a positive integer.']]);
+        }
+
+        return $this->respondFrom($this->reports->run($report, $clientId, $request->only(self::FILTERS)));
     }
 
     public function export(Request $request, string $report): JsonResponse|BinaryFileResponse
@@ -39,7 +44,12 @@ class ReportController extends Controller
             return $this->apiResponse(true, 'Report not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        $result = $this->reports->run($report, $this->clientId($request), $request->only(self::FILTERS));
+        $clientId = $this->clientId($request);
+        if ($clientId === false) {
+            return $this->apiResponse(true, 'client_id must be a positive integer.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, ['client_id' => ['Must be a positive integer.']]);
+        }
+
+        $result = $this->reports->run($report, $clientId, $request->only(self::FILTERS));
 
         if ($result['in_error']) {
             return $this->respondFrom($result);
@@ -54,15 +64,30 @@ class ReportController extends Controller
             return $this->apiResponse(true, 'Export not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        $response = $this->exports->download($dataset, $this->clientId($request), $request->only(self::FILTERS), true);
+        $clientId = $this->clientId($request);
+        if ($clientId === false) {
+            return $this->apiResponse(true, 'client_id must be a positive integer.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, ['client_id' => ['Must be a positive integer.']]);
+        }
+
+        $response = $this->exports->download($dataset, $clientId, $request->only(self::FILTERS), true);
 
         return is_string($response)
             ? $this->apiResponse(true, $response, ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR)
             : $response;
     }
 
-    protected function clientId(Request $request): ?int
+    protected function clientId(Request $request): int|null|false
     {
-        return $request->filled('client_id') ? $request->integer('client_id') : null;
+        if (! $request->filled('client_id')) {
+            return null;
+        }
+
+        $raw = $request->input('client_id');
+
+        if (! is_numeric($raw) || (int) $raw < 1 || (string) (int) $raw !== trim((string) $raw)) {
+            return false;
+        }
+
+        return (int) $raw;
     }
 }

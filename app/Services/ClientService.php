@@ -60,7 +60,13 @@ class ClientService
         }
 
         if (array_key_exists('phone_number', $input)) {
-            $input['phone_number'] = GhanaPhone::normalize($input['phone_number']);
+            $phone = GhanaPhone::normalize($input['phone_number']);
+
+            if ($phone !== null && Client::query()->where('phone_number', $phone)->whereKeyNot($client->id)->exists()) {
+                return $this->result(true, 'This phone number is already registered.', ApiCode::BAD_REQUEST, ApiReason::PHONE_TAKEN);
+            }
+
+            $input['phone_number'] = $phone;
         }
 
         if (isset($input['account_type'])) {
@@ -76,6 +82,10 @@ class ClientService
 
         $before = $client->only($fields);
         $client->fill(collect($input)->only($fields)->all())->save();
+
+        if ($before['email'] !== $client->email) {
+            $client->tokens()->update(['revoked' => true]);
+        }
 
         if ($image) {
             $client->storeProfileImage($image, 'client');

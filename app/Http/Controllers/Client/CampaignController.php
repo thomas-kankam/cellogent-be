@@ -72,9 +72,9 @@ class CampaignController extends Controller
         return $this->owned($request, $campaign) ?? $this->respondFrom($this->campaigns->activate($request->user(), $campaign));
     }
 
-    public function rerun(Request $request, Campaign $campaign): JsonResponse
+    public function rerun(StoreCampaignRequest $request, Campaign $campaign): JsonResponse
     {
-        return $this->owned($request, $campaign) ?? $this->respondFrom($this->campaigns->rerun($request->user(), $campaign, $request->all()));
+        return $this->owned($request, $campaign) ?? $this->respondFrom($this->campaigns->rerun($request->user(), $campaign, $request->validated()));
     }
 
     public function pause(Request $request, Campaign $campaign): JsonResponse

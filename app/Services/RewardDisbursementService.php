@@ -743,11 +743,11 @@ class RewardDisbursementService
         }
 
         if (! empty($filters['from'])) {
-            $query->where('created_at', '>=', $filters['from']);
+            $query->where('created_at', '>=', \Illuminate\Support\Carbon::parse($filters['from'])->startOfDay());
         }
 
         if (! empty($filters['to'])) {
-            $query->where('created_at', '<=', $filters['to'].' 23:59:59');
+            $query->where('created_at', '<=', \Illuminate\Support\Carbon::parse($filters['to'])->endOfDay());
         }
 
         return $query;

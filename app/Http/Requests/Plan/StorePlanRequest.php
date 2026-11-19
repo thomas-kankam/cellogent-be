@@ -26,7 +26,7 @@ class StorePlanRequest extends ApiFormRequest
             // Up to 4 packages: e.g. 1 / 2 / 3 months + one non-expiry (months 0 or null).
             'details' => ['required', 'array', 'min:1', 'max:4'],
             'details.*.months' => ['nullable', 'integer', 'min:0', 'max:36'],
-            'details.*.units' => ['required', 'integer', 'min:0'],
+            'details.*.units' => ['required', 'integer', 'min:1'],
             'details.*.price' => ['required', 'numeric', 'min:0.01'],
         ];
     }

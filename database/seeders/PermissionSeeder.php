@@ -53,6 +53,9 @@ class PermissionSeeder extends Seeder
             ['module' => 'sms', 'name' => 'sms.view'],
             ['module' => 'sms', 'name' => 'sms.send'],
             ['module' => 'sms', 'name' => 'sms.aggregator'],
+
+            // Templates
+            ['module' => 'template', 'name' => 'template.manage'],
         ];
 
         foreach ($permissions as $permission) {

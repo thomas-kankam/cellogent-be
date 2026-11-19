@@ -90,9 +90,9 @@ class SurveyController extends Controller
         return $this->owned($request, $survey) ?? $this->respondFrom($this->surveys->activate($request->user(), $survey));
     }
 
-    public function rerun(Request $request, Survey $survey): JsonResponse
+    public function rerun(StoreSurveyRequest $request, Survey $survey): JsonResponse
     {
-        return $this->owned($request, $survey) ?? $this->respondFrom($this->surveys->rerun($request->user(), $survey, $request->all()));
+        return $this->owned($request, $survey) ?? $this->respondFrom($this->surveys->rerun($request->user(), $survey, $request->validated()));
     }
 
     public function pause(Request $request, Survey $survey): JsonResponse

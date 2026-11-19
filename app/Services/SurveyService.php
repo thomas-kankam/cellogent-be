@@ -21,6 +21,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Client surveys: SMS a link, collect answers on a public page, optionally pay a reward
@@ -368,6 +369,10 @@ class SurveyService
      */
     public function forceDelete(Client $client, Survey $survey): array
     {
+        if (!$survey->trashed() && in_array($survey->status, [Survey::STATUS_ACTIVE, Survey::STATUS_SCHEDULED], true)) {
+            return $this->result(true, 'Pause, cancel or complete this survey before permanently deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         $surveyId = $survey->id;
 
         DB::transaction(function () use ($survey) {

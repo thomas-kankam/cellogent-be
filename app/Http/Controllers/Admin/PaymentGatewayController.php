@@ -48,22 +48,34 @@ class PaymentGatewayController extends Controller
         }
 
         $data = $validator->validated();
-
-        if (($data['is_enabled'] ?? true) === false) {
-            $othersEnabled = PaymentGateway::query()->where('code', '!=', $gateway->code)->where('is_enabled', true)->exists();
-
-            if (! $othersEnabled) {
-                return $this->apiResponse(true, 'At least one payment gateway must stay enabled.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
-            }
-        }
-
         $before = $gateway->only(['is_enabled', 'priority']);
 
         if (array_key_exists('is_enabled', $data)) {
-            $gateway->update([
-                'is_enabled' => (bool) $data['is_enabled'],
-                'updated_by' => $request->user()->id,
-            ]);
+            $wantEnabled = filter_var($data['is_enabled'], FILTER_VALIDATE_BOOLEAN);
+
+            $blocked = \Illuminate\Support\Facades\DB::transaction(function () use ($gateway, $wantEnabled, $request) {
+                $locked = PaymentGateway::query()->lockForUpdate()->get();
+
+                if (! $wantEnabled) {
+                    $othersEnabled = $locked->contains(fn (PaymentGateway $g) => $g->code !== $gateway->code && (bool) $g->is_enabled);
+
+                    if (! $othersEnabled) {
+                        return true;
+                    }
+                }
+
+                $target = $locked->firstWhere('code', $gateway->code);
+                $target?->update([
+                    'is_enabled' => $wantEnabled,
+                    'updated_by' => $request->user()->id,
+                ]);
+
+                return false;
+            }, 3);
+
+            if ($blocked) {
+                return $this->apiResponse(true, 'At least one payment gateway must stay enabled.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            }
         }
 
         // Priority is always rewritten uniquely as 1..n (1 = primary). Never allow duplicates.
@@ -122,12 +134,10 @@ class PaymentGatewayController extends Controller
         }
 
         $before = $this->presentSettings();
+        $validatedCharges = $validator->validated()['charges'] ?? [];
 
-        foreach (CheckoutService::PURPOSES as $purpose) {
-            if (array_key_exists($purpose, $request->input('charges', []))) {
-                $value = $request->input("charges.{$purpose}");
-                Setting::put("charges.{$purpose}", $value === null ? 0 : round((float) $value, 2), $request->user()->id);
-            }
+        foreach ($validatedCharges as $purpose => $value) {
+            Setting::put("charges.{$purpose}", $value === null ? 0 : round((float) $value, 2), $request->user()->id);
         }
 
         $after = $this->presentSettings();

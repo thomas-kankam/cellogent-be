@@ -284,16 +284,23 @@ class UtilityService
                 $message = "{$count} {$kind} will receive this package.";
             }
 
-            // array_merge so quantity/amount override the unit presentPrice fields
-            // (PHP's + keeps left-hand keys and would leave amount as the single-pack price).
-            return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, array_merge($presented, [
+            $override = [
                 'quantity' => $count,
                 'unit_amount' => $unitSell,
                 'amount' => $total,
                 'currency' => config('payments.currency', 'GHS'),
                 'audience' => $audience,
                 'message' => $message,
-            ]));
+            ];
+
+            if ($admin) {
+                $override['cost'] = round((float) $unit['cost'] * $count, 2);
+                $override['profit'] = round($total - $override['cost'], 2);
+            }
+
+            // array_merge so quantity/amount/cost/profit override the unit presentPrice fields
+            // (PHP's + keeps left-hand keys and would leave amount as the single-pack price).
+            return $this->result(false, 'Quote ready.', ApiCode::SUCCESS, ApiReason::SUCCESS, array_merge($presented, $override));
         }
 
         $prices = $this->priceAll($specs, false);
@@ -347,6 +354,10 @@ class UtilityService
                 return $prices;
             }
 
+            if ($blocked = $this->assertBeneficiaries($prices)) {
+                return $blocked;
+            }
+
             return [
                 'name' => 'Utility purchase ('.count($prices).' items)',
                 'amount' => round(array_sum(array_column($prices, 'sell')), 2),
@@ -368,6 +379,10 @@ class UtilityService
 
         if ($price['order_type'] !== $purpose) {
             return 'This purchase type does not match the selected provider.';
+        }
+
+        if ($blocked = $this->assertBeneficiaries([$price])) {
+            return $blocked;
         }
 
         return ['name' => $price['name'], 'amount' => $price['sell'], 'meta' => ['utility' => $price]];

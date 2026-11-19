@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\SenderIdBlacklistController as AdminSenderIdBlack
 use App\Http\Controllers\Admin\SenderIdController as AdminSenderIdController;
 use App\Http\Controllers\Admin\SmsController as AdminSmsController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
+use App\Http\Controllers\Admin\TemplateController as AdminTemplateController;
 use App\Http\Controllers\Admin\UtilityController as AdminUtilityController;
 use App\Http\Controllers\Admin\WalletController as AdminWalletController;
 use App\Http\Controllers\Auth\AdminAuthController;
@@ -39,6 +40,7 @@ use App\Http\Controllers\Client\SenderIdController as ClientSenderIdController;
 use App\Http\Controllers\Client\SmsController as ClientSmsController;
 use App\Http\Controllers\Client\SubscriptionController as ClientSubscriptionController;
 use App\Http\Controllers\Client\SurveyController as ClientSurveyController;
+use App\Http\Controllers\Client\TemplateController as ClientTemplateController;
 use App\Http\Controllers\Client\UtilityController as ClientUtilityController;
 use App\Http\Controllers\Client\WalletController as ClientWalletController;
 use App\Http\Controllers\PaymentWebhookController;
@@ -217,6 +219,14 @@ Route::prefix('client')->group(function () {
         Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox')->middleware('throttle:sms-api');
         // resend quick sms type only
         Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox')->middleware('throttle:sms-api');
+
+        Route::get('templates', [ClientTemplateController::class, 'index']);
+        Route::post('templates', [ClientTemplateController::class, 'store']);
+        Route::whereNumber('template')->group(function () {
+            Route::get('templates/{template}', [ClientTemplateController::class, 'show']);
+            Route::put('templates/{template}', [ClientTemplateController::class, 'update']);
+            Route::delete('templates/{template}', [ClientTemplateController::class, 'destroy']);
+        });
     });
 });
 
@@ -406,6 +416,16 @@ Route::prefix('admin')->group(function () {
             Route::get('sms/aggregator/balance', [AdminSmsController::class, 'aggregatorBalance']);
             Route::get('sms/aggregator/requests', [AdminSmsController::class, 'aggregatorRequests']);
             Route::get('sms/aggregator/delivery-receipts/{sequenceNo}', [AdminSmsController::class, 'deliveryReceipt']);
+        });
+
+        Route::middleware('permission:template.manage,sms.view')->group(function () {
+            Route::get('templates', [AdminTemplateController::class, 'index']);
+            Route::post('templates', [AdminTemplateController::class, 'store']);
+            Route::whereNumber('template')->group(function () {
+                Route::get('templates/{template}', [AdminTemplateController::class, 'show']);
+                Route::put('templates/{template}', [AdminTemplateController::class, 'update']);
+                Route::delete('templates/{template}', [AdminTemplateController::class, 'destroy']);
+            });
         });
     });
 });

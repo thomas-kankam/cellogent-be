@@ -71,6 +71,10 @@ class AdminService
 
         $admin->fill(collect($input)->only(['first_name', 'last_name', 'email', 'phone_number', 'role_id'])->all())->save();
 
+        if ($before['email'] !== $admin->email || (int) $before['role_id'] !== (int) $admin->role_id) {
+            $this->revokeTokens($admin);
+        }
+
         if ($image) {
             $admin->storeProfileImage($image, 'admin');
             ProcessProfileImageJob::dispatch('admin', (int) $admin->id, (string) $admin->profile_image);

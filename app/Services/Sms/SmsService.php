@@ -439,6 +439,13 @@ class SmsService
                 'recipients' => $inbox->recipients_count,
                 'units' => $inbox->units_used,
             ]);
+        } elseif ($admin) {
+            $this->activity()->record('Admin SMS queued', 'sms', 'created', 'admin', $admin, null, [
+                'sms_id' => $inbox->id,
+                'type' => $inbox->type,
+                'recipients' => $inbox->recipients_count,
+                'units' => $inbox->units_used,
+            ]);
         }
 
         $data = $admin ? $this->presenter->forAdmin($inbox->fresh()) : $this->presenter->forClient($inbox->fresh());

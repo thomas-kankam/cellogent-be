@@ -316,7 +316,7 @@ class OnboardingService
             $starts = now();
             $ends = $starts->copy()->addMonth();
 
-            Subscription::query()->firstOrCreate(
+            $subscription = Subscription::query()->firstOrCreate(
                 ['client_id' => $client->id],
                 [
                     'plan_id' => null,
@@ -331,29 +331,31 @@ class OnboardingService
                 ],
             );
 
-            SubscriptionArchive::create([
-                'client_id' => $client->id,
-                'plan_id' => null,
-                'plan_name' => 'Trial',
-                'plan_price' => 0,
-                'plan_type' => 'trial',
-                'duration_in_months' => 1,
-                'starts_at' => $starts,
-                'ends_at' => $ends,
-                'payment_status' => null,
-                'payment_id' => null,
-                'payment_reference' => null,
-            ]);
+            if ($subscription->wasRecentlyCreated) {
+                SubscriptionArchive::create([
+                    'client_id' => $client->id,
+                    'plan_id' => null,
+                    'plan_name' => 'Trial',
+                    'plan_price' => 0,
+                    'plan_type' => 'trial',
+                    'duration_in_months' => 1,
+                    'starts_at' => $starts,
+                    'ends_at' => $ends,
+                    'payment_status' => null,
+                    'payment_id' => null,
+                    'payment_reference' => null,
+                ]);
 
-            $this->activity()->record(
-                'Trial granted after OTP verification',
-                'subscription',
-                'created',
-                'client',
-                $client,
-                $client,
-                ['units' => 10, 'source' => 'cellogent'],
-            );
+                $this->activity()->record(
+                    'Trial granted after OTP verification',
+                    'subscription',
+                    'created',
+                    'client',
+                    $client,
+                    $client,
+                    ['units' => 10, 'source' => 'cellogent'],
+                );
+            }
         });
     }
 

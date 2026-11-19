@@ -48,11 +48,6 @@ class PaymentController extends Controller
 
     public function show(Payment $payment): JsonResponse
     {
-        if ($payment->status === Payment::PENDING && $payment->gateway && $payment->gateway !== 'wallet') {
-            $this->verifier->syncPendingForClient((int) $payment->client_id, $payment->id);
-            $payment->refresh();
-        }
-
         return $this->apiResponse(false, 'Payment loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->payments->presentForAdmin($payment));
     }
 
@@ -72,6 +67,10 @@ class PaymentController extends Controller
 
     public function complete(Request $request, Payment $payment): JsonResponse
     {
+        if (! $payment->gateway || $payment->gateway === 'wallet') {
+            return $this->apiResponse(true, 'Wallet payments cannot be manually completed.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         return $this->respondFrom($this->payments->complete($payment, $request->user()));
     }
 

@@ -305,6 +305,10 @@ class CampaignService
      */
     public function forceDelete(Client $client, Campaign $campaign): array
     {
+        if (! $campaign->trashed() && in_array($campaign->status, [Campaign::STATUS_ACTIVE, Campaign::STATUS_SCHEDULED], true)) {
+            return $this->result(true, 'Pause, cancel or complete this campaign before permanently deleting it.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         $campaignId = $campaign->id;
 
         DB::transaction(function () use ($campaign) {

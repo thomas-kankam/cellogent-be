@@ -202,6 +202,19 @@ class PaymentService
             Order::query()->where('id', $payment->order_id)->where('status', 'pending')->update(['status' => $status]);
         }
 
+        if ($admin) {
+            $client = Client::query()->find($payment->client_id);
+            $this->activity()->record(
+                $status === Payment::CANCELLED ? 'Payment cancelled by admin' : 'Payment failed by admin',
+                'payment',
+                'updated',
+                'admin',
+                $admin,
+                $client,
+                ['payment_id' => $payment->id, 'status' => $status, 'reason' => $reason],
+            );
+        }
+
         $label = $status === Payment::CANCELLED ? 'Payment marked as cancelled.' : 'Payment marked as failed.';
 
         return $this->result(false, $label, ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($payment->fresh()));

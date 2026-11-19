@@ -11,6 +11,7 @@ use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\Survey;
+use App\Services\Engagement\EngagementSupport;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use App\Services\Utilities\UtilityService;
@@ -98,6 +99,10 @@ class CheckoutService
      */
     public function start(Client $client, string $purpose, array $input): array
     {
+        if (in_array($purpose, self::FUND_PURPOSES, true) && ! EngagementSupport::REWARDS_ENABLED) {
+            return $this->result(true, 'Campaign and survey reward funding is currently disabled.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
         // Wallet top-up: client never picks a method — primary enabled gateway collects.
         // You cannot top up a wallet with wallet balance.
         if ($purpose === 'wallet_top_up') {

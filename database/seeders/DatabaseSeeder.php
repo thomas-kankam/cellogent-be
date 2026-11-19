@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             PlanSeeder::class,
             ProductMarginSeeder::class,
             RewardSeeder::class,
+            TemplateSeeder::class,
             PassportSeeder::class,
         ]);
     }

@@ -133,15 +133,17 @@ class SubscriptionService
             );
         }
 
-        // months 0 always means non-expiry, even if the caller omitted/mis-set type.
+        // months 0 always means non-expiry; non_expiry must not be paired with a dated months > 0 option.
         if ($months === 0 || ! empty($option['non_expiry'])) {
             $type = 'non_expiry';
             $months = 0;
+        } elseif ($type === 'non_expiry') {
+            $type = 'monthly';
         }
 
         $starts = now();
 
-        $subscription = DB::transaction(function () use ($client, $plan, $option, $starts, $type) {
+        $subscription = DB::transaction(function () use ($client, $plan, $option, $starts, $type, $paymentStatus, $paymentId, $paymentReference) {
             $current = Subscription::query()->where('client_id', $client->id)->lockForUpdate()->first();
 
             $stillActive = $current
@@ -181,23 +183,23 @@ class SubscriptionService
                     : $plan->name.' plan ('.$option['months'].' month)',
             ]);
 
+            SubscriptionArchive::create([
+                'client_id' => $client->id,
+                'plan_id' => $plan->id,
+                'plan_name' => $plan->name,
+                'plan_price' => $option['price'],
+                'units' => $option['units'],
+                'plan_type' => $type,
+                'duration_in_months' => $type === 'non_expiry' ? null : $option['months'],
+                'starts_at' => $subscription->starts_at,
+                'ends_at' => $subscription->ends_at,
+                'payment_status' => $paymentStatus,
+                'payment_id' => $paymentId,
+                'payment_reference' => $paymentReference,
+            ]);
+
             return $subscription;
         }, 3);
-
-        SubscriptionArchive::create([
-            'client_id' => $client->id,
-            'plan_id' => $plan->id,
-            'plan_name' => $plan->name,
-            'plan_price' => $option['price'],
-            'units' => $option['units'],
-            'plan_type' => $type,
-            'duration_in_months' => $type === 'non_expiry' ? null : $option['months'],
-            'starts_at' => $subscription->starts_at,
-            'ends_at' => $subscription->ends_at,
-            'payment_status' => $paymentStatus,
-            'payment_id' => $paymentId,
-            'payment_reference' => $paymentReference,
-        ]);
 
         $this->activity()->record(
             'Subscription activated',
