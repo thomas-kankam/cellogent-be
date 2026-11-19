@@ -104,10 +104,11 @@ class PrepareBulkSmsJob implements ShouldQueue
         if ($inbox->mode === 'reblast') {
             DB::table('sents')
                 ->where('retry_inbox_id', $inbox->id)
+                ->when($inbox->client_id, fn ($q) => $q->where('client_id', $inbox->client_id))
                 ->select(['id', 'to', 'message'])
                 ->chunkById(self::READ_CHUNK, function ($rows) use ($collect, $personalized, $inbox, $client) {
                     if (! $personalized || ! $inbox->client_id) {
-                        return $collect($rows, 'to');
+                        return $collect($rows, 'to', fn ($row) => $inbox->message ?: (string) $row->message);
                     }
 
                     $phones = $rows->pluck('to')->map(fn ($p) => (string) $p)->unique()->all();
@@ -125,7 +126,13 @@ class PrepareBulkSmsJob implements ShouldQueue
                     return $collect($rows, 'to', function ($row) use ($contacts, $inbox, $client) {
                         $contact = $contacts->get((string) $row->to);
 
-                        return $contact ? ContactPlaceholders::render($inbox->message, $contact, $client) : null;
+                        if ($contact) {
+                            return ContactPlaceholders::render($inbox->message, $contact, $client);
+                        }
+
+                        return ! ContactPlaceholders::hasContactPlaceholders((string) $row->message)
+                            ? (string) $row->message
+                            : null;
                     });
                 });
         } else {

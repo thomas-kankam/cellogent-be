@@ -108,20 +108,26 @@ class ProcessQuickSmsJob implements ShouldQueue
     {
         $sources = Sent::query()
             ->where('inbox_id', $inbox->parent_id)
-            ->whereNotNull('message_id')
-            ->get(['to', 'message_id']);
+            ->when($inbox->client_id, fn ($q) => $q->where('client_id', $inbox->client_id))
+            ->get(['to', 'message_id'])
+            ->keyBy(fn (Sent $s) => (string) $s->to);
 
         $submitted = 0;
         $failed = 0;
 
-        foreach ($sources as $source) {
+        foreach ($inbox->recipients() as $to) {
             SmsThrottle::await('quick', 1);
 
-            $to = (string) $source->to;
-            $response = $kairos->resend((string) $source->message_id, $inbox->message, $inbox->id);
+            $source = $sources->get($to);
+            $messageId = $source?->message_id ? (string) $source->message_id : '';
 
-            // Kairos docs say transactionId; live API often 404s. Retry once as a new quick send.
-            if (! $response->ok) {
+            $response = $messageId !== ''
+                ? $kairos->resend($messageId, $inbox->message, $inbox->id)
+                : null;
+
+            // Kairos docs say transactionId; live API often 404s or older rows have no message_id.
+            // Fall back to a normal quick send so the resend always goes through.
+            if (! $response || ! $response->ok) {
                 $response = $kairos->quick($to, $inbox->from, $inbox->message, $inbox->id);
             }
 
@@ -129,14 +135,6 @@ class ProcessQuickSmsJob implements ShouldQueue
 
             $submitted += $ok;
             $failed += $bad;
-        }
-
-        $known = $sources->pluck('to')->map(fn ($to) => (string) $to)->all();
-        $orphans = array_values(array_diff($inbox->recipients(), $known));
-
-        if ($orphans !== []) {
-            $writer->markFailed($inbox->id, $orphans, 'Original message not found');
-            $failed += count($orphans);
         }
 
         return [$submitted, $failed];

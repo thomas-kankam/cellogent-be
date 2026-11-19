@@ -27,12 +27,22 @@ final class KairosResponse
 
     public function transactionId(): ?string
     {
-        return $this->body['transactionId'] ?? null;
+        $id = $this->body['transactionId']
+            ?? $this->data()['transactionId']
+            ?? $this->body['messageId']
+            ?? $this->data()['messageId']
+            ?? null;
+
+        return $id !== null && (string) $id !== '' ? (string) $id : null;
     }
 
     public function sequenceNo(): ?string
     {
-        return $this->body['sequenceNo'] ?? null;
+        $seq = $this->body['sequenceNo']
+            ?? $this->data()['sequenceNo']
+            ?? null;
+
+        return $seq !== null && (string) $seq !== '' ? (string) $seq : null;
     }
 
     /**
@@ -51,8 +61,14 @@ final class KairosResponse
     public function messagesByRecipient(): array
     {
         $out = [];
+        $topTransactionId = $this->transactionId();
+        $topSequenceNo = $this->sequenceNo();
+        $topJobId = $this->data()['jobId'] ?? $this->body['jobId'] ?? null;
 
         foreach ($this->data()['batches'] ?? [] as $batch) {
+            $batchTransactionId = $batch['transactionId'] ?? $batch['messageId'] ?? $topTransactionId;
+            $batchJobId = $batch['jobId'] ?? $topJobId;
+
             foreach ($batch['messages'] ?? [] as $message) {
                 $to = (string) ($message['to'] ?? '');
 
@@ -60,10 +76,17 @@ final class KairosResponse
                     continue;
                 }
 
+                $seq = $message['sequenceNo'] ?? $topSequenceNo;
+                $msgId = $message['transactionId']
+                    ?? $message['messageId']
+                    ?? $message['id']
+                    ?? $batchTransactionId
+                    ?? $seq;
+
                 $out[$to] = [
-                    'sequence_no' => $message['sequenceNo'] ?? null,
-                    'message_id' => $message['transactionId'] ?? null,
-                    'job_id' => $batch['jobId'] ?? null,
+                    'sequence_no' => $seq !== null ? (string) $seq : null,
+                    'message_id' => $msgId !== null ? (string) $msgId : null,
+                    'job_id' => $batchJobId !== null ? (string) $batchJobId : null,
                 ];
             }
         }

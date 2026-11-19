@@ -149,11 +149,16 @@ class SmsService
      */
     public function reblast(Client $client, Inbox $source, ?string $message, string $requestType): array
     {
+        if ((int) $source->client_id !== (int) $client->id) {
+            return $this->result(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
         if (in_array($source->status, [Inbox::STATUS_QUEUED, Inbox::STATUS_PROCESSING], true)) {
             return $this->result(true, 'This message is still sending. Try again when it finishes.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $failed = Sent::query()
+            ->where('client_id', $client->id)
             ->where('inbox_id', $source->id)
             ->where('status', Sent::FAILED)
             ->whereNull('retry_inbox_id')
@@ -192,17 +197,23 @@ class SmsService
                 'mode' => 'reblast',
                 'parent_id' => $source->id,
                 'from' => $sender,
+                'contact_group_ids' => $source->contact_group_ids,
                 'message' => $textToSend,
             ],
-            recipients: function (Inbox $inbox) use ($source, $useQuick) {
+            recipients: function (Inbox $inbox) use ($client, $source, $useQuick) {
                 $claimed = Sent::query()
+                    ->where('client_id', $client->id)
                     ->where('inbox_id', $source->id)
                     ->where('status', Sent::FAILED)
                     ->whereNull('retry_inbox_id')
                     ->update(['retry_inbox_id' => $inbox->id]);
 
                 if ($useQuick) {
-                    $inbox->to = Sent::query()->where('retry_inbox_id', $inbox->id)->pluck('to')->implode(',');
+                    $inbox->to = Sent::query()
+                        ->where('client_id', $client->id)
+                        ->where('retry_inbox_id', $inbox->id)
+                        ->pluck('to')
+                        ->implode(',');
                 }
 
                 return $claimed;
@@ -217,6 +228,10 @@ class SmsService
      */
     public function resend(Client $client, Inbox $source, string $message, string $requestType): array
     {
+        if ((int) $source->client_id !== (int) $client->id) {
+            return $this->result(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
         if (! $source->isQuick()) {
             return $this->result(true, 'Only quick messages can be resent. Use re-blast for bulk messages.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
@@ -226,10 +241,17 @@ class SmsService
         }
 
         $recipients = Sent::query()
+            ->where('client_id', $client->id)
             ->where('inbox_id', $source->id)
-            ->whereNotNull('message_id')
             ->pluck('to')
+            ->map(fn ($to) => (string) $to)
+            ->unique()
+            ->values()
             ->all();
+
+        if ($recipients === []) {
+            $recipients = $source->recipients();
+        }
 
         if ($recipients === []) {
             return $this->result(true, 'This message has nothing that can be resent.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
