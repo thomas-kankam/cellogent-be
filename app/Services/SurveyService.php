@@ -15,6 +15,7 @@ use App\Services\Payments\CheckoutService;
 use App\Support\ApiCode;
 use App\Support\ApiReason;
 use App\Support\GhanaPhone;
+use App\Support\SmsParts;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -106,6 +107,7 @@ class SurveyService
             'audience' => [
                 'eligible_recipients' => (int) $survey->eligible_recipients,
                 'not_eligible' => (int) $survey->not_eligible,
+                'estimated_sms_units' => $this->estimatedSmsUnits($survey),
             ],
             'analytics' => $summary,
             'activated_at' => optional($survey->activated_at)->toDateTimeString(),
@@ -502,6 +504,14 @@ class SurveyService
             return $this->result(true, 'Add at least one question before activating.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        $refreshed = $this->refreshEstimate($client, $survey, null);
+
+        if ($this->support->failed($refreshed)) {
+            return $refreshed;
+        }
+
+        $survey = $refreshed;
+
         if ($survey->eligible_recipients < 1) {
             return $this->result(true, 'There are no eligible recipients in the selected groups.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
@@ -510,6 +520,10 @@ class SurveyService
 
         if ($this->support->failed($sender)) {
             return $sender;
+        }
+
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, $this->estimatedSmsUnits($survey)), 'activate this survey')) {
+            return $unitError;
         }
 
         $survey->update([
@@ -547,7 +561,33 @@ class SurveyService
             return $this->result(true, 'The reserved funds for this survey are no longer available.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
+        $refreshed = $this->refreshEstimate($client, $survey, null);
+
+        if ($this->support->failed($refreshed)) {
+            return $refreshed;
+        }
+
+        $survey = $refreshed;
+
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, $this->estimatedSmsUnits($survey)), 'resume this survey')) {
+            return $unitError;
+        }
+
         return $this->transition($client, $survey, [Survey::STATUS_PAUSED], $this->liveStatus($survey), 'resumed', 'Survey resumed.');
+    }
+
+    /**
+     * Estimated SMS units needed to blast this survey to its eligible recipients.
+     */
+    protected function estimatedSmsUnits(Survey $survey): int
+    {
+        $text = trim((string) ($survey->body ?: $survey->intro ?: $survey->name));
+        $url = $this->surveyUrl($survey);
+        $smsText = preg_match('/\{\s*survey_?url\s*\}/i', $text)
+            ? (preg_replace('/\{\s*survey_?url\s*\}/i', $url, $text) ?? $text)
+            : trim($text . ' ' . $url);
+
+        return SmsParts::count($smsText) * (int) $survey->eligible_recipients;
     }
 
     /**

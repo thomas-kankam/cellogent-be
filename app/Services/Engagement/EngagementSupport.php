@@ -11,6 +11,7 @@ use App\Models\SenderId;
 use App\Models\SenderIdBlacklist;
 use App\Models\WalletHold;
 use App\Services\MarginService;
+use App\Services\Sms\SmsUnitService;
 use App\Services\Utilities\SwiftCatalog;
 use App\Services\WalletService;
 use App\Support\ApiCode;
@@ -45,7 +46,29 @@ class EngagementSupport
         protected WalletService $wallets,
         protected MarginService $margins,
         protected SwiftCatalog $catalog,
+        protected SmsUnitService $smsUnits,
     ) {}
+
+    /**
+     * Check that the client has enough SMS units before activating or resuming a campaign/survey.
+     * Returns null when the client has enough units, or an error response array otherwise.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}|null
+     */
+    public function ensureSmsUnits(Client $client, int $requiredUnits, string $actionLabel): ?array
+    {
+        $check = $this->smsUnits->checkAvailability($client->id, $requiredUnits, $actionLabel);
+
+        if ($check['ok']) {
+            return null;
+        }
+
+        return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+            'required_units' => $check['required_units'],
+            'available_units' => $check['available_units'],
+            'shortfall_units' => $check['shortfall_units'],
+        ]);
+    }
 
     /**
      * True when a helper returned an error result instead of its value.

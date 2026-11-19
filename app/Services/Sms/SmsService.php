@@ -53,6 +53,17 @@ class SmsService
             ]);
         }
 
+        $requiredUnits = count($recipients['valid']) * SmsParts::count($input['message']);
+        $check = $this->units->checkAvailability($client->id, $requiredUnits, 'send this quick SMS');
+
+        if (! $check['ok']) {
+            return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+                'required_units' => $check['required_units'],
+                'available_units' => $check['available_units'],
+                'shortfall_units' => $check['shortfall_units'],
+            ]);
+        }
+
         return $this->queue(
             client: $client,
             admin: null,
@@ -104,6 +115,17 @@ class SmsService
                 : 'These contact groups have no contacts that can receive SMS.';
 
             return $this->result(true, $error, ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $requiredUnits = $audience * SmsParts::count($message);
+        $check = $this->units->checkAvailability($client->id, $requiredUnits, 'send this bulk SMS');
+
+        if (! $check['ok']) {
+            return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+                'required_units' => $check['required_units'],
+                'available_units' => $check['available_units'],
+                'shortfall_units' => $check['shortfall_units'],
+            ]);
         }
 
         return $this->queue(

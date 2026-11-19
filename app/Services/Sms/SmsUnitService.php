@@ -64,6 +64,58 @@ class SmsUnitService
     }
 
     /**
+     * Check that the client has an active, non-expired SMS plan with at least `$requiredUnits`.
+     *
+     * @return array{ok: bool, reason?: string, required_units: int, available_units: int, shortfall_units: int}
+     */
+    public function checkAvailability(int $clientId, int $requiredUnits, string $actionLabel = 'send this message'): array
+    {
+        $requiredUnits = max(1, $requiredUnits);
+        $subscription = Subscription::query()->where('client_id', $clientId)->first();
+
+        if (! $subscription || $subscription->status !== 'active') {
+            return [
+                'ok' => false,
+                'reason' => "You do not have an active SMS plan. Please purchase or top up your SMS units to {$actionLabel}.",
+                'required_units' => $requiredUnits,
+                'available_units' => 0,
+                'shortfall_units' => $requiredUnits,
+            ];
+        }
+
+        if ($subscription->ends_at && $subscription->ends_at->isPast()) {
+            return [
+                'ok' => false,
+                'reason' => "Your SMS plan has expired. Please renew or top up your SMS units to {$actionLabel}.",
+                'required_units' => $requiredUnits,
+                'available_units' => 0,
+                'shortfall_units' => $requiredUnits,
+            ];
+        }
+
+        $available = (int) $subscription->units;
+
+        if ($available < $requiredUnits) {
+            $shortfall = $requiredUnits - $available;
+
+            return [
+                'ok' => false,
+                'reason' => "Not enough SMS units to {$actionLabel}. Required: {$requiredUnits} units, available: {$available} units (shortfall: {$shortfall} units). Please top up your SMS units first.",
+                'required_units' => $requiredUnits,
+                'available_units' => $available,
+                'shortfall_units' => $shortfall,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'required_units' => $requiredUnits,
+            'available_units' => $available,
+            'shortfall_units' => 0,
+        ];
+    }
+
+    /**
      * Take units from an active, unexpired subscription. Must run inside a transaction.
      *
      * @return array{ok: bool, reason?: string, previous?: int}

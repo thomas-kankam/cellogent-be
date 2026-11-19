@@ -439,6 +439,14 @@ class CampaignService
             return $this->result(true, 'The reserved funds for this campaign are no longer available. Fund it again.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
         }
 
+        $refreshed = $this->refreshEstimate($client, $campaign, null);
+
+        if ($this->support->failed($refreshed)) {
+            return $refreshed;
+        }
+
+        $campaign = $refreshed;
+
         if ($campaign->eligible_recipients < 1) {
             return $this->result(true, 'There are no eligible recipients in the selected groups.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
@@ -447,6 +455,10 @@ class CampaignService
 
         if ($this->support->failed($sender)) {
             return $sender;
+        }
+
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, (int) $campaign->estimated_cost_units), 'activate this campaign')) {
+            return $unitError;
         }
 
         $campaign->update([
@@ -482,6 +494,18 @@ class CampaignService
     {
         if (EngagementSupport::rewardOn($campaign) && ! $this->support->isFunded($campaign)) {
             return $this->result(true, 'The reserved funds for this campaign are no longer available.', ApiCode::BAD_REQUEST, ApiReason::FUNDS_RESERVED);
+        }
+
+        $refreshed = $this->refreshEstimate($client, $campaign, null);
+
+        if ($this->support->failed($refreshed)) {
+            return $refreshed;
+        }
+
+        $campaign = $refreshed;
+
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, (int) $campaign->estimated_cost_units), 'resume this campaign')) {
+            return $unitError;
         }
 
         return $this->transition($client, $campaign, [Campaign::STATUS_PAUSED], $this->liveStatus($campaign), 'resumed', 'Campaign resumed.');
@@ -722,10 +746,37 @@ class CampaignService
             'eligible_recipients' => $audience['eligible'],
             'not_eligible' => $audience['not_eligible'],
             'estimated_cost' => $this->support->estimate($snapshot, $audience['eligible'], $snapshot['estimate_override'] ?? null),
-            'estimated_cost_units' => SmsParts::count($campaign->body) * $smsAudience['eligible'],
+            'estimated_cost_units' => $this->estimatedSmsParts((string) $campaign->body, is_array($campaign->cta) ? $campaign->cta : null, $campaign) * $smsAudience['eligible'],
         ]);
 
         return $campaign->fresh();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $cta
+     */
+    protected function estimatedSmsParts(string $body, ?array $cta, ?Campaign $campaign = null): int
+    {
+        $smsText = $body;
+
+        if (is_array($cta) && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
+            $ctaValue = trim((string) ($cta['url'] ?? $cta['value'] ?? ''));
+            $renderedCta = CampaignLink::shouldWrap($cta)
+                ? ($campaign ? CampaignLink::url($campaign, 999999) : CampaignLink::sampleUrl())
+                : $ctaValue;
+
+            if ($ctaValue !== '' && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $smsText)) {
+                if (CampaignLink::shouldWrap($cta) && str_contains($smsText, $ctaValue)) {
+                    $smsText = str_replace($ctaValue, $renderedCta, $smsText);
+                } elseif (! str_contains($smsText, $ctaValue)) {
+                    $label = trim((string) ($cta['label'] ?? ''));
+                    $suffix = $label !== '' ? "{$label}: {$renderedCta}" : $renderedCta;
+                    $smsText = $smsText !== '' ? $smsText.' '.$suffix : $suffix;
+                }
+            }
+        }
+
+        return SmsParts::count($smsText);
     }
 
     /**
@@ -940,25 +991,6 @@ class CampaignService
         $smsAudience = $needsBeneficiary ? $this->support->audience($client, $groups, true, false, $body) : $audience;
         $eligible = $audience['eligible'];
 
-        $smsText = $body;
-
-        if (is_array($cta) && filter_var($cta['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
-            $ctaValue = trim((string) ($cta['url'] ?? $cta['value'] ?? ''));
-            $renderedCta = CampaignLink::shouldWrap($cta)
-                ? ($existing ? CampaignLink::url($existing, 999999) : CampaignLink::sampleUrl())
-                : $ctaValue;
-
-            if ($ctaValue !== '' && ! preg_match('/\{\s*(link|cta_?url)\s*\}/i', $smsText)) {
-                if (CampaignLink::shouldWrap($cta) && str_contains($smsText, $ctaValue)) {
-                    $smsText = str_replace($ctaValue, $renderedCta, $smsText);
-                } elseif (! str_contains($smsText, $ctaValue)) {
-                    $label = trim((string) ($cta['label'] ?? ''));
-                    $suffix = $label !== '' ? "{$label}: {$renderedCta}" : $renderedCta;
-                    $smsText = $smsText !== '' ? $smsText.' '.$suffix : $suffix;
-                }
-            }
-        }
-
         return $fields + [
             'name' => $name,
             'type' => $type,
@@ -974,7 +1006,7 @@ class CampaignService
             'estimated_cost' => $reward['enabled']
                 ? $this->support->estimate($reward['snapshot'], $eligible, $reward['snapshot']['estimate_override'] ?? null)
                 : 0,
-            'estimated_cost_units' => SmsParts::count($smsText) * $smsAudience['eligible'],
+            'estimated_cost_units' => $this->estimatedSmsParts($body, is_array($cta) ? $cta : null, $existing) * $smsAudience['eligible'],
         ];
     }
 
