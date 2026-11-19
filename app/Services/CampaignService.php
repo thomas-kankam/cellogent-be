@@ -209,7 +209,7 @@ class CampaignService
     public function update(Client $client, Campaign $campaign, array $input): array
     {
         if (! in_array($campaign->status, Campaign::EDITABLE, true)) {
-            return $this->result(true, 'Only draft, funded or paused campaigns can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            return $this->result(true, 'Only draft, funded, paused, completed or cancelled campaigns can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $attributes = $this->build($client, $input, $campaign);
@@ -220,6 +220,25 @@ class CampaignService
 
         $reserved = (float) $campaign->reserved_amount;
         $reset = [];
+
+        if (in_array($campaign->status, [Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
+            $analytics = is_array($campaign->analytics) ? $campaign->analytics : [];
+            unset(
+                $analytics['blasted_at'],
+                $analytics['blast_claimed_at'],
+                $analytics['blast_failed_at'],
+                $analytics['blast_error'],
+                $analytics['blast_next_attempt_at'],
+                $analytics['blast_attempts'],
+            );
+
+            $reset = [
+                'status' => Campaign::STATUS_DRAFT,
+                'completed_at' => null,
+                'cancelled_at' => null,
+                'analytics' => $analytics,
+            ];
+        }
 
         if ($campaign->wallet_hold_id) {
             $needsMore = $attributes['reward_enabled'] && (float) $attributes['estimated_cost'] > $reserved + 0.00001;
@@ -419,18 +438,21 @@ class CampaignService
     }
 
     /**
+     * Activate a draft/funded campaign, or re-run a completed/cancelled campaign with the same data.
+     *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function activate(Client $client, Campaign $campaign): array
     {
         $hasReward = EngagementSupport::rewardOn($campaign);
+        $isRerun = in_array($campaign->status, [Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true);
         $ready = $campaign->status === Campaign::STATUS_FUNDED
-            || ($campaign->status === Campaign::STATUS_DRAFT && ! $hasReward);
+            || (in_array($campaign->status, [Campaign::STATUS_DRAFT, Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true) && ! $hasReward);
 
         if (! $ready) {
-            $message = $campaign->status === Campaign::STATUS_DRAFT && $hasReward
+            $message = $hasReward
                 ? 'Fund this campaign before activating it.'
-                : 'Only draft campaigns can be activated.';
+                : 'Only draft, completed or cancelled campaigns can be activated.';
 
             return $this->result(true, $message, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
@@ -457,16 +479,45 @@ class CampaignService
             return $sender;
         }
 
-        if ($unitError = $this->support->ensureSmsUnits($client, max(1, (int) $campaign->estimated_cost_units), 'activate this campaign')) {
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, (int) $campaign->estimated_cost_units), $isRerun ? 're-run this campaign' : 'activate this campaign')) {
             return $unitError;
+        }
+
+        $analytics = is_array($campaign->analytics) ? $campaign->analytics : [];
+        unset(
+            $analytics['blasted_at'],
+            $analytics['blast_claimed_at'],
+            $analytics['blast_failed_at'],
+            $analytics['blast_error'],
+            $analytics['blast_next_attempt_at'],
+            $analytics['blast_attempts'],
+        );
+
+        $sendAt = $campaign->send_at;
+
+        if ($isRerun && $campaign->type === Campaign::TYPE_PROMOTION && $sendAt && $sendAt->isPast()) {
+            $sendAt = now();
+            $campaign->send_at = $sendAt;
+        }
+
+        if ($isRerun && $campaign->type === Campaign::TYPE_OCCASION) {
+            CampaignEvent::query()
+                ->where('campaign_id', $campaign->id)
+                ->where('event', CampaignEvent::SENT)
+                ->whereIn('occasion_year', [0, (int) now()->year])
+                ->delete();
         }
 
         $campaign->update([
             'status' => $this->liveStatus($campaign),
-            'activated_at' => $campaign->activated_at ?? now(),
+            'send_at' => $sendAt,
+            'activated_at' => now(),
+            'completed_at' => null,
+            'cancelled_at' => null,
+            'analytics' => $analytics,
         ]);
 
-        $this->activity()->record('Campaign activated', 'campaign', 'activated', 'client', $client, $client, [
+        $this->activity()->record($isRerun ? 'Campaign re-run' : 'Campaign activated', 'campaign', $isRerun ? 'rerun' : 'activated', 'client', $client, $client, [
             'campaign_id' => $campaign->id,
             'status' => $campaign->status,
         ]);
@@ -476,7 +527,34 @@ class CampaignService
             DispatchEngagementBlastJob::dispatch('campaign', $campaign->id)->afterCommit();
         }
 
-        return $this->result(false, 'Campaign activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($campaign->fresh()));
+        return $this->result(false, $isRerun ? 'Campaign re-run activated.' : 'Campaign activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($campaign->fresh()));
+    }
+
+    /**
+     * Re-run a completed, cancelled or draft campaign, optionally applying new edits first.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function rerun(Client $client, Campaign $campaign, array $input = []): array
+    {
+        if (! in_array($campaign->status, [Campaign::STATUS_DRAFT, Campaign::STATUS_FUNDED, Campaign::STATUS_PAUSED, Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
+            return $this->result(true, 'Only completed, cancelled, paused or draft campaigns can be re-run.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if ($input !== []) {
+            $updated = $this->update($client, $campaign, $input);
+
+            if ($updated['in_error']) {
+                return $updated;
+            }
+
+            $campaign = $campaign->fresh();
+        } elseif ($campaign->status === Campaign::STATUS_PAUSED) {
+            $campaign->update(['status' => Campaign::STATUS_COMPLETED]);
+        }
+
+        return $this->activate($client, $campaign);
     }
 
     /**

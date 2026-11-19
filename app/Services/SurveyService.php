@@ -253,7 +253,7 @@ class SurveyService
     public function update(Client $client, Survey $survey, array $input): array
     {
         if (!in_array($survey->status, Survey::EDITABLE, true)) {
-            return $this->result(true, 'Only draft, funded or paused surveys can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            return $this->result(true, 'Only draft, funded, paused, completed or cancelled surveys can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $attributes = $this->build($client, $input, $survey);
@@ -278,6 +278,25 @@ class SurveyService
 
         $reserved = (float) $survey->reserved_amount;
         $reset = [];
+
+        if (in_array($survey->status, [Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
+            $analytics = is_array($survey->analytics) ? $survey->analytics : [];
+            unset(
+                $analytics['blasted_at'],
+                $analytics['blast_claimed_at'],
+                $analytics['blast_failed_at'],
+                $analytics['blast_error'],
+                $analytics['blast_next_attempt_at'],
+                $analytics['blast_attempts'],
+            );
+
+            $reset = [
+                'status' => Survey::STATUS_DRAFT,
+                'completed_at' => null,
+                'cancelled_at' => null,
+                'analytics' => $analytics,
+            ];
+        }
 
         if ($survey->wallet_hold_id) {
             $needsMore = $attributes['reward_enabled'] && (float) $attributes['estimated_cost'] > $reserved + 0.00001;
@@ -480,18 +499,21 @@ class SurveyService
     }
 
     /**
+     * Activate a draft/funded survey, or re-run a completed/cancelled survey with the same data.
+     *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function activate(Client $client, Survey $survey): array
     {
         $hasReward = EngagementSupport::rewardOn($survey);
+        $isRerun = in_array($survey->status, [Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true);
         $ready = $survey->status === Survey::STATUS_FUNDED ||
-            ($survey->status === Survey::STATUS_DRAFT && !$hasReward);
+            (in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true) && !$hasReward);
 
         if (!$ready) {
-            $message = $survey->status === Survey::STATUS_DRAFT && $hasReward
+            $message = $hasReward
                 ? 'Fund this survey before activating it.'
-                : 'Only draft surveys can be activated.';
+                : 'Only draft, completed or cancelled surveys can be activated.';
 
             return $this->result(true, $message, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
@@ -522,16 +544,37 @@ class SurveyService
             return $sender;
         }
 
-        if ($unitError = $this->support->ensureSmsUnits($client, max(1, $this->estimatedSmsUnits($survey)), 'activate this survey')) {
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, $this->estimatedSmsUnits($survey)), $isRerun ? 're-run this survey' : 'activate this survey')) {
             return $unitError;
+        }
+
+        $analytics = is_array($survey->analytics) ? $survey->analytics : [];
+        unset(
+            $analytics['blasted_at'],
+            $analytics['blast_claimed_at'],
+            $analytics['blast_failed_at'],
+            $analytics['blast_error'],
+            $analytics['blast_next_attempt_at'],
+            $analytics['blast_attempts'],
+        );
+
+        $sendAt = $survey->send_at;
+
+        if ($isRerun && $sendAt && $sendAt->isPast()) {
+            $sendAt = now();
+            $survey->send_at = $sendAt;
         }
 
         $survey->update([
             'status' => $this->liveStatus($survey),
-            'activated_at' => $survey->activated_at ?? now(),
+            'send_at' => $sendAt,
+            'activated_at' => now(),
+            'completed_at' => null,
+            'cancelled_at' => null,
+            'analytics' => $analytics,
         ]);
 
-        $this->activity()->record('Survey activated', 'survey', 'activated', 'client', $client, $client, [
+        $this->activity()->record($isRerun ? 'Survey re-run' : 'Survey activated', 'survey', $isRerun ? 'rerun' : 'activated', 'client', $client, $client, [
             'survey_id' => $survey->id,
             'status' => $survey->status,
         ]);
@@ -541,7 +584,34 @@ class SurveyService
             DispatchEngagementBlastJob::dispatch('survey', $survey->id)->afterCommit();
         }
 
-        return $this->result(false, 'Survey activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey->fresh()));
+        return $this->result(false, $isRerun ? 'Survey re-run activated.' : 'Survey activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey->fresh()));
+    }
+
+    /**
+     * Re-run a completed, cancelled or draft survey, optionally applying new edits first.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function rerun(Client $client, Survey $survey, array $input = []): array
+    {
+        if (!in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_PAUSED, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
+            return $this->result(true, 'Only completed, cancelled, paused or draft surveys can be re-run.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if ($input !== []) {
+            $updated = $this->update($client, $survey, $input);
+
+            if ($updated['in_error']) {
+                return $updated;
+            }
+
+            $survey = $survey->fresh();
+        } elseif ($survey->status === Survey::STATUS_PAUSED) {
+            $survey->update(['status' => Survey::STATUS_COMPLETED]);
+        }
+
+        return $this->activate($client, $survey);
     }
 
     /**

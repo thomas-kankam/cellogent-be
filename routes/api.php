@@ -163,6 +163,7 @@ Route::prefix('client')->group(function () {
             // Funding is only for rewards, which are switched off for now.
             // Route::post('campaigns/{campaign}/fund', [ClientCampaignController::class, 'fund'])->middleware('throttle:checkout');
             Route::post('campaigns/{campaign}/activate', [ClientCampaignController::class, 'activate']);
+            Route::post('campaigns/{campaign}/rerun', [ClientCampaignController::class, 'rerun']);
             Route::post('campaigns/{campaign}/pause', [ClientCampaignController::class, 'pause']);
             Route::post('campaigns/{campaign}/resume', [ClientCampaignController::class, 'resume']);
             Route::post('campaigns/{campaign}/complete', [ClientCampaignController::class, 'complete']);
@@ -186,6 +187,7 @@ Route::prefix('client')->group(function () {
             // Funding is only for rewards, which are switched off for now.
             // Route::post('surveys/{survey}/fund', [ClientSurveyController::class, 'fund'])->middleware('throttle:checkout');
             Route::post('surveys/{survey}/activate', [ClientSurveyController::class, 'activate']);
+            Route::post('surveys/{survey}/rerun', [ClientSurveyController::class, 'rerun']);
             Route::post('surveys/{survey}/pause', [ClientSurveyController::class, 'pause']);
             Route::post('surveys/{survey}/resume', [ClientSurveyController::class, 'resume']);
             Route::post('surveys/{survey}/complete', [ClientSurveyController::class, 'complete']);

@@ -40,7 +40,13 @@ class Campaign extends Model
     ];
 
     /** Statuses in which the campaign content can still be edited. */
-    public const EDITABLE = [self::STATUS_DRAFT, self::STATUS_FUNDED, self::STATUS_PAUSED];
+    public const EDITABLE = [
+        self::STATUS_DRAFT,
+        self::STATUS_FUNDED,
+        self::STATUS_PAUSED,
+        self::STATUS_COMPLETED,
+        self::STATUS_CANCELLED,
+    ];
 
     protected $fillable = [
         'client_id',

@@ -169,6 +169,18 @@ class SmsService
             return $sender;
         }
 
+        $textToSend = $message ?: $source->message;
+        $requiredUnits = $failed * SmsParts::count($textToSend);
+        $check = $this->units->checkAvailability($client->id, $requiredUnits, 're-blast this SMS');
+
+        if (! $check['ok']) {
+            return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+                'required_units' => $check['required_units'],
+                'available_units' => $check['available_units'],
+                'shortfall_units' => $check['shortfall_units'],
+            ]);
+        }
+
         $useQuick = $source->isQuick() && $failed <= (int) config('sms.quick.max_recipients', 100);
 
         return $this->queue(
@@ -180,7 +192,7 @@ class SmsService
                 'mode' => 'reblast',
                 'parent_id' => $source->id,
                 'from' => $sender,
-                'message' => $message ?: $source->message,
+                'message' => $textToSend,
             ],
             recipients: function (Inbox $inbox) use ($source, $useQuick) {
                 $claimed = Sent::query()
@@ -227,6 +239,17 @@ class SmsService
 
         if (is_array($sender)) {
             return $sender;
+        }
+
+        $requiredUnits = count($recipients) * SmsParts::count($message);
+        $check = $this->units->checkAvailability($client->id, $requiredUnits, 'resend this SMS');
+
+        if (! $check['ok']) {
+            return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+                'required_units' => $check['required_units'],
+                'available_units' => $check['available_units'],
+                'shortfall_units' => $check['shortfall_units'],
+            ]);
         }
 
         return $this->queue(
