@@ -15,6 +15,8 @@ class PlanService
     use LogsActivity;
     use ReturnsServiceResult;
 
+    public const MAX_PLANS = 4;
+
     /**
      * @return array<string, mixed>
      */
@@ -35,6 +37,16 @@ class PlanService
      */
     public function create(Admin $admin, array $input): array
     {
+        if (Plan::query()->count() >= self::MAX_PLANS) {
+            return $this->result(
+                true,
+                'You can only have a maximum of '.self::MAX_PLANS.' plans. Update or delete an existing plan instead.',
+                ApiCode::BAD_REQUEST,
+                ApiReason::INVALID,
+                ['plans' => ['Maximum of '.self::MAX_PLANS.' plans reached.']],
+            );
+        }
+
         $name = trim((string) $input['name']);
 
         if ($this->nameTaken($name)) {
@@ -131,6 +143,32 @@ class PlanService
         ]);
 
         return $this->result(false, 'Plan updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($plan));
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function delete(Admin $admin, Plan $plan): array
+    {
+        $planId = $plan->id;
+        $wasFeatured = (bool) $plan->is_featured;
+
+        DB::transaction(function () use ($plan, $wasFeatured) {
+            $plan->delete();
+
+            if ($wasFeatured && ! Plan::query()->where('is_featured', true)->exists()) {
+                $replacement = Plan::query()->where('status', 'active')->latest('id')->first()
+                    ?? Plan::query()->latest('id')->first();
+
+                $replacement?->update(['is_featured' => true]);
+            }
+        });
+
+        $this->activity()->record('Plan deleted', 'subscription', 'deleted', 'admin', $admin, null, [
+            'plan_id' => $planId,
+        ]);
+
+        return $this->result(false, 'Plan deleted.', ApiCode::SUCCESS, ApiReason::SUCCESS);
     }
 
     protected function nameTaken(string $name, ?int $exceptId = null): bool

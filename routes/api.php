@@ -297,6 +297,7 @@ Route::prefix('admin')->group(function () {
             Route::post('plans', [AdminPlanController::class, 'store']);
             Route::get('plans/{plan}', [AdminPlanController::class, 'show']);
             Route::put('plans/{plan}', [AdminPlanController::class, 'update']);
+            Route::delete('plans/{plan}', [AdminPlanController::class, 'destroy']);
         });
 
         // Rewards catalog: priced like plans, so the same permission manages it.

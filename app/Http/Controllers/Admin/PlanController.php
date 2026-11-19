@@ -44,4 +44,9 @@ class PlanController extends Controller
     {
         return $this->respondFrom($this->plans->update($request->user(), $plan, $request->validated()));
     }
+
+    public function destroy(Request $request, Plan $plan): JsonResponse
+    {
+        return $this->respondFrom($this->plans->delete($request->user(), $plan));
+    }
 }

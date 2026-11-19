@@ -4,6 +4,7 @@ namespace App\Http\Requests\Plan;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Models\Plan;
+use App\Services\PlanService;
 use Illuminate\Validation\Rule;
 
 class StorePlanRequest extends ApiFormRequest
@@ -33,6 +34,15 @@ class StorePlanRequest extends ApiFormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            $isCreating = ! ($this->route('plan') instanceof Plan);
+
+            if ($isCreating && Plan::query()->count() >= PlanService::MAX_PLANS) {
+                $validator->errors()->add(
+                    'plans',
+                    'You can only have a maximum of '.PlanService::MAX_PLANS.' plans. Update or delete an existing plan instead.',
+                );
+            }
+
             $details = $this->input('details');
 
             if (! is_array($details)) {
