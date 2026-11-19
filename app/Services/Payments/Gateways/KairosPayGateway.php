@@ -89,17 +89,31 @@ class KairosPayGateway implements PaymentGatewayDriver
             return new GatewayStatus(GatewayStatus::PENDING, message: (string) ($body['statusMessage'] ?? 'HTTP '.$response->status()), raw: $body);
         }
 
-        $state = match (strtoupper((string) ($data['status'] ?? ''))) {
-            'COMPLETED' => GatewayStatus::PAID,
-            'FAILED', 'CANCELLED' => GatewayStatus::FAILED,
+        $rawStatus = strtoupper(trim((string) ($data['status'] ?? '')));
+        $gatewayText = trim((string) ($data['message'] ?? $data['narration'] ?? $body['statusMessage'] ?? ''));
+
+        $state = match ($rawStatus) {
+            'COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'PAID' => GatewayStatus::PAID,
+            'CANCELLED', 'CANCELED', 'ABANDONED' => GatewayStatus::CANCELLED,
+            'FAILED', 'DECLINED', 'REJECTED', 'EXPIRED', 'REVERSED', 'ERROR' => GatewayStatus::FAILED,
             default => GatewayStatus::PENDING,
+        };
+
+        $reason = match ($state) {
+            GatewayStatus::CANCELLED => $gatewayText !== '' && strtoupper($gatewayText) !== 'SUCCESS'
+                ? $gatewayText
+                : 'Mobile money payment was cancelled.',
+            GatewayStatus::FAILED => $gatewayText !== '' && strtoupper($gatewayText) !== 'SUCCESS'
+                ? $gatewayText
+                : 'Mobile money payment '.strtolower($rawStatus ?: 'failed').'.',
+            default => $gatewayText !== '' ? $gatewayText : null,
         };
 
         return new GatewayStatus(
             $state,
             amountPaid: isset($data['amount']) ? (float) $data['amount'] : null,
             gatewayCharge: isset($data['charge']) ? (float) $data['charge'] : null,
-            message: $state === GatewayStatus::FAILED ? 'Mobile money payment '.strtolower((string) $data['status']).'.' : null,
+            message: $reason,
             raw: $body,
             method: 'momo',
         );

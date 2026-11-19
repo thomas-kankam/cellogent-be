@@ -153,8 +153,28 @@ class PaymentService
      */
     public function fail(Payment $payment, ?Admin $admin = null, string $reason = 'Payment failed.', ?array $raw = null): array
     {
+        return $this->settleUnsuccessful($payment, Payment::FAILED, $admin, $reason, $raw);
+    }
+
+    /**
+     * Mark a pending payment (and its order) as cancelled/abandoned with the gateway's response.
+     *
+     * @param  array<string, mixed>|null  $raw
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function cancel(Payment $payment, ?Admin $admin = null, string $reason = 'Payment was cancelled.', ?array $raw = null): array
+    {
+        return $this->settleUnsuccessful($payment, Payment::CANCELLED, $admin, $reason, $raw);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $raw
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function settleUnsuccessful(Payment $payment, string $status, ?Admin $admin, string $reason, ?array $raw): array
+    {
         $changes = [
-            'status' => Payment::FAILED,
+            'status' => $status,
             'failed_at' => now(),
             'failure_reason' => mb_substr($reason, 0, 255),
             'next_verify_at' => null,
@@ -175,14 +195,16 @@ class PaymentService
             ->update($changes);
 
         if (! $updated) {
-            return $this->result(true, 'Only pending payments can be failed.', ApiCode::BAD_REQUEST, ApiReason::ALREADY_PROCESSED);
+            return $this->result(true, 'Only pending payments can be updated.', ApiCode::BAD_REQUEST, ApiReason::ALREADY_PROCESSED);
         }
 
         if ($payment->order_id) {
-            Order::query()->where('id', $payment->order_id)->where('status', 'pending')->update(['status' => 'failed']);
+            Order::query()->where('id', $payment->order_id)->where('status', 'pending')->update(['status' => $status]);
         }
 
-        return $this->result(false, 'Payment marked as failed.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($payment->fresh()));
+        $label = $status === Payment::CANCELLED ? 'Payment marked as cancelled.' : 'Payment marked as failed.';
+
+        return $this->result(false, $label, ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($payment->fresh()));
     }
 
     protected function fulfill(Payment $payment, Client $client, ?Admin $admin): void

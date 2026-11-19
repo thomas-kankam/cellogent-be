@@ -15,6 +15,8 @@ class Payment extends Model
 
     public const FAILED = 'failed';
 
+    public const CANCELLED = 'cancelled';
+
     protected $fillable = [
         'client_id',
         'admin_id',

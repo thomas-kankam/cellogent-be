@@ -23,8 +23,8 @@ return [
         'cooldown_minutes' => 5,
     ],
 
-    // Seconds between status checks while a payment is pending. After the last one it is marked failed.
-    'verify_backoff' => [20, 30, 30, 60, 60, 120, 300, 600, 900, 1800, 3600],
+    // Seconds between status checks while a payment is pending. After the last one it is marked cancelled.
+    'verify_backoff' => [15, 25, 35, 60, 90, 120],
 
     'gateways' => [
         'kairos' => [

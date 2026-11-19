@@ -213,7 +213,9 @@ Route::prefix('client')->group(function () {
         Route::get('sms', [ClientSmsController::class, 'index']);
         Route::get('sms/{inbox}', [ClientSmsController::class, 'show'])->whereNumber('inbox');
         Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
+        // reblast quick and bulk sms
         Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox')->middleware('throttle:sms-api');
+        // resend quick sms type only
         Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox')->middleware('throttle:sms-api');
     });
 });

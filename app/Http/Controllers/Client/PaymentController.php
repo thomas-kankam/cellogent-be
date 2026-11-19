@@ -23,6 +23,8 @@ class PaymentController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->verifier->syncPendingForClient($request->user()->id);
+
         $query = Payment::query()->where('client_id', $request->user()->id)->latest('id');
 
         if ($request->filled('status')) {
@@ -47,6 +49,11 @@ class PaymentController extends Controller
     {
         if ((int) $payment->client_id !== (int) $request->user()->id) {
             return $this->apiResponse(true, 'Payment not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if ($payment->status === Payment::PENDING) {
+            $this->verifier->syncPendingForClient($request->user()->id, $payment->id);
+            $payment->refresh();
         }
 
         return $this->apiResponse(false, 'Payment loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->payments->present($payment));
@@ -94,8 +101,9 @@ class PaymentController extends Controller
 
         $message = match ($payment->status) {
             Payment::PAID => 'Payment successful.',
+            Payment::CANCELLED => $payment->failure_reason ?: 'Payment was cancelled.',
             Payment::FAILED => $payment->failure_reason ?: 'Payment failed.',
-            default => 'Payment is still pending. Approve the prompt on your phone or complete checkout.',
+            default => 'Payment is still awaiting confirmation from the gateway.',
         };
 
         return $this->apiResponse(false, $message, ApiCode::SUCCESS, ApiReason::SUCCESS, $this->payments->present($payment));

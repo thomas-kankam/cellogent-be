@@ -8,6 +8,8 @@ final class GatewayStatus
 
     public const FAILED = 'failed';
 
+    public const CANCELLED = 'cancelled';
+
     public const PENDING = 'pending';
 
     /**

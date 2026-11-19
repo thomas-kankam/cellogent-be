@@ -61,25 +61,64 @@ class PaymentVerifier
             return Payment::FAILED;
         }
 
-        $this->scheduleNext($payment);
+        if ($status->state === GatewayStatus::CANCELLED) {
+            $this->payments->cancel($payment, null, $status->message ?? 'Payment was cancelled.', $status->raw);
 
-        return Payment::PENDING;
+            return Payment::CANCELLED;
+        }
+
+        $this->scheduleNext($payment, $status);
+
+        return $payment->fresh()->status;
     }
 
-    protected function scheduleNext(Payment $payment): void
+    /**
+     * Check any pending gateway payments for a client so viewing payments/orders reflects the live gateway state.
+     */
+    public function syncPendingForClient(int $clientId, ?int $onlyPaymentId = null): void
     {
-        $backoff = (array) config('payments.verify_backoff', [60]);
+        $query = Payment::query()
+            ->where('client_id', $clientId)
+            ->where('status', Payment::PENDING)
+            ->whereNotNull('gateway')
+            ->where('gateway', '!=', 'wallet');
+
+        if ($onlyPaymentId !== null) {
+            $query->whereKey($onlyPaymentId);
+        } else {
+            $query->latest('id')->limit(5);
+        }
+
+        foreach ($query->get() as $payment) {
+            try {
+                $this->verify($payment);
+            } catch (\Throwable $e) {
+                Log::warning('Live payment sync failed', ['payment_id' => $payment->id, 'error' => $e->getMessage()]);
+            }
+        }
+    }
+
+    protected function scheduleNext(Payment $payment, GatewayStatus $status): void
+    {
+        $backoff = (array) config('payments.verify_backoff', [15, 25, 35, 60, 90, 120]);
         $attempt = (int) $payment->verify_attempts + 1;
 
         if ($attempt >= count($backoff)) {
-            $this->payments->fail($payment, null, 'Payment was not completed in time.');
+            $reason = $status->message ?: 'Payment was not completed or was cancelled by user.';
+            $this->payments->cancel($payment, null, $reason, $status->raw ?: null);
 
             return;
         }
 
-        $payment->update([
+        $changes = [
             'verify_attempts' => $attempt,
             'next_verify_at' => now()->addSeconds((int) $backoff[$attempt]),
-        ]);
+        ];
+
+        if ($status->raw !== []) {
+            $changes['gateway_response'] = $status->raw;
+        }
+
+        $payment->update($changes);
     }
 }

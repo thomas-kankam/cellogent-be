@@ -87,17 +87,27 @@ class PaystackGateway implements PaymentGatewayDriver
             return new GatewayStatus(GatewayStatus::PENDING, message: (string) ($body['message'] ?? 'HTTP '.$response->status()), raw: $body);
         }
 
-        $state = match ((string) ($data['status'] ?? '')) {
+        $rawStatus = strtolower(trim((string) ($data['status'] ?? '')));
+        $gatewayText = trim((string) ($data['gateway_response'] ?? $data['message'] ?? $body['message'] ?? ''));
+
+        $state = match ($rawStatus) {
             'success' => GatewayStatus::PAID,
             'failed', 'reversed' => GatewayStatus::FAILED,
-            default => GatewayStatus::PENDING, // ongoing, pending, abandoned (client may still pay)
+            'abandoned', 'cancelled', 'canceled' => GatewayStatus::CANCELLED,
+            default => GatewayStatus::PENDING,
+        };
+
+        $reason = match ($state) {
+            GatewayStatus::FAILED => $gatewayText !== '' ? $gatewayText : 'Payment failed on Paystack.',
+            GatewayStatus::CANCELLED => $gatewayText !== '' ? $gatewayText : 'Payment was cancelled or abandoned on Paystack.',
+            default => $gatewayText !== '' ? $gatewayText : null,
         };
 
         return new GatewayStatus(
             $state,
             amountPaid: isset($data['amount']) ? ((int) $data['amount']) / 100 : null,
             gatewayCharge: isset($data['fees']) ? ((int) $data['fees']) / 100 : null,
-            message: $state === GatewayStatus::FAILED ? (string) ($data['gateway_response'] ?? 'Payment failed.') : null,
+            message: $reason,
             raw: $body,
             method: $this->methodFromChannel($data['channel'] ?? null),
         );
