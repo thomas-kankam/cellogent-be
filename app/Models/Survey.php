@@ -33,14 +33,8 @@ class Survey extends Model
         self::STATUS_CANCELLED,
     ];
 
-    /** Statuses in which the survey content can still be edited. */
-    public const EDITABLE = [
-        self::STATUS_DRAFT,
-        self::STATUS_FUNDED,
-        self::STATUS_PAUSED,
-        self::STATUS_COMPLETED,
-        self::STATUS_CANCELLED,
-    ];
+    /** Statuses in which the survey content can still be edited in-place. */
+    public const EDITABLE = [self::STATUS_DRAFT, self::STATUS_FUNDED, self::STATUS_PAUSED];
 
     public const QUESTION_TYPES = ['text', 'long_text', 'single_choice', 'multiple_choice', 'rating', 'yes_no', 'number'];
 

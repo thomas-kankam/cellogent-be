@@ -110,6 +110,7 @@ class SurveyService
                 'estimated_sms_units' => $this->estimatedSmsUnits($survey),
             ],
             'analytics' => $summary,
+            'parent_id' => isset($survey->analytics['parent_id']) ? (int) $survey->analytics['parent_id'] : null,
             'activated_at' => optional($survey->activated_at)->toDateTimeString(),
             'completed_at' => optional($survey->completed_at)->toDateTimeString(),
             'cancelled_at' => optional($survey->cancelled_at)->toDateTimeString(),
@@ -253,7 +254,7 @@ class SurveyService
     public function update(Client $client, Survey $survey, array $input): array
     {
         if (!in_array($survey->status, Survey::EDITABLE, true)) {
-            return $this->result(true, 'Only draft, funded, paused, completed or cancelled surveys can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            return $this->result(true, 'Only draft, funded or paused surveys can be edited in-place. Use rerun to run a completed or cancelled survey again.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $attributes = $this->build($client, $input, $survey);
@@ -278,25 +279,6 @@ class SurveyService
 
         $reserved = (float) $survey->reserved_amount;
         $reset = [];
-
-        if (in_array($survey->status, [Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
-            $analytics = is_array($survey->analytics) ? $survey->analytics : [];
-            unset(
-                $analytics['blasted_at'],
-                $analytics['blast_claimed_at'],
-                $analytics['blast_failed_at'],
-                $analytics['blast_error'],
-                $analytics['blast_next_attempt_at'],
-                $analytics['blast_attempts'],
-            );
-
-            $reset = [
-                'status' => Survey::STATUS_DRAFT,
-                'completed_at' => null,
-                'cancelled_at' => null,
-                'analytics' => $analytics,
-            ];
-        }
 
         if ($survey->wallet_hold_id) {
             $needsMore = $attributes['reward_enabled'] && (float) $attributes['estimated_cost'] > $reserved + 0.00001;
@@ -499,19 +481,23 @@ class SurveyService
     }
 
     /**
-     * Activate a draft/funded survey, or re-run a completed/cancelled survey with the same data.
+     * Activate a draft/funded survey. If the survey is already completed or cancelled,
+     * delegates to `rerun()` so a new record is created and the old one is kept for audit history.
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function activate(Client $client, Survey $survey): array
     {
+        if (in_array($survey->status, [Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
+            return $this->rerun($client, $survey);
+        }
+
         $hasReward = EngagementSupport::rewardOn($survey);
-        $isRerun = in_array($survey->status, [Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true);
         $ready = $survey->status === Survey::STATUS_FUNDED ||
-            (in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true) && !$hasReward);
+            ($survey->status === Survey::STATUS_DRAFT && !$hasReward);
 
         if (!$ready) {
-            $message = $hasReward
+            $message = $survey->status === Survey::STATUS_DRAFT && $hasReward
                 ? 'Fund this survey before activating it.'
                 : 'Only draft, completed or cancelled surveys can be activated.';
 
@@ -544,37 +530,16 @@ class SurveyService
             return $sender;
         }
 
-        if ($unitError = $this->support->ensureSmsUnits($client, max(1, $this->estimatedSmsUnits($survey)), $isRerun ? 're-run this survey' : 'activate this survey')) {
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, $this->estimatedSmsUnits($survey)), 'activate this survey')) {
             return $unitError;
-        }
-
-        $analytics = is_array($survey->analytics) ? $survey->analytics : [];
-        unset(
-            $analytics['blasted_at'],
-            $analytics['blast_claimed_at'],
-            $analytics['blast_failed_at'],
-            $analytics['blast_error'],
-            $analytics['blast_next_attempt_at'],
-            $analytics['blast_attempts'],
-        );
-
-        $sendAt = $survey->send_at;
-
-        if ($isRerun && $sendAt && $sendAt->isPast()) {
-            $sendAt = now();
-            $survey->send_at = $sendAt;
         }
 
         $survey->update([
             'status' => $this->liveStatus($survey),
-            'send_at' => $sendAt,
-            'activated_at' => now(),
-            'completed_at' => null,
-            'cancelled_at' => null,
-            'analytics' => $analytics,
+            'activated_at' => $survey->activated_at ?? now(),
         ]);
 
-        $this->activity()->record($isRerun ? 'Survey re-run' : 'Survey activated', 'survey', $isRerun ? 'rerun' : 'activated', 'client', $client, $client, [
+        $this->activity()->record('Survey activated', 'survey', 'activated', 'client', $client, $client, [
             'survey_id' => $survey->id,
             'status' => $survey->status,
         ]);
@@ -584,34 +549,98 @@ class SurveyService
             DispatchEngagementBlastJob::dispatch('survey', $survey->id)->afterCommit();
         }
 
-        return $this->result(false, $isRerun ? 'Survey re-run activated.' : 'Survey activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey->fresh()));
+        return $this->result(false, 'Survey activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($survey->fresh()));
     }
 
     /**
-     * Re-run a completed, cancelled or draft survey, optionally applying new edits first.
+     * Re-run a survey by creating a brand-new Survey record (with the same data/questions or optional
+     * edited fields) and activating it immediately, keeping the original record intact for audit trail.
      *
      * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function rerun(Client $client, Survey $survey, array $input = []): array
+    public function rerun(Client $client, Survey $source, array $input = []): array
     {
-        if (!in_array($survey->status, [Survey::STATUS_DRAFT, Survey::STATUS_FUNDED, Survey::STATUS_PAUSED, Survey::STATUS_COMPLETED, Survey::STATUS_CANCELLED], true)) {
-            return $this->result(true, 'Only completed, cancelled, paused or draft surveys can be re-run.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        if (!array_key_exists('send_at', $input) && $source->send_at && $source->send_at->isPast()) {
+            $input['send_at'] = null;
         }
 
-        if ($input !== []) {
-            $updated = $this->update($client, $survey, $input);
+        $attributes = $this->build($client, $input, $source);
 
-            if ($updated['in_error']) {
-                return $updated;
+        if ($this->support->failed($attributes)) {
+            return $attributes;
+        }
+
+        if (array_key_exists('questions', $input)) {
+            $questions = $this->questionRows($input['questions'] ?? []);
+
+            if ($this->support->failed($questions)) {
+                return $questions;
             }
-
-            $survey = $survey->fresh();
-        } elseif ($survey->status === Survey::STATUS_PAUSED) {
-            $survey->update(['status' => Survey::STATUS_COMPLETED]);
+        } else {
+            $source->loadMissing('questions');
+            $questions = $source->questions->map(fn(SurveyQuestion $q, int $index) => [
+                'id' => null,
+                'prompt' => $q->prompt,
+                'type' => $q->type,
+                'options' => $q->options,
+                'required' => (bool) $q->required,
+                'position' => $q->position ?? $index,
+            ])->values()->all();
         }
 
-        return $this->activate($client, $survey);
+        if ($questions === []) {
+            return $this->invalid(['questions' => ['Add at least one question.']]);
+        }
+
+        if ((int) $attributes['eligible_recipients'] < 1) {
+            return $this->result(true, 'There are no eligible recipients in the selected groups.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        // Check SMS units BEFORE creating the new survey record so nothing is saved if balance is low.
+        $preview = new Survey($attributes + ['public_token' => str_repeat('x', 48)]);
+        $requiredUnits = max(1, $this->estimatedSmsUnits($preview));
+
+        if ($unitError = $this->support->ensureSmsUnits($client, $requiredUnits, 're-run this survey')) {
+            return $unitError;
+        }
+
+        $newSurvey = DB::transaction(function () use ($client, $source, $attributes, $questions) {
+            $survey = Survey::create($attributes + [
+                'client_id' => $client->id,
+                'status' => Survey::STATUS_DRAFT,
+                'public_token' => $this->newToken(),
+                'reserved_amount' => 0,
+                'analytics' => $this->emptyAnalytics() + ['parent_id' => $source->id],
+            ]);
+
+            $this->syncQuestions($survey, $questions);
+
+            $survey->update([
+                'status' => $this->liveStatus($survey),
+                'activated_at' => now(),
+            ]);
+
+            return $survey;
+        }, 3);
+
+        $this->activity()->record('Survey re-run created', 'survey', 'rerun', 'client', $client, $client, [
+            'survey_id' => $newSurvey->id,
+            'parent_survey_id' => $source->id,
+            'status' => $newSurvey->status,
+        ]);
+
+        if ($newSurvey->status === Survey::STATUS_ACTIVE) {
+            DispatchEngagementBlastJob::dispatch('survey', $newSurvey->id)->afterCommit();
+        }
+
+        return $this->result(
+            false,
+            'Survey re-run created and activated.',
+            ApiCode::CREATED,
+            ApiReason::CREATED,
+            $this->present($newSurvey->fresh()),
+        );
     }
 
     /**

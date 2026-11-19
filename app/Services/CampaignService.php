@@ -120,6 +120,7 @@ class CampaignService
                 'estimated_sms_units' => (int) $campaign->estimated_cost_units,
             ],
             'analytics' => $summary,
+            'parent_id' => isset($campaign->analytics['parent_id']) ? (int) $campaign->analytics['parent_id'] : null,
             'inbox_id' => $campaign->inbox_id,
             'activated_at' => optional($campaign->activated_at)->toDateTimeString(),
             'completed_at' => optional($campaign->completed_at)->toDateTimeString(),
@@ -209,7 +210,7 @@ class CampaignService
     public function update(Client $client, Campaign $campaign, array $input): array
     {
         if (! in_array($campaign->status, Campaign::EDITABLE, true)) {
-            return $this->result(true, 'Only draft, funded, paused, completed or cancelled campaigns can be edited.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            return $this->result(true, 'Only draft, funded or paused campaigns can be edited in-place. Use rerun to run a completed or cancelled campaign again.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         $attributes = $this->build($client, $input, $campaign);
@@ -220,25 +221,6 @@ class CampaignService
 
         $reserved = (float) $campaign->reserved_amount;
         $reset = [];
-
-        if (in_array($campaign->status, [Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
-            $analytics = is_array($campaign->analytics) ? $campaign->analytics : [];
-            unset(
-                $analytics['blasted_at'],
-                $analytics['blast_claimed_at'],
-                $analytics['blast_failed_at'],
-                $analytics['blast_error'],
-                $analytics['blast_next_attempt_at'],
-                $analytics['blast_attempts'],
-            );
-
-            $reset = [
-                'status' => Campaign::STATUS_DRAFT,
-                'completed_at' => null,
-                'cancelled_at' => null,
-                'analytics' => $analytics,
-            ];
-        }
 
         if ($campaign->wallet_hold_id) {
             $needsMore = $attributes['reward_enabled'] && (float) $attributes['estimated_cost'] > $reserved + 0.00001;
@@ -438,19 +420,23 @@ class CampaignService
     }
 
     /**
-     * Activate a draft/funded campaign, or re-run a completed/cancelled campaign with the same data.
+     * Activate a draft/funded campaign. If the campaign is already completed or cancelled,
+     * delegates to `rerun()` so a new record is created and the old one is kept for audit history.
      *
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
     public function activate(Client $client, Campaign $campaign): array
     {
+        if (in_array($campaign->status, [Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
+            return $this->rerun($client, $campaign);
+        }
+
         $hasReward = EngagementSupport::rewardOn($campaign);
-        $isRerun = in_array($campaign->status, [Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true);
         $ready = $campaign->status === Campaign::STATUS_FUNDED
-            || (in_array($campaign->status, [Campaign::STATUS_DRAFT, Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true) && ! $hasReward);
+            || ($campaign->status === Campaign::STATUS_DRAFT && ! $hasReward);
 
         if (! $ready) {
-            $message = $hasReward
+            $message = $campaign->status === Campaign::STATUS_DRAFT && $hasReward
                 ? 'Fund this campaign before activating it.'
                 : 'Only draft, completed or cancelled campaigns can be activated.';
 
@@ -479,45 +465,16 @@ class CampaignService
             return $sender;
         }
 
-        if ($unitError = $this->support->ensureSmsUnits($client, max(1, (int) $campaign->estimated_cost_units), $isRerun ? 're-run this campaign' : 'activate this campaign')) {
+        if ($unitError = $this->support->ensureSmsUnits($client, max(1, (int) $campaign->estimated_cost_units), 'activate this campaign')) {
             return $unitError;
-        }
-
-        $analytics = is_array($campaign->analytics) ? $campaign->analytics : [];
-        unset(
-            $analytics['blasted_at'],
-            $analytics['blast_claimed_at'],
-            $analytics['blast_failed_at'],
-            $analytics['blast_error'],
-            $analytics['blast_next_attempt_at'],
-            $analytics['blast_attempts'],
-        );
-
-        $sendAt = $campaign->send_at;
-
-        if ($isRerun && $campaign->type === Campaign::TYPE_PROMOTION && $sendAt && $sendAt->isPast()) {
-            $sendAt = now();
-            $campaign->send_at = $sendAt;
-        }
-
-        if ($isRerun && $campaign->type === Campaign::TYPE_OCCASION) {
-            CampaignEvent::query()
-                ->where('campaign_id', $campaign->id)
-                ->where('event', CampaignEvent::SENT)
-                ->whereIn('occasion_year', [0, (int) now()->year])
-                ->delete();
         }
 
         $campaign->update([
             'status' => $this->liveStatus($campaign),
-            'send_at' => $sendAt,
-            'activated_at' => now(),
-            'completed_at' => null,
-            'cancelled_at' => null,
-            'analytics' => $analytics,
+            'activated_at' => $campaign->activated_at ?? now(),
         ]);
 
-        $this->activity()->record($isRerun ? 'Campaign re-run' : 'Campaign activated', 'campaign', $isRerun ? 'rerun' : 'activated', 'client', $client, $client, [
+        $this->activity()->record('Campaign activated', 'campaign', 'activated', 'client', $client, $client, [
             'campaign_id' => $campaign->id,
             'status' => $campaign->status,
         ]);
@@ -527,34 +484,72 @@ class CampaignService
             DispatchEngagementBlastJob::dispatch('campaign', $campaign->id)->afterCommit();
         }
 
-        return $this->result(false, $isRerun ? 'Campaign re-run activated.' : 'Campaign activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($campaign->fresh()));
+        return $this->result(false, 'Campaign activated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($campaign->fresh()));
     }
 
     /**
-     * Re-run a completed, cancelled or draft campaign, optionally applying new edits first.
+     * Re-run a campaign by creating a brand-new Campaign record (with the same data or optional
+     * edited fields) and activating it immediately, keeping the original record intact for audit trail.
      *
      * @param  array<string, mixed>  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function rerun(Client $client, Campaign $campaign, array $input = []): array
+    public function rerun(Client $client, Campaign $source, array $input = []): array
     {
-        if (! in_array($campaign->status, [Campaign::STATUS_DRAFT, Campaign::STATUS_FUNDED, Campaign::STATUS_PAUSED, Campaign::STATUS_COMPLETED, Campaign::STATUS_CANCELLED], true)) {
-            return $this->result(true, 'Only completed, cancelled, paused or draft campaigns can be re-run.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        // If no new send_at was passed and the old send_at is in the past, default to immediate send.
+        if (! array_key_exists('send_at', $input)
+            && $source->type === Campaign::TYPE_PROMOTION
+            && $source->send_at
+            && $source->send_at->isPast()) {
+            $input['send_at'] = null;
         }
 
-        if ($input !== []) {
-            $updated = $this->update($client, $campaign, $input);
+        $attributes = $this->build($client, $input, $source);
 
-            if ($updated['in_error']) {
-                return $updated;
-            }
-
-            $campaign = $campaign->fresh();
-        } elseif ($campaign->status === Campaign::STATUS_PAUSED) {
-            $campaign->update(['status' => Campaign::STATUS_COMPLETED]);
+        if ($this->support->failed($attributes)) {
+            return $attributes;
         }
 
-        return $this->activate($client, $campaign);
+        if ((int) $attributes['eligible_recipients'] < 1) {
+            return $this->result(true, 'There are no eligible recipients in the selected groups.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        // Check SMS units BEFORE creating the new campaign record so nothing is saved if balance is low.
+        $requiredUnits = max(1, (int) $attributes['estimated_cost_units']);
+
+        if ($unitError = $this->support->ensureSmsUnits($client, $requiredUnits, 're-run this campaign')) {
+            return $unitError;
+        }
+
+        $newCampaign = Campaign::create($attributes + [
+            'client_id' => $client->id,
+            'status' => Campaign::STATUS_DRAFT,
+            'reserved_amount' => 0,
+            'analytics' => $this->emptyAnalytics() + ['parent_id' => $source->id],
+        ]);
+
+        $newCampaign->update([
+            'status' => $this->liveStatus($newCampaign),
+            'activated_at' => now(),
+        ]);
+
+        $this->activity()->record('Campaign re-run created', 'campaign', 'rerun', 'client', $client, $client, [
+            'campaign_id' => $newCampaign->id,
+            'parent_campaign_id' => $source->id,
+            'status' => $newCampaign->status,
+        ]);
+
+        if ($newCampaign->status === Campaign::STATUS_ACTIVE && $newCampaign->type === Campaign::TYPE_PROMOTION) {
+            DispatchEngagementBlastJob::dispatch('campaign', $newCampaign->id)->afterCommit();
+        }
+
+        return $this->result(
+            false,
+            'Campaign re-run created and activated.',
+            ApiCode::CREATED,
+            ApiReason::CREATED,
+            $this->present($newCampaign->fresh()),
+        );
     }
 
     /**
