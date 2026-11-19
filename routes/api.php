@@ -71,6 +71,8 @@ Route::prefix('public')->middleware('throttle:60,1')->group(function () {
 });
 
 Route::prefix('client')->group(function () {
+    Route::post('check-availability', [ClientAuthController::class, 'checkAvailability'])->middleware('throttle:30,1');
+    Route::post('check_availability', [ClientAuthController::class, 'checkAvailability'])->middleware('throttle:30,1');
     Route::post('signup', [ClientAuthController::class, 'signup'])->middleware('throttle:5,1');
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('request_otp', [ClientAuthController::class, 'requestOtp']);

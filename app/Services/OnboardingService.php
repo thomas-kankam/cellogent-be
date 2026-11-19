@@ -46,28 +46,56 @@ class OnboardingService
     {
         $input = ValidatesClientAccount::normalizeClientAccountPayload($input);
         $email = strtolower(trim($input['email']));
+        $phone = $this->formatGhanaPhone($input['phone_number'] ?? null);
 
-        // Public signup must not reveal whether the email is already registered.
-        // Existing accounts get a fresh OTP (registration if still unverified, otherwise login)
-        // and the same success shape as a brand-new signup.
-        $existing = $this->actors->findByEmail('client', $email);
+        $emailTaken = $this->actors->emailTaken('client', $email);
+        $phoneTaken = $this->actors->phoneTaken('client', $phone);
 
-        if ($existing instanceof Client) {
-            // Unverified: resend the registration code so they can finish signup.
-            // Verified: same API shape, no hint — they already log in with OTP.
-            if ($existing->status === 'active' && ! $existing->is_verified) {
-                $this->otp->issue($existing, 'registration');
-            }
-
-            return $this->publicSignupResponse($email);
+        if ($emailTaken && $phoneTaken) {
+            return [
+                'in_error' => true,
+                'message' => 'This email and phone number are already registered.',
+                'status_code' => ApiCode::BAD_REQUEST,
+                'reason' => ApiReason::EMAIL_TAKEN,
+                'data' => [
+                    'email_taken' => true,
+                    'phone_taken' => true,
+                ],
+            ];
         }
 
-        $client = DB::transaction(function () use ($input, $email, $image) {
+        if ($emailTaken) {
+            return [
+                'in_error' => true,
+                'message' => 'This email is already registered.',
+                'status_code' => ApiCode::BAD_REQUEST,
+                'reason' => ApiReason::EMAIL_TAKEN,
+                'data' => [
+                    'email_taken' => true,
+                    'phone_taken' => false,
+                ],
+            ];
+        }
+
+        if ($phoneTaken) {
+            return [
+                'in_error' => true,
+                'message' => 'This phone number is already registered.',
+                'status_code' => ApiCode::BAD_REQUEST,
+                'reason' => ApiReason::PHONE_TAKEN,
+                'data' => [
+                    'email_taken' => false,
+                    'phone_taken' => true,
+                ],
+            ];
+        }
+
+        $client = DB::transaction(function () use ($input, $email, $phone, $image) {
             $client = $this->clients->create([
                 'first_name' => $input['first_name'] ?? null,
                 'last_name' => $input['last_name'] ?? null,
                 'email' => $email,
-                'phone_number' => $this->formatGhanaPhone($input['phone_number'] ?? null),
+                'phone_number' => $phone,
                 'date_of_birth' => $input['date_of_birth'] ?? null,
                 'gender' => $input['gender'] ?? null,
                 'account_type' => $input['account_type'] ?? null,
@@ -113,17 +141,22 @@ class OnboardingService
     {
         $input = ValidatesClientAccount::normalizeClientAccountPayload($input);
         $email = strtolower(trim($input['email']));
+        $phone = $this->formatGhanaPhone($input['phone_number'] ?? null);
 
         if ($this->actors->emailTaken('client', $email)) {
             return $this->fail('This email is already registered.', ApiCode::BAD_REQUEST, ApiReason::EMAIL_TAKEN);
         }
 
-        $client = DB::transaction(function () use ($admin, $input, $email, $image) {
+        if ($this->actors->phoneTaken('client', $phone)) {
+            return $this->fail('This phone number is already registered.', ApiCode::BAD_REQUEST, ApiReason::PHONE_TAKEN);
+        }
+
+        $client = DB::transaction(function () use ($admin, $input, $email, $phone, $image) {
             $client = $this->clients->create([
                 'first_name' => $input['first_name'] ?? null,
                 'last_name' => $input['last_name'] ?? null,
                 'email' => $email,
-                'phone_number' => $this->formatGhanaPhone($input['phone_number'] ?? null),
+                'phone_number' => $phone,
                 'date_of_birth' => $input['date_of_birth'] ?? null,
                 'gender' => $input['gender'] ?? null,
                 'account_type' => $input['account_type'] ?? null,
@@ -347,13 +380,80 @@ class OnboardingService
 
         return [
             'in_error' => false,
-            'message' => 'If this email can be used, a verification code has been sent.',
+            'message' => 'Account created. A verification code has been sent to your email.',
             'status_code' => ApiCode::CREATED,
             'reason' => ApiReason::CREATED,
             'data' => [
                 'email' => $email,
                 'channel' => 'email',
                 'expires_at' => now()->addMinutes($minutes)->toDateTimeString(),
+            ],
+        ];
+    }
+
+    /**
+     * Check whether an email or phone number already exists in the `clients` table.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function checkClientAvailability(string $emailOrPhone): array
+    {
+        $raw = trim($emailOrPhone);
+        $isEmail = str_contains($raw, '@');
+
+        if ($isEmail) {
+            $email = strtolower($raw);
+
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return [
+                    'in_error' => true,
+                    'message' => 'Please enter a valid email address.',
+                    'status_code' => ApiCode::VALIDATION,
+                    'reason' => ApiReason::VALIDATION_ERROR,
+                    'data' => ['emailOrPhone' => ['Please enter a valid email address.']],
+                ];
+            }
+
+            $exists = $this->actors->emailTaken('client', $email);
+
+            return [
+                'in_error' => false,
+                'message' => $exists ? 'This email is already registered.' : 'This email is available.',
+                'status_code' => ApiCode::SUCCESS,
+                'reason' => $exists ? ApiReason::EMAIL_TAKEN : ApiReason::SUCCESS,
+                'data' => [
+                    'type' => 'email',
+                    'value' => $email,
+                    'exists' => $exists,
+                    'available' => ! $exists,
+                ],
+            ];
+        }
+
+        $mobile = \App\Support\GhanaPhone::toMobile($raw);
+
+        if (! $mobile) {
+            return [
+                'in_error' => true,
+                'message' => 'Please enter a valid phone number or email address.',
+                'status_code' => ApiCode::VALIDATION,
+                'reason' => ApiReason::VALIDATION_ERROR,
+                'data' => ['emailOrPhone' => ['Please enter a valid phone number or email address.']],
+            ];
+        }
+
+        $exists = $this->actors->phoneTaken('client', $mobile);
+
+        return [
+            'in_error' => false,
+            'message' => $exists ? 'This phone number is already registered.' : 'This phone number is available.',
+            'status_code' => ApiCode::SUCCESS,
+            'reason' => $exists ? ApiReason::PHONE_TAKEN : ApiReason::SUCCESS,
+            'data' => [
+                'type' => 'phone',
+                'value' => $mobile,
+                'exists' => $exists,
+                'available' => ! $exists,
             ],
         ];
     }

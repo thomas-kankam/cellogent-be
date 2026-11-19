@@ -38,6 +38,8 @@ final class ApiReason
 
     public const EMAIL_TAKEN = 'email_taken';
 
+    public const PHONE_TAKEN = 'phone_taken';
+
     public const ALREADY_PROCESSED = 'already_processed';
 
     public const INSUFFICIENT_BALANCE = 'insufficient_balance';
