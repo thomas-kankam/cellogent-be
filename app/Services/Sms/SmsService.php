@@ -53,38 +53,6 @@ class SmsService
             ]);
         }
 
-        $message = $input['message'];
-        $valid = $recipients['valid'];
-
-        if (ContactPlaceholders::hasContactPlaceholders($message)) {
-            $eligiblePhones = ContactPlaceholders::applyRequiredFilter(
-                Contact::query()
-                    ->visible()
-                    ->where('client_id', $client->id)
-                    ->whereIn('phone_number', $valid)
-                    ->where(fn ($q) => $q->whereNull('dnd_status')->orWhere('dnd_status', '!=', 'active')),
-                $message,
-            )
-                ->distinct()
-                ->pluck('phone_number')
-                ->map(fn ($phone) => (string) $phone)
-                ->all();
-
-            $eligibleSet = array_flip($eligiblePhones);
-            $valid = array_values(array_filter($valid, fn (string $phone) => isset($eligibleSet[$phone])));
-
-            if ($valid === []) {
-                $fields = implode(', ', ContactPlaceholders::requiredPlaceholders($message));
-
-                return $this->result(
-                    true,
-                    "None of the selected recipients have all required placeholder fields ({$fields}).",
-                    ApiCode::BAD_REQUEST,
-                    ApiReason::INVALID,
-                );
-            }
-        }
-
         return $this->queue(
             client: $client,
             admin: null,
@@ -92,10 +60,10 @@ class SmsService
                 'type' => 'quick',
                 'request_type' => $requestType,
                 'from' => $sender,
-                'to' => implode(',', $valid),
-                'message' => $message,
+                'to' => implode(',', $recipients['valid']),
+                'message' => $input['message'],
             ],
-            recipients: count($valid),
+            recipients: count($recipients['valid']),
         );
     }
 
