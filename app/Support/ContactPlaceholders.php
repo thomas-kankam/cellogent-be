@@ -114,11 +114,6 @@ class ContactPlaceholders
         return self::requiredColumns($template) !== [];
     }
 
-    public static function hasClientPlaceholders(string $template): bool
-    {
-        return in_array('businessname', self::extractKeys($template), true);
-    }
-
     /**
      * Restrict a Contact query to contacts that have every placeholder column non-empty.
      */
@@ -149,27 +144,7 @@ class ContactPlaceholders
     }
 
     /**
-     * Render client-only placeholders (e.g. `{businessName}`) when no contact is needed.
-     */
-    public static function renderClientOnly(string $template, ?Client $client): string
-    {
-        if (! $client || ! self::hasClientPlaceholders($template)) {
-            return $template;
-        }
-
-        $business = self::businessName($client);
-
-        $text = preg_replace_callback('/\{\s*([A-Za-z_]+)\s*\}/', function (array $m) use ($business) {
-            $key = self::normalize($m[1]);
-
-            return $key === 'businessname' ? $business : $m[0];
-        }, $template) ?? $template;
-
-        return trim(preg_replace('/[ \t]{2,}/', ' ', $text) ?? $text);
-    }
-
-    /**
-     * Render all contact, client and extra placeholders in `$template`.
+     * Render all contact and extra placeholders in `$template`.
      *
      * @param  array<string, mixed>  $extraVars
      */
@@ -196,7 +171,6 @@ class ContactPlaceholders
             'address' => trim((string) ($contact->address ?? '')),
             'phonenumber' => $phone,
             'phone' => $phone,
-            'businessname' => $client ? self::businessName($client) : '',
         ];
 
         $text = preg_replace_callback('/\{\s*([A-Za-z_]+)\s*\}/', function (array $m) use ($values) {
@@ -206,11 +180,6 @@ class ContactPlaceholders
         }, $template) ?? $template;
 
         return trim(preg_replace('/[ \t]{2,}/', ' ', $text) ?? $text);
-    }
-
-    protected static function businessName(Client $client): string
-    {
-        return trim((string) ($client->business_name ?: trim($client->first_name.' '.$client->last_name)));
     }
 
     /**

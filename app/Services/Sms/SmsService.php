@@ -83,8 +83,6 @@ class SmsService
                     ApiReason::INVALID,
                 );
             }
-        } elseif (ContactPlaceholders::hasClientPlaceholders($message)) {
-            $message = ContactPlaceholders::renderClientOnly($message, $client);
         }
 
         return $this->queue(
@@ -129,10 +127,6 @@ class SmsService
         }
 
         $message = $input['message'];
-
-        if (! ContactPlaceholders::hasContactPlaceholders($message) && ContactPlaceholders::hasClientPlaceholders($message)) {
-            $message = ContactPlaceholders::renderClientOnly($message, $client);
-        }
 
         $audience = (int) $this->audience($client->id, $groupIds, $message)->distinct()->count('phone_number');
 
