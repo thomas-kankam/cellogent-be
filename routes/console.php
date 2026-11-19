@@ -14,6 +14,7 @@ use App\Services\Sms\AggregatorBalanceService;
 use App\Services\Sms\SmsService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -40,33 +41,38 @@ Artisan::command('sms:dispatch-pending', function () {
 })->purpose('Re-queue SMS whose job never started');
 
 Artisan::command('sms:sync-delivery', function () {
-    $ids = Sent::query()
-        ->where('status', Sent::SUBMITTED)
-        ->whereNotNull('next_dlr_at')
-        ->where('next_dlr_at', '<=', now())
-        ->orderBy('next_dlr_at')
-        ->limit((int) config('sms.dlr.per_minute', 1000))
-        ->pluck('id')
-        ->all();
+    try {
+        $ids = Sent::query()
+            ->where('status', Sent::SUBMITTED)
+            ->whereNotNull('next_dlr_at')
+            ->where('next_dlr_at', '<=', now())
+            ->orderBy('next_dlr_at')
+            ->limit((int) config('sms.dlr.per_minute', 1000))
+            ->pluck('id')
+            ->all();
 
-    if ($ids === []) {
-        return;
+        if ($ids === []) {
+            return;
+        }
+
+        // Short lease so a stuck/slow worker does not block re-poll for long.
+        $leaseSeconds = (int) config('sms.dlr.lease_seconds', 90);
+
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            Sent::query()->whereIn('id', $chunk)->update([
+                'next_dlr_at' => now()->addSeconds($leaseSeconds),
+            ]);
+        }
+
+        foreach (array_chunk($ids, (int) config('sms.dlr.job_size', 100)) as $chunk) {
+            SyncDeliveryReportsJob::dispatch($chunk);
+        }
+
+        $this->info('Queued delivery checks for '.count($ids).' messages.');
+    } catch (\Throwable $e) {
+        Log::error('sms:sync-delivery failed: '.$e->getMessage(), ['exception' => $e]);
+        $this->error($e->getMessage());
     }
-
-    // Short lease so a stuck/slow worker does not block re-poll for long.
-    $leaseSeconds = (int) config('sms.dlr.lease_seconds', 90);
-
-    foreach (array_chunk($ids, 1000) as $chunk) {
-        Sent::query()->whereIn('id', $chunk)->update([
-            'next_dlr_at' => now()->addSeconds($leaseSeconds),
-        ]);
-    }
-
-    foreach (array_chunk($ids, (int) config('sms.dlr.job_size', 100)) as $chunk) {
-        SyncDeliveryReportsJob::dispatch($chunk);
-    }
-
-    $this->info('Queued delivery checks for '.count($ids).' messages.');
 })->purpose('Poll the aggregator for delivery receipts');
 
 Artisan::command('sms:check-aggregator-balance', function (AggregatorBalanceService $balances) {
@@ -97,7 +103,7 @@ Artisan::command('payments:verify-pending', function () {
 
 Schedule::command('payments:verify-pending')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:dispatch-pending')->everyMinute()->withoutOverlapping();
-Schedule::command('sms:sync-delivery')->everyThirtySeconds()->withoutOverlapping();
+Schedule::command('sms:sync-delivery')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:check-aggregator-balance')->everyFifteenMinutes()->withoutOverlapping();
 
 Artisan::command('engagement:dispatch-due', function (EngagementBlastService $blasts) {
