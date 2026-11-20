@@ -156,11 +156,13 @@ class SmsService
     }
 
     /**
-     * Send again to the recipients of $source that failed (their units were already refunded).
+     * Re-blast an existing SMS either to its failed recipients (`target=failed`, default)
+     * or to all original recipients / contact groups (`target=all`), optionally scheduled.
      *
+     * @param  array<string, mixed>|string|null  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function reblast(Client $client, Inbox $source, ?string $message, string $requestType): array
+    public function reblast(Client $client, Inbox $source, array|string|null $input, string $requestType): array
     {
         if ((int) $source->client_id !== (int) $client->id) {
             return $this->result(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
@@ -178,6 +180,21 @@ class SmsService
             return $this->result(true, 'This message is still sending. Try again when it finishes.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        $message = is_array($input) ? ($input['message'] ?? null) : $input;
+        $target = is_array($input) ? strtolower((string) ($input['target'] ?? 'failed')) : 'failed';
+        $scheduledAt = is_array($input) ? $this->resolveScheduledAt($input) : null;
+        $textToSend = ($message !== null && $message !== '') ? (string) $message : $source->message;
+
+        $sender = $this->clientSender($client, $source->from);
+
+        if (is_array($sender)) {
+            return $sender;
+        }
+
+        if ($target === 'all') {
+            return $this->reblastAll($client, $source, $sender, $textToSend, $requestType, $scheduledAt);
+        }
+
         $failed = Sent::query()
             ->where('client_id', $client->id)
             ->where('inbox_id', $source->id)
@@ -189,15 +206,12 @@ class SmsService
             return $this->result(true, 'There are no failed recipients to send to.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        $sender = $this->clientSender($client, $source->from);
-
-        if (is_array($sender)) {
-            return $sender;
-        }
-
-        $textToSend = $message ?: $source->message;
         $requiredUnits = $failed * SmsParts::count($textToSend);
-        $check = $this->units->checkAvailability($client->id, $requiredUnits, 're-blast this SMS');
+        $check = $this->units->checkAvailability(
+            $client->id,
+            $requiredUnits,
+            $scheduledAt ? 'schedule this re-blast' : 're-blast this SMS',
+        );
 
         if (! $check['ok']) {
             return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
@@ -220,6 +234,7 @@ class SmsService
                 'from' => $sender,
                 'contact_group_ids' => $source->contact_group_ids,
                 'message' => $textToSend,
+                'scheduled_at' => $scheduledAt,
             ],
             recipients: function (Inbox $inbox) use ($client, $source, $useQuick) {
                 $claimed = Sent::query()
@@ -239,6 +254,128 @@ class SmsService
 
                 return $claimed;
             },
+        );
+    }
+
+    /**
+     * Re-blast to all original recipients (quick) or all eligible contacts in the same contact groups (bulk).
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    protected function reblastAll(
+        Client $client,
+        Inbox $source,
+        string $sender,
+        string $textToSend,
+        string $requestType,
+        ?Carbon $scheduledAt,
+    ): array {
+        if ($source->isQuick()) {
+            $recipients = $source->recipients();
+
+            if ($recipients === []) {
+                $recipients = Sent::query()
+                    ->where('client_id', $client->id)
+                    ->where('inbox_id', $source->id)
+                    ->pluck('to')
+                    ->map(fn ($to) => (string) $to)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
+            if ($recipients === []) {
+                return $this->result(true, 'This message has no recipients to re-blast.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+            }
+
+            $requiredUnits = count($recipients) * SmsParts::count($textToSend);
+            $check = $this->units->checkAvailability(
+                $client->id,
+                $requiredUnits,
+                $scheduledAt ? 'schedule this re-blast' : 're-blast this SMS',
+            );
+
+            if (! $check['ok']) {
+                return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+                    'required_units' => $check['required_units'],
+                    'available_units' => $check['available_units'],
+                    'shortfall_units' => $check['shortfall_units'],
+                ]);
+            }
+
+            return $this->queue(
+                client: $client,
+                admin: null,
+                attributes: [
+                    'type' => 'quick',
+                    'request_type' => $requestType,
+                    'mode' => 'reblast_all',
+                    'parent_id' => $source->id,
+                    'from' => $sender,
+                    'to' => implode(',', $recipients),
+                    'message' => $textToSend,
+                    'scheduled_at' => $scheduledAt,
+                ],
+                recipients: count($recipients),
+            );
+        }
+
+        $groupIds = array_values(array_unique(array_map('intval', $source->contact_group_ids ?? [])));
+
+        if ($groupIds === []) {
+            return $this->result(true, 'This bulk message has no contact groups to re-blast.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $owned = ContactGroup::query()
+            ->where('client_id', $client->id)
+            ->whereIn('id', $groupIds)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($owned === []) {
+            return $this->result(true, 'The original contact groups for this message are no longer available.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $audience = (int) $this->audience($client->id, $owned, $textToSend)->distinct()->count('phone_number');
+
+        if ($audience === 0) {
+            $error = ContactPlaceholders::hasContactPlaceholders($textToSend)
+                ? 'No contacts in the selected groups have all required placeholder fields ('.implode(', ', ContactPlaceholders::requiredPlaceholders($textToSend)).').'
+                : 'These contact groups have no contacts that can receive SMS.';
+
+            return $this->result(true, $error, ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        $requiredUnits = $audience * SmsParts::count($textToSend);
+        $check = $this->units->checkAvailability(
+            $client->id,
+            $requiredUnits,
+            $scheduledAt ? 'schedule this bulk re-blast' : 're-blast this bulk SMS',
+        );
+
+        if (! $check['ok']) {
+            return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
+                'required_units' => $check['required_units'],
+                'available_units' => $check['available_units'],
+                'shortfall_units' => $check['shortfall_units'],
+            ]);
+        }
+
+        return $this->queue(
+            client: $client,
+            admin: null,
+            attributes: [
+                'type' => 'bulk',
+                'request_type' => $requestType,
+                'mode' => 'reblast_all',
+                'parent_id' => $source->id,
+                'from' => $sender,
+                'contact_group_ids' => $owned,
+                'message' => $textToSend,
+                'scheduled_at' => $scheduledAt,
+            ],
+            recipients: $audience,
         );
     }
 
