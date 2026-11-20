@@ -115,8 +115,9 @@ class SmsController extends Controller
     }
 
     /**
-     * Full delivery report (summary, failure breakdown, units & paginated per-recipient status)
-     * for a quick or bulk SMS. Available on both dashboard and /api/v1.
+     * Per-contact delivery report for a quick or bulk SMS.
+     * - Single recipient (e.g. 1-contact quick SMS): returns `contact` directly without pagination.
+     * - Multiple recipients (multi quick or bulk SMS): returns paginated `contacts` + `pagination`.
      */
     public function deliveryReport(Request $request, int $inbox): JsonResponse
     {
@@ -126,11 +127,72 @@ class SmsController extends Controller
             return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        return $this->buildDeliveryReportResponse($request, $row);
+        $stats = $this->deliveryStats($row);
+
+        $query = Sent::query()
+            ->where('client_id', $row->client_id)
+            ->where('inbox_id', $row->id)
+            ->orderBy('id');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status'));
+        }
+
+        if ($request->filled('to')) {
+            $query->where('to', $request->string('to'));
+        }
+
+        $paginator = $this->paginateQuery($request, $query, 50);
+        $groupMap = $this->presenter->recipientGroupsForInbox($row, $paginator->getCollection());
+
+        $contacts = $paginator->getCollection()->map(function (Sent $sent) use ($row, $groupMap) {
+            $presented = $this->presenter->recipientForClient($sent, $row, $groupMap[(string) $sent->to] ?? []);
+
+            return [
+                'to' => $presented['to'],
+                'status' => $presented['status'],
+                'failure_reason' => $presented['failure_reason'],
+                'message_id' => $presented['message_id'],
+                'units_used' => $presented['units_used'],
+                'units_refunded' => $presented['units_refunded'],
+                'contact_groups' => $presented['contact_groups'],
+                'sent_at' => $presented['sent_at'],
+                'delivered_at' => $presented['delivered_at'],
+            ];
+        })->values()->all();
+
+        $payload = [
+            'sms_id' => $row->id,
+            'type' => $row->type,
+            'from' => $row->from,
+            'status' => $row->status,
+            'summary' => $stats['summary'],
+            'failure_breakdown' => $stats['failure_breakdown'],
+        ];
+
+        $isSingleRecipient = $stats['summary']['total_recipients'] <= 1
+            && $paginator->total() === 1
+            && $paginator->currentPage() === 1
+            && ! $request->filled('status')
+            && ! $request->filled('to');
+
+        if ($isSingleRecipient) {
+            $payload['contact'] = $contacts[0];
+        } else {
+            $payload['contacts'] = $contacts;
+            $payload['pagination'] = [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+            ];
+        }
+
+        return $this->apiResponse(false, 'Delivery report loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $payload);
     }
 
     /**
-     * Check delivery status by either inbox ID or message_id (works for quick & bulk SMS).
+     * Lightweight sent SMS status check by inbox ID or message_id (works for quick & bulk SMS).
      */
     public function statusByReference(Request $request, string $reference): JsonResponse
     {
@@ -142,6 +204,7 @@ class SmsController extends Controller
         }
 
         $inbox = null;
+        $matchedSent = null;
 
         if (ctype_digit($reference)) {
             $inbox = Inbox::query()->where('client_id', $clientId)->whereKey((int) $reference)->first();
@@ -155,35 +218,53 @@ class SmsController extends Controller
                 ->first();
         }
 
-        $matchedSentQuery = null;
-
         if (! $inbox) {
-            $sent = Sent::query()
+            $matchedSent = Sent::query()
                 ->where('client_id', $clientId)
                 ->where('message_id', $reference)
                 ->first();
 
-            if (! $sent) {
+            if (! $matchedSent) {
                 return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
             }
 
             $inbox = Inbox::query()
                 ->where('client_id', $clientId)
-                ->whereKey($sent->inbox_id)
+                ->whereKey($matchedSent->inbox_id)
                 ->first();
 
             if (! $inbox) {
                 return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
             }
-
-            $matchedSentQuery = Sent::query()
-                ->where('client_id', $clientId)
-                ->where('inbox_id', $inbox->id)
-                ->where('message_id', $reference)
-                ->orderBy('id');
         }
 
-        return $this->buildDeliveryReportResponse($request, $inbox, $matchedSentQuery);
+        $stats = $this->deliveryStats($inbox);
+
+        $data = [
+            'id' => $inbox->id,
+            'type' => $inbox->type,
+            'from' => $inbox->from,
+            'message_id' => $inbox->message_id,
+            'status' => $inbox->status,
+            'scheduled_at' => optional($inbox->scheduled_at)->toDateTimeString(),
+            'created_at' => optional($inbox->created_at)->toDateTimeString(),
+            'completed_at' => optional($inbox->completed_at)->toDateTimeString(),
+            'counts' => $stats['summary'],
+            'units' => $stats['units'],
+        ];
+
+        if ($matchedSent) {
+            $presented = $this->presenter->recipientForClient($matchedSent, $inbox);
+            $data['recipient'] = [
+                'to' => $presented['to'],
+                'status' => $presented['status'],
+                'failure_reason' => $presented['failure_reason'],
+                'sent_at' => $presented['sent_at'],
+                'delivered_at' => $presented['delivered_at'],
+            ];
+        }
+
+        return $this->apiResponse(false, 'SMS status loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $data);
     }
 
     public function recipients(Request $request, int $inbox): JsonResponse
@@ -268,10 +349,11 @@ class SmsController extends Controller
         return $this->respondFrom($this->sms->cancelScheduled($request->user(), $row));
     }
 
-    protected function buildDeliveryReportResponse(Request $request, Inbox $row, ?\Illuminate\Database\Eloquent\Builder $recipientQuery = null): JsonResponse
+    /**
+     * @return array{summary: array<string, int|float>, failure_breakdown: array<string, int>, units: array<string, int>}
+     */
+    protected function deliveryStats(Inbox $row): array
     {
-        $this->presenter->warmGroups([$row]);
-
         $statusCounts = Sent::query()
             ->where('client_id', $row->client_id)
             ->where('inbox_id', $row->id)
@@ -306,32 +388,8 @@ class SmsController extends Controller
             : max(0, $totalRecipients - $delivered - $failedTotal);
         $deliveryRate = $totalRecipients > 0 ? round(($delivered / $totalRecipients) * 100, 2) : 0.0;
 
-        $query = $recipientQuery ?? Sent::query()
-            ->where('client_id', $row->client_id)
-            ->where('inbox_id', $row->id)
-            ->orderBy('id');
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
-        }
-
-        if ($request->filled('to')) {
-            $query->where('to', $request->string('to'));
-        }
-
-        $paginator = $this->paginateQuery($request, $query, 50);
-        $groupMap = $this->presenter->recipientGroupsForInbox($row, $paginator->getCollection());
-
-        $recipients = $paginator->getCollection()->map(fn (Sent $sent) => $this->presenter->recipientForClient(
-            $sent,
-            $row,
-            $groupMap[(string) $sent->to] ?? [],
-        ))->values()->all();
-
-        return $this->apiResponse(false, 'Delivery report loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
-            'sms' => $this->presenter->forClient($row),
-            'report' => [
-                'status' => $row->status,
+        return [
+            'summary' => [
                 'total_recipients' => $totalRecipients,
                 'queued' => $queued,
                 'submitted' => $submitted,
@@ -339,28 +397,19 @@ class SmsController extends Controller
                 'failed' => $failedTotal,
                 'pending' => $pending,
                 'delivery_rate' => $deliveryRate,
-                'failure_breakdown' => [
-                    'undelivered' => $undelivered,
-                    'rejected' => $rejected,
-                    'expired' => $expired,
-                    'not_sent' => $notSent,
-                ],
-                'units' => [
-                    'charged' => (int) $row->units_used,
-                    'refunded' => (int) $row->units_refunded,
-                    'net' => max(0, (int) $row->units_used - (int) $row->units_refunded),
-                ],
             ],
-            'recipients' => [
-                'items' => $recipients,
-                'pagination' => [
-                    'current_page' => $paginator->currentPage(),
-                    'per_page' => $paginator->perPage(),
-                    'total' => $paginator->total(),
-                    'last_page' => $paginator->lastPage(),
-                ],
+            'failure_breakdown' => [
+                'undelivered' => $undelivered,
+                'rejected' => $rejected,
+                'expired' => $expired,
+                'not_sent' => $notSent,
             ],
-        ]);
+            'units' => [
+                'charged' => (int) $row->units_used,
+                'refunded' => (int) $row->units_refunded,
+                'net' => max(0, (int) $row->units_used - (int) $row->units_refunded),
+            ],
+        ];
     }
 
     protected function owned(Request $request, int $id): ?Inbox
