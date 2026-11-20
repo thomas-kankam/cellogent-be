@@ -213,7 +213,9 @@ Route::prefix('client')->group(function () {
         Route::post('sms/quick', [ClientSmsController::class, 'quick'])->middleware('throttle:sms-api');
         Route::post('sms/bulk', [ClientSmsController::class, 'bulk'])->middleware('throttle:sms-api');
         Route::get('sms', [ClientSmsController::class, 'index']);
+        Route::get('sms/status/{reference}', [ClientSmsController::class, 'statusByReference']);
         Route::get('sms/{inbox}', [ClientSmsController::class, 'show'])->whereNumber('inbox');
+        Route::get('sms/{inbox}/delivery-report', [ClientSmsController::class, 'deliveryReport'])->whereNumber('inbox');
         Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
         // reblast quick and bulk sms
         Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox')->middleware('throttle:sms-api');
@@ -243,7 +245,9 @@ Route::prefix('v1')->middleware(['auth.apikey', 'throttle:sms-api'])->group(func
     Route::post('sms/quick', [ClientSmsController::class, 'quick']);
     Route::post('sms/bulk', [ClientSmsController::class, 'bulk']);
     Route::get('sms', [ClientSmsController::class, 'index']);
+    Route::get('sms/status/{reference}', [ClientSmsController::class, 'statusByReference']);
     Route::get('sms/{inbox}', [ClientSmsController::class, 'show'])->whereNumber('inbox');
+    Route::get('sms/{inbox}/delivery-report', [ClientSmsController::class, 'deliveryReport'])->whereNumber('inbox');
     Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
     Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox');
     Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox');
