@@ -181,7 +181,7 @@ class SmsController extends Controller
             return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        return $this->respondFrom($this->sms->resend($request->user(), $row, $request->string('message')->toString(), $this->requestType($request)));
+        return $this->respondFrom($this->sms->resend($request->user(), $row, $request->validated(), $this->requestType($request)));
     }
 
     public function cancel(Request $request, int $inbox): JsonResponse

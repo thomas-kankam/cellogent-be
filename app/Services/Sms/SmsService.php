@@ -380,11 +380,13 @@ class SmsService
     }
 
     /**
-     * Resend a quick message with new text using the aggregator's resend (same recipients).
+     * Resend a quick message with new text using the aggregator's resend (same recipients),
+     * optionally scheduled for later.
      *
+     * @param  array<string, mixed>|string  $input
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
-    public function resend(Client $client, Inbox $source, string $message, string $requestType): array
+    public function resend(Client $client, Inbox $source, array|string $input, string $requestType): array
     {
         if ((int) $source->client_id !== (int) $client->id) {
             return $this->result(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
@@ -405,6 +407,9 @@ class SmsService
         if (in_array($source->status, [Inbox::STATUS_QUEUED, Inbox::STATUS_PROCESSING], true)) {
             return $this->result(true, 'This message is still sending. Try again when it finishes.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
+
+        $message = is_array($input) ? (string) ($input['message'] ?? '') : $input;
+        $scheduledAt = is_array($input) ? $this->resolveScheduledAt($input) : null;
 
         $recipients = Sent::query()
             ->where('client_id', $client->id)
@@ -430,7 +435,11 @@ class SmsService
         }
 
         $requiredUnits = count($recipients) * SmsParts::count($message);
-        $check = $this->units->checkAvailability($client->id, $requiredUnits, 'resend this SMS');
+        $check = $this->units->checkAvailability(
+            $client->id,
+            $requiredUnits,
+            $scheduledAt ? 'schedule this SMS resend' : 'resend this SMS',
+        );
 
         if (! $check['ok']) {
             return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
@@ -451,6 +460,7 @@ class SmsService
                 'from' => $sender,
                 'to' => implode(',', $recipients),
                 'message' => $message,
+                'scheduled_at' => $scheduledAt,
             ],
             recipients: count($recipients),
         );
