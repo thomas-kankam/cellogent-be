@@ -87,10 +87,10 @@ class PrepareBulkSmsJob implements ShouldQueue
                     continue;
                 }
 
-                $buffer[] = $base + [
+                $buffer[] = array_merge($base, [
                     'to' => (string) $row->{$column},
                     'message' => $message,
-                ];
+                ]);
             }
 
             while ($buffer !== [] && $remaining > 0) {
