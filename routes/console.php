@@ -31,7 +31,9 @@ Artisan::command('sms:dispatch-pending', function () {
         ->limit(500)
         ->pluck('inbox_id')
         ->each(function (int $inboxId) use (&$count) {
-            if ($inbox = Inbox::query()->find($inboxId)) {
+            $inbox = Inbox::query()->find($inboxId);
+
+            if ($inbox && $inbox->status === Inbox::STATUS_QUEUED) {
                 SmsService::dispatch($inbox);
                 $count++;
             }
@@ -39,6 +41,17 @@ Artisan::command('sms:dispatch-pending', function () {
 
     $this->info("Re-dispatched {$count} pending SMS.");
 })->purpose('Re-queue SMS whose job never started');
+
+Artisan::command('sms:dispatch-scheduled', function (SmsService $sms) {
+    try {
+        $count = $sms->dispatchScheduled();
+
+        $this->info("Dispatched {$count} scheduled SMS.");
+    } catch (\Throwable $e) {
+        Log::error('sms:dispatch-scheduled failed: '.$e->getMessage(), ['exception' => $e]);
+        $this->error($e->getMessage());
+    }
+})->purpose('Queue scheduled quick and bulk SMS whose send time has arrived');
 
 Artisan::command('sms:sync-delivery', function () {
     try {
@@ -102,6 +115,7 @@ Artisan::command('payments:verify-pending', function () {
 })->purpose('Check pending gateway payments that are due for a status check');
 
 Schedule::command('payments:verify-pending')->everyMinute()->withoutOverlapping();
+Schedule::command('sms:dispatch-scheduled')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:dispatch-pending')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:sync-delivery')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:check-aggregator-balance')->everyFifteenMinutes()->withoutOverlapping();

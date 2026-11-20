@@ -184,6 +184,17 @@ class SmsController extends Controller
         return $this->respondFrom($this->sms->resend($request->user(), $row, $request->string('message')->toString(), $this->requestType($request)));
     }
 
+    public function cancel(Request $request, int $inbox): JsonResponse
+    {
+        $row = $this->owned($request, $inbox);
+
+        if (! $row) {
+            return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        return $this->respondFrom($this->sms->cancelScheduled($request->user(), $row));
+    }
+
     protected function owned(Request $request, int $id): ?Inbox
     {
         return Inbox::query()->where('client_id', $request->user()->id)->whereKey($id)->first();

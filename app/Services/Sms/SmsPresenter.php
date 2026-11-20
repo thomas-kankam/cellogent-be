@@ -52,8 +52,10 @@ class SmsPresenter
         $sent = (int) $inbox->submitted_count;
         $delivered = (int) $inbox->delivered_count;
         $failed = (int) $inbox->failed_count;
-        // Not in a final state yet (still sending, or submitted and waiting for delivery confirmation).
-        $pending = max(0, $recipients - $delivered - $failed);
+        // Not in a final state yet (scheduled, sending, or awaiting delivery confirmation).
+        $pending = $inbox->status === Inbox::STATUS_CANCELLED
+            ? 0
+            : max(0, $recipients - $delivered - $failed);
 
         return [
             'id' => $inbox->id,
@@ -75,6 +77,7 @@ class SmsPresenter
                 'failed' => $failed,       // rejected or undelivered/expired
                 'pending' => $pending,     // still sending or awaiting handset confirmation
             ],
+            'scheduled_at' => optional($inbox->scheduled_at)->toDateTimeString(),
             'created_at' => optional($inbox->created_at)->toDateTimeString(),
             'completed_at' => optional($inbox->completed_at)->toDateTimeString(),
         ];

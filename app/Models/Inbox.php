@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Inbox extends Model
 {
+    public const STATUS_SCHEDULED = 'scheduled';
+
     public const STATUS_QUEUED = 'queued';
 
     public const STATUS_PROCESSING = 'processing';
@@ -13,6 +15,8 @@ class Inbox extends Model
     public const STATUS_COMPLETED = 'completed';
 
     public const STATUS_FAILED = 'failed';
+
+    public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
         'client_id',
@@ -39,6 +43,7 @@ class Inbox extends Model
         'is_global',
         'message_id',
         'status',
+        'scheduled_at',
         'completed_at',
     ];
 
@@ -47,6 +52,7 @@ class Inbox extends Model
         return [
             'contact_group_ids' => 'array',
             'is_global' => 'boolean',
+            'scheduled_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
     }

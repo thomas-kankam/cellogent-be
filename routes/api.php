@@ -219,6 +219,8 @@ Route::prefix('client')->group(function () {
         Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox')->middleware('throttle:sms-api');
         // resend quick sms type only
         Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox')->middleware('throttle:sms-api');
+        // cancel a scheduled quick or bulk sms before it sends
+        Route::post('sms/{inbox}/cancel', [ClientSmsController::class, 'cancel'])->whereNumber('inbox');
 
         Route::get('templates', [ClientTemplateController::class, 'index']);
         Route::post('templates', [ClientTemplateController::class, 'store']);
@@ -245,6 +247,7 @@ Route::prefix('v1')->middleware(['auth.apikey', 'throttle:sms-api'])->group(func
     Route::get('sms/{inbox}/recipients', [ClientSmsController::class, 'recipients'])->whereNumber('inbox');
     Route::post('sms/{inbox}/reblast', [ClientSmsController::class, 'reblast'])->whereNumber('inbox');
     Route::post('sms/{inbox}/resend', [ClientSmsController::class, 'resend'])->whereNumber('inbox');
+    Route::post('sms/{inbox}/cancel', [ClientSmsController::class, 'cancel'])->whereNumber('inbox');
 
     Route::get('sender-ids', [ClientSenderIdController::class, 'index']);
     Route::post('sender-ids', [ClientSenderIdController::class, 'store']);

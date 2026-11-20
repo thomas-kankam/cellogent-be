@@ -20,6 +20,7 @@ use App\Support\ApiReason;
 use App\Support\ContactPlaceholders;
 use App\Support\GhanaPhone;
 use App\Support\SmsParts;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -53,8 +54,13 @@ class SmsService
             ]);
         }
 
+        $scheduledAt = $this->resolveScheduledAt($input);
         $requiredUnits = count($recipients['valid']) * SmsParts::count($input['message']);
-        $check = $this->units->checkAvailability($client->id, $requiredUnits, 'send this quick SMS');
+        $check = $this->units->checkAvailability(
+            $client->id,
+            $requiredUnits,
+            $scheduledAt ? 'schedule this quick SMS' : 'send this quick SMS',
+        );
 
         if (! $check['ok']) {
             return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
@@ -73,6 +79,7 @@ class SmsService
                 'from' => $sender,
                 'to' => implode(',', $recipients['valid']),
                 'message' => $input['message'],
+                'scheduled_at' => $scheduledAt,
             ],
             recipients: count($recipients['valid']),
         );
@@ -117,8 +124,13 @@ class SmsService
             return $this->result(true, $error, ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
+        $scheduledAt = $this->resolveScheduledAt($input);
         $requiredUnits = $audience * SmsParts::count($message);
-        $check = $this->units->checkAvailability($client->id, $requiredUnits, 'send this bulk SMS');
+        $check = $this->units->checkAvailability(
+            $client->id,
+            $requiredUnits,
+            $scheduledAt ? 'schedule this bulk SMS' : 'send this bulk SMS',
+        );
 
         if (! $check['ok']) {
             return $this->result(true, $check['reason'], ApiCode::BAD_REQUEST, ApiReason::INSUFFICIENT_BALANCE, [
@@ -137,6 +149,7 @@ class SmsService
                 'from' => $sender,
                 'contact_group_ids' => $groupIds,
                 'message' => $message,
+                'scheduled_at' => $scheduledAt,
             ],
             recipients: $audience,
         );
@@ -151,6 +164,14 @@ class SmsService
     {
         if ((int) $source->client_id !== (int) $client->id) {
             return $this->result(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if ($source->status === Inbox::STATUS_SCHEDULED) {
+            return $this->result(true, 'This message is scheduled and has not been sent yet.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if ($source->status === Inbox::STATUS_CANCELLED) {
+            return $this->result(true, 'Cancelled messages cannot be re-blasted.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         if (in_array($source->status, [Inbox::STATUS_QUEUED, Inbox::STATUS_PROCESSING], true)) {
@@ -234,6 +255,14 @@ class SmsService
 
         if (! $source->isQuick()) {
             return $this->result(true, 'Only quick messages can be resent. Use re-blast for bulk messages.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if ($source->status === Inbox::STATUS_SCHEDULED) {
+            return $this->result(true, 'This message is scheduled and has not been sent yet.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
+        }
+
+        if ($source->status === Inbox::STATUS_CANCELLED) {
+            return $this->result(true, 'Cancelled messages cannot be resent.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
         if (in_array($source->status, [Inbox::STATUS_QUEUED, Inbox::STATUS_PROCESSING], true)) {
@@ -347,6 +376,107 @@ class SmsService
         return $query;
     }
 
+    /**
+     * Cancel a scheduled quick or bulk SMS before it begins sending and refund its reserved units.
+     *
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function cancelScheduled(Client $client, Inbox $source): array
+    {
+        if ((int) $source->client_id !== (int) $client->id) {
+            return $this->result(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        $cancelled = DB::transaction(function () use ($source): ?Inbox {
+            $locked = Inbox::query()->whereKey($source->id)->lockForUpdate()->first();
+
+            if (! $locked || $locked->status !== Inbox::STATUS_SCHEDULED) {
+                return null;
+            }
+
+            $locked->update(['status' => Inbox::STATUS_CANCELLED]);
+
+            return $locked;
+        }, 3);
+
+        if (! $cancelled) {
+            return $this->result(
+                true,
+                'Only scheduled messages that have not started sending can be cancelled.',
+                ApiCode::BAD_REQUEST,
+                ApiReason::INVALID,
+            );
+        }
+
+        if ((int) $cancelled->units_used > 0) {
+            $this->units->refund(
+                $client->id,
+                (int) $cancelled->units_used,
+                $cancelled->id,
+                'Cancelled scheduled '.ucfirst($cancelled->type).' SMS',
+            );
+        }
+
+        $this->activity()->record('Scheduled SMS cancelled', 'sms', 'updated', 'client', $client, $client, [
+            'sms_id' => $cancelled->id,
+            'type' => $cancelled->type,
+            'units_refunded' => (int) $cancelled->units_used,
+            'scheduled_at' => optional($cancelled->scheduled_at)->toDateTimeString(),
+        ]);
+
+        return $this->result(
+            false,
+            'Scheduled message cancelled and SMS units refunded.',
+            ApiCode::SUCCESS,
+            ApiReason::SUCCESS,
+            $this->presenter->forClient($cancelled->fresh()),
+        );
+    }
+
+    /**
+     * Find scheduled quick/bulk SMS whose scheduled_at has arrived, move them to queued,
+     * create their Outbox rows, and dispatch their queue jobs.
+     */
+    public function dispatchScheduled(int $limit = 200): int
+    {
+        $ids = Inbox::query()
+            ->where('status', Inbox::STATUS_SCHEDULED)
+            ->whereNotNull('scheduled_at')
+            ->where('scheduled_at', '<=', now())
+            ->orderBy('scheduled_at')
+            ->limit($limit)
+            ->pluck('id')
+            ->all();
+
+        $dispatched = 0;
+
+        foreach ($ids as $id) {
+            $claimed = DB::transaction(function () use ($id): ?Inbox {
+                $inbox = Inbox::query()->whereKey($id)->lockForUpdate()->first();
+
+                if (! $inbox || $inbox->status !== Inbox::STATUS_SCHEDULED) {
+                    return null;
+                }
+
+                if ($inbox->scheduled_at === null || $inbox->scheduled_at->isFuture()) {
+                    return null;
+                }
+
+                $inbox->update(['status' => Inbox::STATUS_QUEUED]);
+                $this->createOutbox($inbox);
+
+                return $inbox;
+            }, 3);
+
+            if ($claimed) {
+                self::dispatch($claimed);
+                $dispatched++;
+            }
+        }
+
+        return $dispatched;
+    }
+
     public static function dispatch(Inbox $inbox): void
     {
         if ($inbox->type === 'quick') {
@@ -360,7 +490,7 @@ class SmsService
     }
 
     /**
-     * Create inbox + outbox, take units, then queue the job.
+     * Create inbox + outbox, take units, then queue the job (or hold until scheduled_at).
      *
      * @param  array<string, mixed>  $attributes
      * @param  int|callable(Inbox): int  $recipients
@@ -369,9 +499,11 @@ class SmsService
     protected function queue(?Client $client, ?Admin $admin, array $attributes, int|callable $recipients): array
     {
         $parts = SmsParts::count($attributes['message']);
+        $scheduledAt = $attributes['scheduled_at'] ?? null;
+        $isScheduled = $scheduledAt instanceof Carbon && $scheduledAt->isFuture();
 
         try {
-            $inbox = DB::transaction(function () use ($client, $admin, $attributes, $recipients, $parts) {
+            $inbox = DB::transaction(function () use ($client, $admin, $attributes, $recipients, $parts, $scheduledAt, $isScheduled) {
                 $inbox = Inbox::create($attributes + [
                     'client_id' => $client?->id,
                     'admin_id' => $admin?->id,
@@ -379,7 +511,8 @@ class SmsService
                     'parts' => $parts,
                     'aggregator' => config('sms.aggregator'),
                     'is_global' => false,
-                    'status' => Inbox::STATUS_QUEUED,
+                    'status' => $isScheduled ? Inbox::STATUS_SCHEDULED : Inbox::STATUS_QUEUED,
+                    'scheduled_at' => $isScheduled ? $scheduledAt : null,
                 ]);
 
                 $count = is_callable($recipients) ? (int) $recipients($inbox) : $recipients;
@@ -392,7 +525,8 @@ class SmsService
                 $previous = null;
 
                 if ($client) {
-                    $debit = $this->units->debit($client->id, $units, $inbox->id, ucfirst($inbox->type).' SMS to '.$count.' recipient(s)');
+                    $label = ($isScheduled ? 'Scheduled ' : '').ucfirst($inbox->type).' SMS to '.$count.' recipient(s)';
+                    $debit = $this->units->debit($client->id, $units, $inbox->id, $label);
 
                     if (! $debit['ok']) {
                         throw new SmsRejected($debit['reason'], ApiReason::INSUFFICIENT_BALANCE);
@@ -407,22 +541,9 @@ class SmsService
                     'previous_units' => $previous,
                 ])->save();
 
-                Outbox::create([
-                    'inbox_id' => $inbox->id,
-                    'client_id' => $inbox->client_id,
-                    'admin_id' => $inbox->admin_id,
-                    'request_type' => $inbox->request_type,
-                    'type' => $inbox->type,
-                    'to' => $inbox->to,
-                    'from' => $inbox->from,
-                    'message' => $inbox->message,
-                    'contact_group_ids' => $inbox->contact_group_ids,
-                    'units_used' => $inbox->units_used,
-                    'previous_units' => $inbox->previous_units,
-                    'aggregator' => $inbox->aggregator,
-                    'is_global' => $inbox->is_global,
-                    'status' => 'pending',
-                ]);
+                if (! $isScheduled) {
+                    $this->createOutbox($inbox);
+                }
 
                 return $inbox;
             }, 3);
@@ -430,27 +551,78 @@ class SmsService
             return $this->result(true, $e->getMessage(), ApiCode::BAD_REQUEST, $e->reason);
         }
 
-        self::dispatch($inbox);
+        if (! $isScheduled) {
+            self::dispatch($inbox);
+        }
+
+        $actionTitle = $isScheduled ? 'SMS scheduled' : 'SMS queued';
+        $meta = [
+            'sms_id' => $inbox->id,
+            'type' => $inbox->type,
+            'recipients' => $inbox->recipients_count,
+            'units' => $inbox->units_used,
+        ];
+
+        if ($isScheduled) {
+            $meta['scheduled_at'] = $inbox->scheduled_at?->toDateTimeString();
+        }
 
         if ($client) {
-            $this->activity()->record('SMS queued', 'sms', 'created', 'client', $client, $client, [
-                'sms_id' => $inbox->id,
-                'type' => $inbox->type,
-                'recipients' => $inbox->recipients_count,
-                'units' => $inbox->units_used,
-            ]);
+            $this->activity()->record($actionTitle, 'sms', 'created', 'client', $client, $client, $meta);
         } elseif ($admin) {
-            $this->activity()->record('Admin SMS queued', 'sms', 'created', 'admin', $admin, null, [
-                'sms_id' => $inbox->id,
-                'type' => $inbox->type,
-                'recipients' => $inbox->recipients_count,
-                'units' => $inbox->units_used,
-            ]);
+            $this->activity()->record('Admin '.$actionTitle, 'sms', 'created', 'admin', $admin, null, $meta);
         }
 
         $data = $admin ? $this->presenter->forAdmin($inbox->fresh()) : $this->presenter->forClient($inbox->fresh());
+        $responseMessage = $isScheduled
+            ? 'Message scheduled for '.$inbox->scheduled_at->toDateTimeString().'.'
+            : 'Message queued for sending.';
 
-        return $this->result(false, 'Message queued for sending.', ApiCode::CREATED, ApiReason::CREATED, $data);
+        return $this->result(false, $responseMessage, ApiCode::CREATED, ApiReason::CREATED, $data);
+    }
+
+    protected function createOutbox(Inbox $inbox): void
+    {
+        if (Outbox::query()->where('inbox_id', $inbox->id)->exists()) {
+            return;
+        }
+
+        Outbox::create([
+            'inbox_id' => $inbox->id,
+            'client_id' => $inbox->client_id,
+            'admin_id' => $inbox->admin_id,
+            'request_type' => $inbox->request_type,
+            'type' => $inbox->type,
+            'to' => $inbox->to,
+            'from' => $inbox->from,
+            'message' => $inbox->message,
+            'contact_group_ids' => $inbox->contact_group_ids,
+            'units_used' => $inbox->units_used,
+            'previous_units' => $inbox->previous_units,
+            'aggregator' => $inbox->aggregator,
+            'is_global' => $inbox->is_global,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Resolve an optional schedule datetime from validated input. Returns null for immediate sends.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    protected function resolveScheduledAt(array $input): ?Carbon
+    {
+        if (($input['send_mode'] ?? null) === 'now') {
+            return null;
+        }
+
+        $raw = $input['scheduled_at'] ?? null;
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return Carbon::parse((string) $raw);
     }
 
     /**
