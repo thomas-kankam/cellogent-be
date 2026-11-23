@@ -39,16 +39,25 @@ class TemplateService
     /**
      * Returns active admin/global templates plus this client's own private templates.
      *
-     * @param  array<string, mixed>  $filters  type, occasion_type, category, owner/scope, search
+     * By default (combined view), deactivated client templates and deactivated admin templates are hidden.
+     * Clients can view their deactivated templates via `owner=mine`, `status=inactive`, or `include_inactive=1`.
+     *
+     * @param  array<string, mixed>  $filters  type, occasion_type, category, owner/scope, status, include_inactive, search
      */
     public function indexForClient(Client $client, array $filters = []): Builder
     {
         $owner = strtolower(trim((string) ($filters['owner'] ?? $filters['scope'] ?? '')));
+        $status = strtolower(trim((string) ($filters['status'] ?? '')));
+        $includeInactive = filter_var($filters['include_inactive'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
-        $query = Template::query()->where(function (Builder $q) use ($client, $owner) {
+        $query = Template::query()->where(function (Builder $q) use ($client, $owner, $status, $includeInactive) {
             if ($owner === 'mine' || $owner === 'client') {
                 $q->where('scope', Template::SCOPE_CLIENT)
                     ->where('client_id', $client->id);
+
+                if (in_array($status, Template::STATUSES, true)) {
+                    $q->where('status', $status);
+                }
 
                 return;
             }
@@ -61,13 +70,27 @@ class TemplateService
                 return;
             }
 
+            // Combined view (client's own + system/admin templates)
+            if ($status === Template::STATUS_INACTIVE) {
+                // Only client's own deactivated templates; deactivated admin templates stay hidden.
+                $q->where('scope', Template::SCOPE_CLIENT)
+                    ->where('client_id', $client->id)
+                    ->where('status', Template::STATUS_INACTIVE);
+
+                return;
+            }
+
             $q->where(function (Builder $global) {
                 $global->where('scope', Template::SCOPE_GLOBAL)
                     ->whereNull('client_id')
                     ->where('status', Template::STATUS_ACTIVE);
-            })->orWhere(function (Builder $mine) use ($client) {
+            })->orWhere(function (Builder $mine) use ($client, $status, $includeInactive) {
                 $mine->where('scope', Template::SCOPE_CLIENT)
                     ->where('client_id', $client->id);
+
+                if ($status !== 'all' && ! $includeInactive) {
+                    $mine->where('status', Template::STATUS_ACTIVE);
+                }
             });
         })->orderByRaw("CASE WHEN scope = 'client' THEN 0 ELSE 1 END")
             ->latest('id');
@@ -176,6 +199,55 @@ class TemplateService
     /**
      * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
      */
+    public function setStatusByAdmin(Admin $admin, Template $template, string $status): array
+    {
+        if (! $template->isGlobal()) {
+            return $this->result(true, 'Template not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if (! in_array($status, Template::STATUSES, true)) {
+            return $this->result(true, 'Invalid template status.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
+        }
+
+        $isActivating = $status === Template::STATUS_ACTIVE;
+
+        if ($template->status === $status) {
+            return $this->result(
+                false,
+                $isActivating ? 'Template is already active.' : 'Template is already deactivated.',
+                ApiCode::SUCCESS,
+                ApiReason::SUCCESS,
+                $this->present($template),
+            );
+        }
+
+        $template->update([
+            'status' => $status,
+            'admin_id' => $admin->id,
+        ]);
+
+        $this->activity()->record(
+            $isActivating ? 'Template activated' : 'Template deactivated',
+            'template',
+            'updated',
+            'admin',
+            $admin,
+            null,
+            ['template_id' => $template->id, 'status' => $status],
+        );
+
+        return $this->result(
+            false,
+            $isActivating ? 'Template activated.' : 'Template deactivated and hidden from clients.',
+            ApiCode::SUCCESS,
+            ApiReason::SUCCESS,
+            $this->present($template->fresh()),
+        );
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
     public function deleteByAdmin(Admin $admin, Template $template): array
     {
         if (! $template->isGlobal()) {
@@ -208,7 +280,7 @@ class TemplateService
             'scope' => Template::SCOPE_CLIENT,
             'client_id' => $client->id,
             'admin_id' => null,
-            'status' => Template::STATUS_ACTIVE,
+            'status' => in_array($input['status'] ?? null, Template::STATUSES, true) ? $input['status'] : Template::STATUS_ACTIVE,
         ]);
 
         $this->activity()->record('Template created', 'template', 'created', 'client', $client, $client, [
@@ -239,13 +311,69 @@ class TemplateService
             return $attributes;
         }
 
-        $template->update($attributes);
+        $extra = [];
+
+        if (array_key_exists('status', $input) && in_array($input['status'], Template::STATUSES, true)) {
+            $extra['status'] = $input['status'];
+        }
+
+        $template->update($attributes + $extra);
 
         $this->activity()->record('Template updated', 'template', 'updated', 'client', $client, $client, [
             'template_id' => $template->id,
         ]);
 
         return $this->result(false, 'Template updated.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->present($template->fresh(), $client));
+    }
+
+    /**
+     * @return array{in_error: bool, message: string, status_code: int, reason: string, data: array<string, mixed>}
+     */
+    public function setStatusByClient(Client $client, Template $template, string $status): array
+    {
+        if ($template->isGlobal()) {
+            return $this->result(true, 'System templates cannot be activated or deactivated by clients.', ApiCode::FORBIDDEN, ApiReason::FORBIDDEN);
+        }
+
+        if (! $template->isOwnedByClient($client->id)) {
+            return $this->result(true, 'Template not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
+        if (! in_array($status, Template::STATUSES, true)) {
+            return $this->result(true, 'Invalid template status.', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR);
+        }
+
+        $isActivating = $status === Template::STATUS_ACTIVE;
+
+        if ($template->status === $status) {
+            return $this->result(
+                false,
+                $isActivating ? 'Template is already active.' : 'Template is already deactivated.',
+                ApiCode::SUCCESS,
+                ApiReason::SUCCESS,
+                $this->present($template, $client),
+            );
+        }
+
+        $template->update(['status' => $status]);
+
+        $this->activity()->record(
+            $isActivating ? 'Template activated' : 'Template deactivated',
+            'template',
+            'updated',
+            'client',
+            $client,
+            $client,
+            ['template_id' => $template->id, 'status' => $status],
+        );
+
+        return $this->result(
+            false,
+            $isActivating ? 'Template activated.' : 'Template deactivated.',
+            ApiCode::SUCCESS,
+            ApiReason::SUCCESS,
+            $this->present($template->fresh(), $client),
+        );
     }
 
     /**

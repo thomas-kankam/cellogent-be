@@ -18,7 +18,7 @@ class TemplateController extends Controller
     public function index(Request $request): JsonResponse
     {
         $client = $request->user();
-        $query = $this->templates->indexForClient($client, $request->only(['type', 'occasion_type', 'category', 'owner', 'scope', 'search']));
+        $query = $this->templates->indexForClient($client, $request->only(['type', 'occasion_type', 'category', 'owner', 'scope', 'status', 'include_inactive', 'search']));
 
         return $this->paginatedApiResponse(
             'Templates loaded.',
@@ -47,6 +47,24 @@ class TemplateController extends Controller
     public function update(StoreTemplateRequest $request, Template $template): JsonResponse
     {
         return $this->respondFrom($this->templates->updateByClient($request->user(), $template, $request->validated()));
+    }
+
+    public function updateStatus(Request $request, Template $template): JsonResponse
+    {
+        $raw = strtolower(trim((string) $request->input('status', '')));
+        $status = match ($raw) {
+            'active', 'activate' => Template::STATUS_ACTIVE,
+            'inactive', 'deactivate' => Template::STATUS_INACTIVE,
+            default => null,
+        };
+
+        if ($status === null) {
+            return $this->apiResponse(true, 'Status must be "active" or "inactive".', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
+                'status' => ['Allowed values: active, inactive.'],
+            ]);
+        }
+
+        return $this->respondFrom($this->templates->setStatusByClient($request->user(), $template, $status));
     }
 
     public function destroy(Request $request, Template $template): JsonResponse

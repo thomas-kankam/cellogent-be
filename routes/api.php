@@ -229,6 +229,7 @@ Route::prefix('client')->group(function () {
         Route::whereNumber('template')->group(function () {
             Route::get('templates/{template}', [ClientTemplateController::class, 'show']);
             Route::put('templates/{template}', [ClientTemplateController::class, 'update']);
+            Route::put('templates/{template}/status', [ClientTemplateController::class, 'updateStatus']);
             Route::delete('templates/{template}', [ClientTemplateController::class, 'destroy']);
         });
     });
@@ -431,6 +432,7 @@ Route::prefix('admin')->group(function () {
             Route::whereNumber('template')->group(function () {
                 Route::get('templates/{template}', [AdminTemplateController::class, 'show']);
                 Route::put('templates/{template}', [AdminTemplateController::class, 'update']);
+                Route::put('templates/{template}/status', [AdminTemplateController::class, 'updateStatus']);
                 Route::delete('templates/{template}', [AdminTemplateController::class, 'destroy']);
             });
         });

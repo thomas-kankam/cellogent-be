@@ -46,6 +46,24 @@ class TemplateController extends Controller
         return $this->respondFrom($this->templates->updateByAdmin($request->user(), $template, $request->validated()));
     }
 
+    public function updateStatus(Request $request, Template $template): JsonResponse
+    {
+        $raw = strtolower(trim((string) $request->input('status', '')));
+        $status = match ($raw) {
+            'active', 'activate' => Template::STATUS_ACTIVE,
+            'inactive', 'deactivate' => Template::STATUS_INACTIVE,
+            default => null,
+        };
+
+        if ($status === null) {
+            return $this->apiResponse(true, 'Status must be "active" or "inactive".', ApiCode::VALIDATION, ApiReason::VALIDATION_ERROR, [
+                'status' => ['Allowed values: active, inactive.'],
+            ]);
+        }
+
+        return $this->respondFrom($this->templates->setStatusByAdmin($request->user(), $template, $status));
+    }
+
     public function destroy(Request $request, Template $template): JsonResponse
     {
         return $this->respondFrom($this->templates->deleteByAdmin($request->user(), $template));
