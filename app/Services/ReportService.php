@@ -120,11 +120,14 @@ class ReportService
     protected function sms(?int $clientId, array $range, array $filters): array
     {
         $bucket = $this->bucket('created_at', $range['group_by']);
+        $sourceExpr = "COALESCE(source, CASE WHEN type = 'quick' THEN 'quick_sms' ELSE 'bulk_sms' END)";
+        $sources = $this->parseSources($filters['source'] ?? null);
 
         $rows = $this->scoped('inboxes', $clientId, $range)
             ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
+            ->when($sources !== [], fn ($q) => $q->whereIn(DB::raw($sourceExpr), $sources))
             ->when($filters['request_type'] ?? null, fn ($q, $v) => $q->where('request_type', $v))
-            ->selectRaw("{$bucket} AS bucket, type, request_type")
+            ->selectRaw("{$bucket} AS bucket, type, {$sourceExpr} AS source, request_type")
             ->selectRaw('COUNT(*) AS messages')
             ->selectRaw('COALESCE(SUM(recipients_count), 0) AS recipients')
             ->selectRaw('COALESCE(SUM(units_used), 0) AS units_used')
@@ -132,12 +135,13 @@ class ReportService
             ->selectRaw('COALESCE(SUM(submitted_count), 0) AS sent')
             ->selectRaw('COALESCE(SUM(delivered_count), 0) AS delivered')
             ->selectRaw('COALESCE(SUM(failed_count), 0) AS failed')
-            ->groupByRaw("{$bucket}, type, request_type")
+            ->groupByRaw("{$bucket}, type, {$sourceExpr}, request_type")
             ->orderBy('bucket')
             ->get()
             ->map(fn ($r) => [
                 'bucket' => $r->bucket,
                 'type' => $r->type,
+                'source' => $r->source,
                 'request_type' => $r->request_type,
                 'messages' => (int) $r->messages,
                 'recipients' => (int) $r->recipients,
@@ -158,6 +162,7 @@ class ReportService
         return [
             'rows' => $rows,
             'by_type' => $by('type'),
+            'by_source' => $by('source'),
             'by_channel' => $by('request_type'),
             'totals' => $this->sum($rows, ['messages', 'recipients', 'units_used', 'units_refunded', 'units_net', 'sent', 'delivered', 'failed']),
         ];
@@ -173,8 +178,12 @@ class ReportService
     protected function delivery(?int $clientId, array $range, array $filters): array
     {
         $bucket = $this->bucket('created_at', $range['group_by']);
+        $sourceExpr = "COALESCE(source, CASE WHEN type = 'quick' THEN 'quick_sms' ELSE 'bulk_sms' END)";
+        $sources = $this->parseSources($filters['source'] ?? null);
+
         $inboxes = fn () => $this->scoped('inboxes', $clientId, $range)
             ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
+            ->when($sources !== [], fn ($q) => $q->whereIn(DB::raw($sourceExpr), $sources))
             ->when($filters['request_type'] ?? null, fn ($q, $v) => $q->where('request_type', $v));
 
         $rows = $inboxes()
@@ -202,6 +211,31 @@ class ReportService
                 ];
             })->all();
 
+        $bySource = $inboxes()
+            ->selectRaw("{$sourceExpr} AS source")
+            ->selectRaw('COUNT(*) AS messages')
+            ->selectRaw('COALESCE(SUM(recipients_count), 0) AS recipients')
+            ->selectRaw('COALESCE(SUM(submitted_count), 0) AS sent')
+            ->selectRaw('COALESCE(SUM(delivered_count), 0) AS delivered')
+            ->selectRaw('COALESCE(SUM(failed_count), 0) AS failed')
+            ->groupByRaw($sourceExpr)
+            ->get()
+            ->mapWithKeys(function ($r) {
+                $recipients = (int) $r->recipients;
+                $delivered = (int) $r->delivered;
+                $failed = (int) $r->failed;
+
+                return [(string) $r->source => [
+                    'messages' => (int) $r->messages,
+                    'recipients' => $recipients,
+                    'sent' => (int) $r->sent,
+                    'delivered' => $delivered,
+                    'failed' => $failed,
+                    'pending' => max(0, $recipients - $delivered - $failed),
+                    'delivery_rate' => $recipients > 0 ? round($delivered / $recipients * 100, 2) : 0.0,
+                ]];
+            })->all();
+
         $reasons = DB::table('sents')
             ->whereIn('inbox_id', $inboxes()->select('id'))
             ->where('status', 'failed')
@@ -224,7 +258,19 @@ class ReportService
         $totals = $this->sum($rows, ['recipients', 'sent', 'delivered', 'failed', 'pending']);
         $totals['delivery_rate'] = $totals['recipients'] > 0 ? round($totals['delivered'] / $totals['recipients'] * 100, 2) : 0.0;
 
-        return ['rows' => $rows, 'failure_reasons' => $failureReasons, 'totals' => $totals];
+        return ['rows' => $rows, 'by_source' => $bySource, 'failure_reasons' => $failureReasons, 'totals' => $totals];
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function parseSources(mixed $raw): array
+    {
+        if (! is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
     /**

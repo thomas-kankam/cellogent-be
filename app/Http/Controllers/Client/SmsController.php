@@ -77,6 +77,17 @@ class SmsController extends Controller
             }
         }
 
+        if ($request->filled('source')) {
+            $sources = array_values(array_filter(array_map('trim', explode(',', (string) $request->input('source')))));
+
+            if ($sources !== []) {
+                $query->whereIn(
+                    DB::raw("COALESCE(source, CASE WHEN type = 'quick' THEN 'quick_sms' ELSE 'bulk_sms' END)"),
+                    $sources,
+                );
+            }
+        }
+
         if ($request->filled('contact_group_id')) {
             $groupId = $request->integer('contact_group_id');
             $query->whereJsonContains('contact_group_ids', $groupId);

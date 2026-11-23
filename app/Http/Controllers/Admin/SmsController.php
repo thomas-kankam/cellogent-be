@@ -95,6 +95,17 @@ class SmsController extends Controller
             }
         }
 
+        if ($request->filled('source')) {
+            $sources = array_values(array_filter(array_map('trim', explode(',', (string) $request->input('source')))));
+
+            if ($sources !== []) {
+                $query->whereIn(
+                    \Illuminate\Support\Facades\DB::raw("COALESCE(source, CASE WHEN type = 'quick' THEN 'quick_sms' ELSE 'bulk_sms' END)"),
+                    $sources,
+                );
+            }
+        }
+
         if ($request->filled('from_date')) {
             $query->where('created_at', '>=', $request->date('from_date')->startOfDay());
         }

@@ -18,6 +18,24 @@ class Inbox extends Model
 
     public const STATUS_CANCELLED = 'cancelled';
 
+    public const SOURCE_QUICK_SMS = 'quick_sms';
+
+    public const SOURCE_BULK_SMS = 'bulk_sms';
+
+    public const SOURCE_CAMPAIGN_PROMOTION = 'campaign_promotion';
+
+    public const SOURCE_CAMPAIGN_OCCASION = 'campaign_occasion';
+
+    public const SOURCE_SURVEY = 'survey';
+
+    public const SOURCES = [
+        self::SOURCE_QUICK_SMS,
+        self::SOURCE_BULK_SMS,
+        self::SOURCE_CAMPAIGN_PROMOTION,
+        self::SOURCE_CAMPAIGN_OCCASION,
+        self::SOURCE_SURVEY,
+    ];
+
     protected $fillable = [
         'client_id',
         'admin_id',
@@ -25,6 +43,8 @@ class Inbox extends Model
         'mode',
         'request_type',
         'type',
+        'source',
+        'source_id',
         'to',
         'from',
         'message',
@@ -68,5 +88,14 @@ class Inbox extends Model
     public function isQuick(): bool
     {
         return $this->type === 'quick';
+    }
+
+    public function resolvedSource(): string
+    {
+        if (is_string($this->source) && $this->source !== '') {
+            return $this->source;
+        }
+
+        return $this->isQuick() ? self::SOURCE_QUICK_SMS : self::SOURCE_BULK_SMS;
     }
 }

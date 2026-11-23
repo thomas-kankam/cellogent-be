@@ -129,6 +129,8 @@ class SmsPresenter
         return [
             'id' => $inbox->id,
             'type' => $inbox->type,
+            'source' => $inbox->resolvedSource(),
+            'source_id' => $inbox->source_id,
             'mode' => $inbox->mode ?? 'send',
             'parent_id' => $inbox->parent_id,
             'request_type' => $inbox->request_type,

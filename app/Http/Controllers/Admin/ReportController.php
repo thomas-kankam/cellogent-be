@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class ReportController extends Controller
 {
-    protected const FILTERS = ['period', 'from', 'to', 'type', 'request_type', 'purpose', 'status', 'inbox_id', 'format'];
+    protected const FILTERS = ['period', 'from', 'to', 'type', 'source', 'request_type', 'purpose', 'status', 'inbox_id', 'format'];
 
     public function __construct(
         protected ReportService $reports,

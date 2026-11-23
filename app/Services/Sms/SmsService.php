@@ -75,6 +75,8 @@ class SmsService
             admin: null,
             attributes: [
                 'type' => 'quick',
+                'source' => $input['source'] ?? Inbox::SOURCE_QUICK_SMS,
+                'source_id' => $input['source_id'] ?? null,
                 'request_type' => $requestType,
                 'from' => $sender,
                 'to' => implode(',', $recipients['valid']),
@@ -145,6 +147,8 @@ class SmsService
             admin: null,
             attributes: [
                 'type' => 'bulk',
+                'source' => $input['source'] ?? Inbox::SOURCE_BULK_SMS,
+                'source_id' => $input['source_id'] ?? null,
                 'request_type' => $requestType,
                 'from' => $sender,
                 'contact_group_ids' => $groupIds,
@@ -231,6 +235,8 @@ class SmsService
             admin: null,
             attributes: [
                 'type' => $useQuick ? 'quick' : 'bulk',
+                'source' => $source->resolvedSource(),
+                'source_id' => $source->source_id,
                 'request_type' => $requestType,
                 'mode' => 'reblast',
                 'parent_id' => $source->id,
@@ -311,6 +317,8 @@ class SmsService
                 admin: null,
                 attributes: [
                     'type' => 'quick',
+                    'source' => $source->resolvedSource(),
+                    'source_id' => $source->source_id,
                     'request_type' => $requestType,
                     'mode' => 'reblast_all',
                     'parent_id' => $source->id,
@@ -370,6 +378,8 @@ class SmsService
             admin: null,
             attributes: [
                 'type' => 'bulk',
+                'source' => $source->resolvedSource(),
+                'source_id' => $source->source_id,
                 'request_type' => $requestType,
                 'mode' => 'reblast_all',
                 'parent_id' => $source->id,
@@ -461,6 +471,8 @@ class SmsService
             admin: null,
             attributes: [
                 'type' => 'quick',
+                'source' => $source->resolvedSource(),
+                'source_id' => $source->source_id,
                 'request_type' => $requestType,
                 'mode' => 'resend',
                 'parent_id' => $source->id,
@@ -500,6 +512,7 @@ class SmsService
             admin: $admin,
             attributes: [
                 'type' => 'quick',
+                'source' => Inbox::SOURCE_QUICK_SMS,
                 'request_type' => 'system',
                 'from' => $input['from'],
                 'to' => implode(',', $recipients['valid']),

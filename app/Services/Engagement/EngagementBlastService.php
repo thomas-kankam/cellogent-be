@@ -7,6 +7,7 @@ use App\Models\Campaign;
 use App\Models\CampaignEvent;
 use App\Models\Client;
 use App\Models\Contact;
+use App\Models\Inbox;
 use App\Models\Survey;
 use App\Services\RewardDisbursementService;
 use App\Services\Sms\SmsService;
@@ -131,6 +132,7 @@ class EngagementBlastService
                 $vars,
                 $groupIds,
                 $item instanceof Campaign ? $item : null,
+                $item,
             );
         } catch (Throwable $e) {
             report($e);
@@ -163,8 +165,18 @@ class EngagementBlastService
      * @param  list<int>|null  $bulkGroupIds
      * @return array{sent: list<array{phone: string, contact_id: int|null, inbox_id: int|null}>, failed: list<array{phone: string, contact_id: int|null, reason: string}>, inbox_ids: list<int>}
      */
-    public function deliver(Client $client, string $sender, string $template, iterable $contacts, array $vars, ?array $bulkGroupIds = null, ?Campaign $campaign = null): array
+    public function deliver(Client $client, string $sender, string $template, iterable $contacts, array $vars, ?array $bulkGroupIds = null, ?Campaign $campaign = null, ?Model $sourceModel = null): array
     {
+        $sourceModel ??= $campaign;
+        $sourceTag = match (true) {
+            $sourceModel instanceof Campaign => $sourceModel->type === Campaign::TYPE_OCCASION
+                ? Inbox::SOURCE_CAMPAIGN_OCCASION
+                : Inbox::SOURCE_CAMPAIGN_PROMOTION,
+            $sourceModel instanceof Survey => Inbox::SOURCE_SURVEY,
+            default => null,
+        };
+        $sourceId = $sourceModel ? (int) $sourceModel->getKey() : null;
+
         $hasContactPlaceholders = $this->isPersonal($template);
         $wrapCtaLink = $campaign !== null && CampaignLink::shouldWrap(is_array($campaign->cta) ? $campaign->cta : null);
         $personal = $hasContactPlaceholders || $wrapCtaLink;
@@ -209,9 +221,10 @@ class EngagementBlastService
                 : array_map(fn ($rows) => ['rows' => $rows, 'bulk' => false], array_chunk($bucket['rows'], $max));
 
             foreach ($batches as $batch) {
+                $sourceMeta = $sourceTag ? ['source' => $sourceTag, 'source_id' => $sourceId] : [];
                 $result = $batch['bulk']
-                    ? $this->sms->bulk($client, ['from' => $sender, 'contact_group_ids' => $bulkGroupIds, 'message' => $bucket['message']], 'system')
-                    : $this->sms->quick($client, ['from' => $sender, 'to' => array_column($batch['rows'], 'phone'), 'message' => $bucket['message']], 'system');
+                    ? $this->sms->bulk($client, ['from' => $sender, 'contact_group_ids' => $bulkGroupIds, 'message' => $bucket['message']] + $sourceMeta, 'system')
+                    : $this->sms->quick($client, ['from' => $sender, 'to' => array_column($batch['rows'], 'phone'), 'message' => $bucket['message']] + $sourceMeta, 'system');
 
                 if ($result['in_error']) {
                     foreach ($batch['rows'] as $row) {
