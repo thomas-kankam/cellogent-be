@@ -160,6 +160,22 @@ class SmsUnitService
         }
 
         DB::transaction(function () use ($clientId, $units, $inboxId, $description) {
+            if ($inboxId) {
+                $inbox = DB::table('inboxes')
+                    ->where('id', $inboxId)
+                    ->lockForUpdate()
+                    ->first(['units_used', 'units_refunded']);
+
+                if ($inbox) {
+                    $refundable = max(0, (int) $inbox->units_used - (int) $inbox->units_refunded);
+                    $units = min($units, $refundable);
+
+                    if ($units <= 0) {
+                        return;
+                    }
+                }
+            }
+
             $subscription = Subscription::query()->where('client_id', $clientId)->lockForUpdate()->first();
 
             if (! $subscription) {

@@ -550,6 +550,13 @@ class SmsService
 
             $locked->update(['status' => Inbox::STATUS_CANCELLED]);
 
+            // Release failed-recipient claims if this was a scheduled failed-only reblast.
+            if ($locked->mode === 'reblast') {
+                Sent::query()
+                    ->where('retry_inbox_id', $locked->id)
+                    ->update(['retry_inbox_id' => null]);
+            }
+
             return $locked;
         }, 3);
 

@@ -27,9 +27,9 @@ class SentWriter
         }
 
         if (! $response->ok) {
-            $this->markFailed($inboxId, $recipients, $response->error ?? 'Not accepted by aggregator');
+            $failed = $this->markFailed($inboxId, $recipients, $response->error ?? 'Not accepted by aggregator');
 
-            return [0, count($recipients)];
+            return [0, $failed];
         }
 
         $accepted = $response->messagesByRecipient();
@@ -48,11 +48,11 @@ class SentWriter
 
         $this->markSubmitted($inboxId, $submitted);
 
-        if ($missing !== []) {
-            $this->markFailed($inboxId, $missing, 'Not returned by aggregator');
-        }
+        $failed = $missing !== []
+            ? $this->markFailed($inboxId, $missing, 'Not returned by aggregator')
+            : 0;
 
-        return [count($submitted), count($missing)];
+        return [count($submitted), $failed];
     }
 
     /**
@@ -91,10 +91,12 @@ class SentWriter
     /**
      * @param  list<string>  $recipients
      */
-    public function markFailed(int $inboxId, array $recipients, string $error): void
+    public function markFailed(int $inboxId, array $recipients, string $error): int
     {
+        $updated = 0;
+
         foreach (array_chunk($recipients, 1000) as $chunk) {
-            DB::table('sents')
+            $updated += DB::table('sents')
                 ->where('inbox_id', $inboxId)
                 ->whereIn('to', $chunk)
                 ->where('status', Sent::QUEUED)
@@ -105,6 +107,8 @@ class SentWriter
                     'updated_at' => now(),
                 ]);
         }
+
+        return $updated;
     }
 
     /**

@@ -85,8 +85,8 @@ class SendBulkSmsBatchJob implements ShouldQueue
         $left = array_column($this->queuedRecipients(), 'to');
 
         if ($left !== []) {
-            app(SentWriter::class)->markFailed($inbox->id, $left, 'Not sent');
-            app(SmsInboxProgress::class)->recordSubmission($inbox, 0, count($left));
+            $failed = app(SentWriter::class)->markFailed($inbox->id, $left, 'Not sent');
+            app(SmsInboxProgress::class)->recordSubmission($inbox, 0, $failed);
         }
 
         app(SmsInboxProgress::class)->batchDone($inbox->id);

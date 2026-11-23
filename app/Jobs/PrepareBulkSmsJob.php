@@ -47,7 +47,7 @@ class PrepareBulkSmsJob implements ShouldQueue
 
         $inbox = Inbox::query()->find($this->inboxId);
 
-        if (! $inbox) {
+        if (! $inbox || $inbox->status !== Inbox::STATUS_QUEUED) {
             Outbox::query()->where('inbox_id', $this->inboxId)->delete();
 
             return;

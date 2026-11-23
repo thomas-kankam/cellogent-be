@@ -73,7 +73,7 @@ class SmsInboxProgress
      */
     public function failUnsent(?Inbox $inbox, string $error = 'Not sent'): void
     {
-        if (! $inbox) {
+        if (! $inbox || ! in_array($inbox->status, [Inbox::STATUS_QUEUED, Inbox::STATUS_PROCESSING], true)) {
             return;
         }
 
