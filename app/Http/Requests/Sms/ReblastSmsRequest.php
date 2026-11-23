@@ -27,6 +27,7 @@ class ReblastSmsRequest extends ApiFormRequest
     public function rules(): array
     {
         return array_merge([
+            'from' => ['nullable', 'string', 'min:3', 'max:11'],
             'target' => ['nullable', 'string', 'in:failed,all'],
             'message' => ['nullable', 'string', 'max:'.(int) config('sms.message_max_length', 1600)],
         ], $this->scheduleRules());

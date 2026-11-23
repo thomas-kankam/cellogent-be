@@ -19,6 +19,7 @@ class ResendSmsRequest extends ApiFormRequest
     public function rules(): array
     {
         return array_merge([
+            'from' => ['nullable', 'string', 'min:3', 'max:11'],
             'message' => ['required', 'string', 'max:'.(int) config('sms.message_max_length', 1600)],
         ], $this->scheduleRules());
     }

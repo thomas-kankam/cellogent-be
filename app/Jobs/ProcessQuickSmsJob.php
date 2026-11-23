@@ -106,11 +106,18 @@ class ProcessQuickSmsJob implements ShouldQueue
      */
     protected function resend(Inbox $inbox, KairosClient $kairos, SentWriter $writer): array
     {
-        $sources = Sent::query()
-            ->where('inbox_id', $inbox->parent_id)
-            ->when($inbox->client_id, fn ($q) => $q->where('client_id', $inbox->client_id))
-            ->get(['to', 'message_id'])
-            ->keyBy(fn (Sent $s) => (string) $s->to);
+        $parentFrom = $inbox->parent_id
+            ? Inbox::query()->whereKey($inbox->parent_id)->value('from')
+            : null;
+        $senderChanged = $parentFrom !== null && strcasecmp((string) $parentFrom, (string) $inbox->from) !== 0;
+
+        $sources = $senderChanged
+            ? collect()
+            : Sent::query()
+                ->where('inbox_id', $inbox->parent_id)
+                ->when($inbox->client_id, fn ($q) => $q->where('client_id', $inbox->client_id))
+                ->get(['to', 'message_id'])
+                ->keyBy(fn (Sent $s) => (string) $s->to);
 
         $submitted = 0;
         $failed = 0;
@@ -121,7 +128,9 @@ class ProcessQuickSmsJob implements ShouldQueue
             $source = $sources->get($to);
             $messageId = $source?->message_id ? (string) $source->message_id : '';
 
-            $response = $messageId !== ''
+            // Kairos resend reuses the original sender ID, so when the client chose a new `from`,
+            // send via quick() directly so the new approved sender ID is honored.
+            $response = (! $senderChanged && $messageId !== '')
                 ? $kairos->resend($messageId, $inbox->message, $inbox->id)
                 : null;
 

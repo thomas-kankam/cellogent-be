@@ -184,8 +184,11 @@ class SmsService
         $target = is_array($input) ? strtolower((string) ($input['target'] ?? 'failed')) : 'failed';
         $scheduledAt = is_array($input) ? $this->resolveScheduledAt($input) : null;
         $textToSend = ($message !== null && $message !== '') ? (string) $message : $source->message;
+        $requestedFrom = is_array($input) && trim((string) ($input['from'] ?? '')) !== ''
+            ? trim((string) $input['from'])
+            : $source->from;
 
-        $sender = $this->clientSender($client, $source->from);
+        $sender = $this->clientSender($client, $requestedFrom);
 
         if (is_array($sender)) {
             return $sender;
@@ -428,7 +431,11 @@ class SmsService
             return $this->result(true, 'This message has nothing that can be resent.', ApiCode::BAD_REQUEST, ApiReason::INVALID);
         }
 
-        $sender = $this->clientSender($client, $source->from);
+        $requestedFrom = is_array($input) && trim((string) ($input['from'] ?? '')) !== ''
+            ? trim((string) $input['from'])
+            : $source->from;
+
+        $sender = $this->clientSender($client, $requestedFrom);
 
         if (is_array($sender)) {
             return $sender;
