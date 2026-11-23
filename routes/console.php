@@ -151,7 +151,7 @@ Artisan::command('contacts:submit-beneficiaries', function (ContactBeneficiarySe
 })->purpose('Submit unverified contact numbers to Swift (weekly)');
 
 Schedule::command('engagement:dispatch-due')->everyMinute()->withoutOverlapping();
-Schedule::command('campaigns:run-occasions')->everyFifteenMinutes()->withoutOverlapping();
+Schedule::command('campaigns:run-occasions')->everyMinute()->withoutOverlapping();
 Schedule::command('rewards:process-pending')->everyMinute()->withoutOverlapping();
 // Submit Sunday 22:00 → midnight verifies catch submitted → verified by morning.
 Schedule::command('contacts:submit-beneficiaries')->weeklyOn(0, '22:00')->withoutOverlapping();
