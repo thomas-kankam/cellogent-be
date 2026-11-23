@@ -92,6 +92,7 @@ class SmsController extends Controller
 
         $paginator = $this->paginateQuery($request, $query);
         $this->presenter->warmGroups($paginator->getCollection());
+        $this->presenter->warmFailureReasons($paginator->getCollection());
 
         return $this->paginatedApiResponse(
             'Messages loaded.',
@@ -109,9 +110,7 @@ class SmsController extends Controller
             return $this->apiResponse(true, 'Message not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
         }
 
-        $this->presenter->warmGroups([$row]);
-
-        return $this->apiResponse(false, 'Message loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presenter->forClient($row));
+        return $this->apiResponse(false, 'Message loaded.', ApiCode::SUCCESS, ApiReason::SUCCESS, $this->presenter->forClientShow($row));
     }
 
     /**

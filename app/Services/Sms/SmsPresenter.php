@@ -7,6 +7,7 @@ use App\Models\ContactGroup;
 use App\Models\Inbox;
 use App\Models\Sent;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Client output never includes aggregator names, ids or raw errors.
@@ -16,6 +17,69 @@ class SmsPresenter
 {
     /** @var array<int, ContactGroup> */
     protected array $groupsById = [];
+
+    /** @var array<int, list<array{code: string, label: string, count: int}>> */
+    protected array $failureReasonsByInbox = [];
+
+    /** @var array<int, int> */
+    protected array $unretriedFailedByInbox = [];
+
+    /**
+     * Prefetch failure reasons and unretried failed counts for a page of inboxes (avoids N+1).
+     *
+     * @param  iterable<Inbox>  $inboxes
+     */
+    public function warmFailureReasons(iterable $inboxes): void
+    {
+        $ids = [];
+
+        foreach ($inboxes as $inbox) {
+            if (! isset($this->failureReasonsByInbox[$inbox->id])) {
+                $ids[] = (int) $inbox->id;
+                $this->failureReasonsByInbox[$inbox->id] = [];
+                $this->unretriedFailedByInbox[$inbox->id] = 0;
+            }
+        }
+
+        if ($ids === []) {
+            return;
+        }
+
+        $rows = Sent::query()
+            ->whereIn('inbox_id', $ids)
+            ->where('status', Sent::FAILED)
+            ->select(
+                'inbox_id',
+                DB::raw('UPPER(COALESCE(dlr_status, "")) as dlr'),
+                DB::raw('COUNT(*) as total'),
+                DB::raw('SUM(CASE WHEN retry_inbox_id IS NULL THEN 1 ELSE 0 END) as unretried'),
+            )
+            ->groupBy('inbox_id', 'dlr')
+            ->get();
+
+        $grouped = [];
+
+        foreach ($rows as $row) {
+            $inboxId = (int) $row->inbox_id;
+            $code = $this->failureCodeFromDlr((string) $row->dlr);
+            $grouped[$inboxId][$code] = ($grouped[$inboxId][$code] ?? 0) + (int) $row->total;
+            $this->unretriedFailedByInbox[$inboxId] = ($this->unretriedFailedByInbox[$inboxId] ?? 0) + (int) $row->unretried;
+        }
+
+        foreach ($grouped as $inboxId => $counts) {
+            $reasons = [];
+
+            foreach ($counts as $code => $count) {
+                $reasons[] = [
+                    'code' => $code,
+                    'label' => $this->failureLabel($code),
+                    'count' => $count,
+                ];
+            }
+
+            $this->failureReasonsByInbox[$inboxId] = $reasons;
+        }
+    }
 
     /**
      * Prefetch contact groups for a page of inboxes (avoids N+1 on index).
@@ -56,10 +120,17 @@ class SmsPresenter
         $pending = $inbox->status === Inbox::STATUS_CANCELLED
             ? 0
             : max(0, $recipients - $delivered - $failed);
+        $deliveryRate = $recipients > 0 ? round(($delivered / $recipients) * 100, 2) : 0.0;
+        $failureReasons = $this->failureReasonsForInbox($inbox);
+        $failureSummary = $failureReasons === []
+            ? null
+            : implode(', ', array_map(fn (array $r) => "{$r['count']} ".str_replace('_', ' ', $r['code']), $failureReasons));
 
         return [
             'id' => $inbox->id,
             'type' => $inbox->type,
+            'mode' => $inbox->mode ?? 'send',
+            'parent_id' => $inbox->parent_id,
             'request_type' => $inbox->request_type,
             'from' => $inbox->from,
             'to' => $inbox->isQuick() ? $inbox->recipients() : null,
@@ -70,16 +141,44 @@ class SmsPresenter
             'recipients' => $recipients,
             'units_used' => (int) $inbox->units_used,
             'units_refunded' => (int) $inbox->units_refunded,
+            'units_net' => max(0, (int) $inbox->units_used - (int) $inbox->units_refunded),
             'status' => $inbox->status,
             'delivery' => [
                 'sent' => $sent,           // accepted by network
                 'delivered' => $delivered, // handset confirmed
                 'failed' => $failed,       // rejected or undelivered/expired
                 'pending' => $pending,     // still sending or awaiting handset confirmation
+                'delivery_rate' => $deliveryRate,
             ],
+            'failure_reasons' => $failureReasons,
+            'failure_summary' => $failureSummary,
             'scheduled_at' => optional($inbox->scheduled_at)->toDateTimeString(),
             'created_at' => optional($inbox->created_at)->toDateTimeString(),
             'completed_at' => optional($inbox->completed_at)->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * Detailed single-SMS view for `GET sms/{inbox}` (adds available follow-up actions).
+     *
+     * @return array<string, mixed>
+     */
+    public function forClientShow(Inbox $inbox): array
+    {
+        $this->warmGroups([$inbox]);
+        $this->warmFailureReasons([$inbox]);
+
+        $finished = in_array($inbox->status, [Inbox::STATUS_COMPLETED, Inbox::STATUS_FAILED], true);
+        $unretriedFailed = $this->unretriedFailedByInbox[$inbox->id] ?? 0;
+
+        return $this->forClient($inbox) + [
+            'actions' => [
+                'can_reblast' => $finished,
+                'can_reblast_failed' => $finished && $unretriedFailed > 0,
+                'unretried_failed_count' => $unretriedFailed,
+                'can_resend' => $finished && $inbox->isQuick(),
+                'can_cancel' => $inbox->status === Inbox::STATUS_SCHEDULED,
+            ],
         ];
     }
 
@@ -241,17 +340,58 @@ class SmsPresenter
         return $out;
     }
 
+    /**
+     * @return list<array{code: string, label: string, count: int}>
+     */
+    protected function failureReasonsForInbox(Inbox $inbox): array
+    {
+        if ((int) $inbox->failed_count === 0 && ! isset($this->failureReasonsByInbox[$inbox->id])) {
+            return [];
+        }
+
+        if (! isset($this->failureReasonsByInbox[$inbox->id])) {
+            $this->warmFailureReasons([$inbox]);
+        }
+
+        $reasons = $this->failureReasonsByInbox[$inbox->id] ?? [];
+
+        if ($reasons === [] && (int) $inbox->failed_count > 0) {
+            return [[
+                'code' => 'not_sent',
+                'label' => $this->failureLabel('not_sent'),
+                'count' => (int) $inbox->failed_count,
+            ]];
+        }
+
+        return $reasons;
+    }
+
+    protected function failureCodeFromDlr(string $dlrStatus): string
+    {
+        return match (strtoupper(trim($dlrStatus))) {
+            'UNDELIVERED' => 'undelivered',
+            'REJECTED' => 'rejected',
+            'EXPIRED' => 'expired',
+            default => 'not_sent',
+        };
+    }
+
+    protected function failureLabel(string $code): string
+    {
+        return match ($code) {
+            'undelivered' => 'Undelivered — recipient phone unreachable, powered off, or out of coverage.',
+            'rejected' => 'Rejected by the mobile network or invalid/blocked recipient number.',
+            'expired' => 'Expired before the recipient handset came online to receive the SMS.',
+            default => 'Could not be submitted to the network (units refunded).',
+        };
+    }
+
     protected function failureReason(Sent $sent): ?string
     {
         if ($sent->status !== Sent::FAILED) {
             return null;
         }
 
-        return match (strtoupper((string) $sent->dlr_status)) {
-            'UNDELIVERED' => 'undelivered',
-            'REJECTED' => 'rejected',
-            'EXPIRED' => 'expired',
-            default => 'not_sent',
-        };
+        return $this->failureCodeFromDlr((string) $sent->dlr_status);
     }
 }
