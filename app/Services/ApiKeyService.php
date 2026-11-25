@@ -25,6 +25,7 @@ class ApiKeyService
     {
         return [
             'id' => $apiKey->id,
+            'api_key_id' => $apiKey->id,
             'resource' => 'api_key',
             'client_id' => $apiKey->client_id,
             'token' => $apiKey->token,

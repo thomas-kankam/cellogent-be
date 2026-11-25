@@ -33,6 +33,7 @@ class ContactService
     {
         return [
             'id' => $contact->id,
+            'contact_id' => $contact->id,
             'client_id' => $contact->client_id,
             'contact_group_id' => $contact->contact_group_id,
             'contact_import_id' => $contact->contact_import_id,

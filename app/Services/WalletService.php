@@ -42,6 +42,7 @@ class WalletService
 
         return [
             'id' => $wallet->id,
+            'wallet_id' => $wallet->id,
             'client_id' => $wallet->client_id,
             'status' => $wallet->status,
             'balance' => $balance,
@@ -181,6 +182,7 @@ class WalletService
 
         return [
             'id' => $topUp->id,
+            'top_up_id' => $topUp->id,
             'wallet_id' => $topUp->wallet_id,
             'client_id' => $topUp->client_id,
             'amount' => $topUp->amount,
@@ -215,6 +217,7 @@ class WalletService
 
         return [
             'id' => $transaction->id,
+            'transaction_id' => $transaction->id,
             'client_id' => $transaction->client_id,
             'type' => $transaction->type,
             'purpose' => $transaction->purpose,

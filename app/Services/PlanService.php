@@ -24,6 +24,7 @@ class PlanService
     {
         return [
             'id' => $plan->id,
+            'plan_id' => $plan->id,
             'name' => $plan->name,
             'details' => $plan->options(),
             'status' => $plan->status,

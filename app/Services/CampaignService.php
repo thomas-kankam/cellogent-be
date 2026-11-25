@@ -95,6 +95,7 @@ class CampaignService
 
         $data = [
             'id' => $campaign->id,
+            'campaign_id' => $campaign->id,
             'resource' => 'campaign',
             'client_id' => $campaign->client_id,
             'name' => $campaign->name,

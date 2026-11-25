@@ -25,6 +25,7 @@ class RoleService
 
         return [
             'id' => $role->id,
+            'role_id' => $role->id,
             'name' => $role->name,
             'description' => $role->description,
             'permissions' => Permission::groupByModule($role->permissions),

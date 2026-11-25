@@ -29,6 +29,7 @@ class SubscriptionService
 
         return [
             'id' => $subscription->id,
+            'subscription_id' => $subscription->id,
             'client_id' => $subscription->client_id,
             'plan_id' => $subscription->plan_id,
             'plan_name' => $subscription->plan_name,
@@ -52,6 +53,7 @@ class SubscriptionService
 
         return [
             'id' => $archive->id,
+            'subscription_archive_id' => $archive->id,
             'client_id' => $archive->client_id,
             'plan_id' => $archive->plan_id,
             'plan_name' => $archive->plan_name,

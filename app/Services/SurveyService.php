@@ -93,6 +93,7 @@ class SurveyService
 
         $data = [
             'id' => $survey->id,
+            'survey_id' => $survey->id,
             'resource' => 'survey',
             'client_id' => $survey->client_id,
             'name' => $survey->name,
@@ -189,6 +190,7 @@ class SurveyService
     {
         return [
             'id' => $question->id,
+            'question_id' => $question->id,
             'prompt' => $question->prompt,
             'type' => $question->type,
             'options' => $question->options,

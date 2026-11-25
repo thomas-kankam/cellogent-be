@@ -89,6 +89,10 @@ class SmsController extends Controller
     {
         $query = Inbox::query()->latest('id');
 
+        if ($request->filled('inbox_id') || $request->filled('id')) {
+            $query->where('id', $request->integer('inbox_id') ?: $request->integer('id'));
+        }
+
         foreach (['client_id', 'admin_id', 'type', 'status', 'request_type'] as $filter) {
             if ($request->filled($filter)) {
                 $query->where($filter, $request->input($filter));

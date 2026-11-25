@@ -47,10 +47,12 @@ class SmsController extends Controller
 
         return $this->paginatedApiResponse('Unit history loaded.', ApiReason::SUCCESS, $this->paginateQuery($request, $query), fn (SmsUnitLedger $row) => [
             'id' => $row->id,
+            'ledger_id' => $row->id,
             'type' => $row->type,
             'units' => (int) $row->units,
             'balance_before' => (int) $row->balance_before,
             'balance_after' => (int) $row->balance_after,
+            'inbox_id' => $row->inbox_id,
             'sms_id' => $row->inbox_id,
             'description' => $row->description,
             'created_at' => optional($row->created_at)->toDateTimeString(),
@@ -70,6 +72,10 @@ class SmsController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Inbox::query()->where('client_id', $request->user()->id)->latest('id');
+
+        if ($request->filled('inbox_id') || $request->filled('id')) {
+            $query->where('id', $request->integer('inbox_id') ?: $request->integer('id'));
+        }
 
         foreach (['type', 'status', 'request_type', 'mode'] as $filter) {
             if ($request->filled($filter)) {
@@ -172,6 +178,8 @@ class SmsController extends Controller
         })->values()->all();
 
         $payload = [
+            'id' => $row->id,
+            'inbox_id' => $row->id,
             'sms_id' => $row->id,
             'type' => $row->type,
             'from' => $row->from,
@@ -252,6 +260,7 @@ class SmsController extends Controller
 
         $data = [
             'id' => $inbox->id,
+            'inbox_id' => $inbox->id,
             'type' => $inbox->type,
             'from' => $inbox->from,
             'message_id' => $inbox->message_id,

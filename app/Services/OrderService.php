@@ -26,6 +26,7 @@ class OrderService
 
         return [
             'id' => $order->id,
+            'order_id' => $order->id,
             'resource' => 'order',
             'client_id' => $order->client_id,
             'admin_id' => $order->admin_id,
@@ -47,6 +48,7 @@ class OrderService
     {
         return [
             'id' => $item->id,
+            'order_item_id' => $item->id,
             'name' => $item->name,
             'unit_price' => $item->unit_price,
             'order_id' => $item->order_id,

@@ -128,6 +128,7 @@ class SmsPresenter
 
         return [
             'id' => $inbox->id,
+            'inbox_id' => $inbox->id,
             'type' => $inbox->type,
             'source' => $inbox->resolvedSource(),
             'source_id' => $inbox->source_id,
@@ -235,6 +236,7 @@ class SmsPresenter
 
             $map[$phone][] = [
                 'id' => (int) $contact->contact_group_id,
+                'contact_group_id' => (int) $contact->contact_group_id,
                 'name' => $group?->name,
                 'contact' => [
                     'first_name' => $contact->first_name,
@@ -254,6 +256,7 @@ class SmsPresenter
     {
         return [
             'id' => $sent->id,
+            'sent_id' => $sent->id,
             'inbox_id' => $sent->inbox_id,
             'to' => $sent->to,
             'from' => $sent->from,
@@ -326,12 +329,14 @@ class SmsPresenter
 
             $out[] = $group ? [
                 'id' => $group->id,
+                'contact_group_id' => $group->id,
                 'name' => $group->name,
                 'description' => $group->description,
                 'count_of_contacts' => (int) $group->count_of_contacts,
                 'deleted' => $group->trashed(),
             ] : [
                 'id' => (int) $id,
+                'contact_group_id' => (int) $id,
                 'name' => null,
                 'description' => null,
                 'count_of_contacts' => null,

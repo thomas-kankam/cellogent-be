@@ -108,6 +108,7 @@ class TemplateService
 
         return [
             'id' => $template->id,
+            'template_id' => $template->id,
             'scope' => $template->scope,
             'is_system' => $isGlobal,
             'is_mine' => $isMine,

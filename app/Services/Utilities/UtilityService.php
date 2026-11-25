@@ -777,6 +777,7 @@ class UtilityService
 
         return [
             'id' => $order->id,
+            'utility_order_id' => $order->id,
             'resource' => 'utility_order',
             'reference' => $order->reference,
             'batch_id' => $order->batch_id,

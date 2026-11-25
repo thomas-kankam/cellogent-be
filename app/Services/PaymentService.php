@@ -41,6 +41,7 @@ class PaymentService
     {
         return [
             'id' => $payment->id,
+            'payment_id' => $payment->id,
             'resource' => 'payment',
             'client_id' => $payment->client_id,
             'order_id' => $payment->order_id,

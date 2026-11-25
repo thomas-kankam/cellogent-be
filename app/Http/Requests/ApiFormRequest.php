@@ -23,6 +23,32 @@ abstract class ApiFormRequest extends FormRequest
         return true;
     }
 
+    /**
+     * Resource-specific ID aliases accepted interchangeably with `id` (and singular/plural contact groups).
+     *
+     * @var list<string>
+     */
+    protected const RESOURCE_ID_ALIASES = [
+        'inbox_id',
+        'sms_id',
+        'sender_id',
+        'contact_group_id',
+        'contact_id',
+        'campaign_id',
+        'survey_id',
+        'template_id',
+        'plan_id',
+        'payment_id',
+        'order_id',
+        'utility_order_id',
+        'subscription_id',
+        'wallet_id',
+        'api_key_id',
+        'client_id',
+        'admin_id',
+        'role_id',
+    ];
+
     protected function prepareForValidation(): void
     {
         $payload = [];
@@ -42,9 +68,54 @@ abstract class ApiFormRequest extends FormRequest
             $payload['meta_data'] = $meta;
         }
 
+        $payload += $this->normalizeResourceIdAliases();
+
         if ($payload !== []) {
             $this->merge($payload);
         }
+    }
+
+    /**
+     * Allow callers to pass either `id` or `<resource>_id` (e.g. `inbox_id`, `plan_id`, `contact_group_id`)
+     * interchangeably based on whichever key this request's validation rules expect.
+     *
+     * @return array<string, mixed>
+     */
+    protected function normalizeResourceIdAliases(): array
+    {
+        if (! method_exists($this, 'rules')) {
+            return [];
+        }
+
+        $rules = $this->rules();
+        $mapped = [];
+
+        // If the request expects `<resource>_id` (e.g. `plan_id`) and caller passed `id`, map it across.
+        if ($this->filled('id')) {
+            $expectedAliases = array_values(array_intersect(self::RESOURCE_ID_ALIASES, array_keys($rules)));
+
+            if (count($expectedAliases) === 1 && ! $this->filled($expectedAliases[0])) {
+                $mapped[$expectedAliases[0]] = $this->input('id');
+            }
+        }
+
+        // If the request expects `id` and caller passed a `<resource>_id` alias (e.g. `inbox_id`), map it to `id`.
+        if (array_key_exists('id', $rules) && ! $this->filled('id')) {
+            foreach (self::RESOURCE_ID_ALIASES as $alias) {
+                if ($this->filled($alias)) {
+                    $mapped['id'] = $this->input($alias);
+                    break;
+                }
+            }
+        }
+
+        // Convenience: if a request expects `contact_group_ids` and caller passed singular `contact_group_id`.
+        if (array_key_exists('contact_group_ids', $rules) && ! $this->filled('contact_group_ids') && $this->filled('contact_group_id')) {
+            $raw = $this->input('contact_group_id');
+            $mapped['contact_group_ids'] = is_array($raw) ? $raw : [$raw];
+        }
+
+        return $mapped;
     }
 
     /**

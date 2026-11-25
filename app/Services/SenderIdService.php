@@ -26,6 +26,7 @@ class SenderIdService
 
         return [
             'id' => $senderId->id,
+            'sender_id' => $senderId->id,
             'name' => $senderId->name,
             'client_id' => $senderId->client_id,
             'status' => $senderId->status,

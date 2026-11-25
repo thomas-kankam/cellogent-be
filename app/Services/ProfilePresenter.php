@@ -23,6 +23,7 @@ class ProfilePresenter
 
             return [
                 'id' => $actor->id,
+                'admin_id' => $actor->id,
                 'first_name' => $actor->first_name,
                 'last_name' => $actor->last_name,
                 'email' => $actor->email,
@@ -32,6 +33,7 @@ class ProfilePresenter
                 'last_login_at' => optional($actor->last_login_at)->toDateTimeString(),
                 'role' => $actor->role ? [
                     'id' => $actor->role->id,
+                    'role_id' => $actor->role->id,
                     'name' => $actor->role->name,
                     'description' => $actor->role->description,
                     'permissions' => Permission::groupByModule($actor->role->permissions),
@@ -44,6 +46,7 @@ class ProfilePresenter
 
         return [
             'id' => $actor->id,
+            'client_id' => $actor->id,
             'first_name' => $actor->first_name,
             'last_name' => $actor->last_name,
             'email' => $actor->email,
