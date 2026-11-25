@@ -84,6 +84,11 @@ class UtilityService
         $flat = [];
 
         foreach ($plans ?? [] as $plan) {
+            // Clients only see purchasable packages; admins see all with availability flags.
+            if (! $admin && ! $plan['available']) {
+                continue;
+            }
+
             $item = $this->presentPlan($plan, $admin);
             $flat[] = $item;
             $categories[$plan['network']][] = $item;
@@ -423,6 +428,14 @@ class UtilityService
             $specs[$i]['_client_phone'] = $client->phone_number;
         }
 
+        // Refresh Swift catalog live before purchasing any data/mashup package so a stale cache
+        // never lets a client buy a package Swift just marked `is_unavailable: true`.
+        $needsDataCatalog = collect($specs)->contains(fn (array $s) => in_array((string) ($s['service'] ?? ''), ['data', 'mashup'], true));
+
+        if ($needsDataCatalog && $this->catalog->plans(fresh: true) === null) {
+            return $this->unavailable('The provider is unavailable right now. Try again shortly.');
+        }
+
         $prices = $this->priceAll($specs, true);
 
         if ($this->failed($prices)) {
@@ -523,20 +536,31 @@ class UtilityService
      */
     public function queueFromPayment(Payment $payment, array $spec): array
     {
-        $existing = UtilityOrder::query()->where('payment_id', $payment->id)->get();
+        $orders = DB::transaction(function () use ($payment, $spec): ?array {
+            // Lock the payment row so concurrent webhook + verify calls cannot create duplicate orders.
+            Payment::query()->whereKey($payment->id)->lockForUpdate()->first();
 
-        if ($existing->isNotEmpty()) {
-            return $existing->all();
-        }
+            $existing = UtilityOrder::query()->where('payment_id', $payment->id)->get();
 
-        $client = Client::query()->findOrFail($payment->client_id);
-        $bulk = isset($spec['items']) && is_array($spec['items']);
-        $prices = $bulk ? array_values($spec['items']) : [$spec];
-        $batchId = $bulk && count($prices) > 1 ? 'PAY-'.$payment->id : null;
-        $orders = [];
+            if ($existing->isNotEmpty()) {
+                return null;
+            }
 
-        foreach ($prices as $price) {
-            $orders[] = $this->createOrder($client, (array) $price, $this->newReference(), (string) $payment->method, $payment, $batchId, ['bulk' => $bulk]);
+            $client = Client::query()->findOrFail($payment->client_id);
+            $bulk = isset($spec['items']) && is_array($spec['items']);
+            $prices = $bulk ? array_values($spec['items']) : [$spec];
+            $batchId = $bulk && count($prices) > 1 ? 'PAY-'.$payment->id : null;
+            $created = [];
+
+            foreach ($prices as $price) {
+                $created[] = $this->createOrder($client, (array) $price, $this->newReference(), (string) $payment->method, $payment, $batchId, ['bulk' => $bulk]);
+            }
+
+            return $created;
+        }, 3);
+
+        if ($orders === null) {
+            return UtilityOrder::query()->where('payment_id', $payment->id)->get()->all();
         }
 
         $this->queueOrders($orders, afterCommit: true);
@@ -657,6 +681,10 @@ class UtilityService
      */
     public function status(Client $client, UtilityOrder $order): array
     {
+        if ((int) $order->client_id !== (int) $client->id) {
+            return $this->result(true, 'Order not found.', ApiCode::NOT_FOUND, ApiReason::NOT_FOUND);
+        }
+
         if ($order->status === 'pending') {
             $order = $this->refresh($order);
         }
@@ -704,6 +732,14 @@ class UtilityService
 
         if (! $order) {
             return $this->result(false, 'No matching order.', ApiCode::SUCCESS, ApiReason::NOT_FOUND, ['order_id' => $orderId]);
+        }
+
+        // Never overwrite provider_response / vouchers on an already-finalised order.
+        if ($order->status !== 'pending') {
+            return $this->result(false, 'Order already finalised.', ApiCode::SUCCESS, ApiReason::SUCCESS, [
+                'order_id' => $orderId,
+                'status' => $order->status,
+            ]);
         }
 
         $state = match ($event) {
@@ -756,11 +792,17 @@ class UtilityService
         }
 
         if (! empty($filters['from'])) {
-            $query->where('created_at', '>=', Carbon::parse($filters['from'])->startOfDay());
+            try {
+                $query->where('created_at', '>=', Carbon::parse((string) $filters['from'])->startOfDay());
+            } catch (Throwable) {
+            }
         }
 
         if (! empty($filters['to'])) {
-            $query->where('created_at', '<=', Carbon::parse($filters['to'])->endOfDay());
+            try {
+                $query->where('created_at', '<=', Carbon::parse((string) $filters['to'])->endOfDay());
+            } catch (Throwable) {
+            }
         }
 
         return $query;
@@ -947,8 +989,8 @@ class UtilityService
 
                 $plan = $this->catalog->plan($packageId);
 
-                if (! $plan || ! $plan['available'] || ($service === 'mashup' && $plan['product_type'] !== 'mashup')) {
-                    return $this->invalid(['package_id' => ['That package is not available.']]);
+                if (! $plan || ! $plan['available'] || (float) ($plan['cost'] ?? 0) <= 0 || ($service === 'mashup' && $plan['product_type'] !== 'mashup')) {
+                    return $this->invalid(['package_id' => ['This package is currently unavailable. Please choose another package.']]);
                 }
 
                 $productType = $plan['product_type'];
@@ -2063,7 +2105,8 @@ class UtilityService
             'size' => $plan['size'],
             'size_gb' => $plan['size_gb'],
             'price' => $priced['sell'],
-            'available' => $plan['available'],
+            'available' => (bool) $plan['available'],
+            'is_unavailable' => ! $plan['available'],
             // Affordable MTN SME (YELLO) only — frontend can warn before purchase.
             'requires_beneficiary' => SwiftBeneficiary::required($plan['product_type'], $plan['network']),
         ];

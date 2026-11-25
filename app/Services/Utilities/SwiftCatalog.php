@@ -10,21 +10,23 @@ use Illuminate\Support\Facades\Cache;
  */
 class SwiftCatalog
 {
-    protected const CACHE_KEY = 'swift:plans:v2';
+    protected const CACHE_KEY = 'swift:plans:v3';
 
     public function __construct(protected SwiftClient $swift) {}
 
     /**
      * Every plan, or null when Swift cannot be reached.
      *
-     * @return list<array{package_id: string, network: string, network_key: string, size: string, size_gb: float|null, cost: float, available: bool, product_type: string}>|null
+     * @return list<array{package_id: string, network: string, network_key: string, size: string, size_gb: float|null, cost: float, available: bool, is_unavailable: bool, product_type: string}>|null
      */
-    public function plans(): ?array
+    public function plans(bool $fresh = false): ?array
     {
-        $cached = Cache::get(self::CACHE_KEY);
+        if (! $fresh) {
+            $cached = Cache::get(self::CACHE_KEY);
 
-        if (is_array($cached)) {
-            return $cached;
+            if (is_array($cached)) {
+                return $cached;
+            }
         }
 
         $response = $this->swift->plans();
@@ -52,9 +54,9 @@ class SwiftCatalog
     /**
      * @return array<string, mixed>|null
      */
-    public function plan(string $packageId): ?array
+    public function plan(string $packageId, bool $fresh = false): ?array
     {
-        foreach ($this->plans() ?? [] as $plan) {
+        foreach ($this->plans($fresh) ?? [] as $plan) {
             if (strcasecmp($plan['package_id'], trim($packageId)) === 0) {
                 return $plan;
             }
@@ -70,7 +72,7 @@ class SwiftCatalog
 
     /**
      * @param  array<string, mixed>  $row
-     * @return array{package_id: string, network: string, network_key: string, size: string, size_gb: float|null, cost: float, available: bool, product_type: string}
+     * @return array{package_id: string, network: string, network_key: string, size: string, size_gb: float|null, cost: float, available: bool, is_unavailable: bool, product_type: string}
      */
     protected function normalize(array $row): array
     {
@@ -78,6 +80,8 @@ class SwiftCatalog
         $packageId = (string) $row['package_id'];
         $size = trim((string) ($row['package_size'] ?? ''));
         $mashup = (bool) preg_match('/mash/i', $network.' '.$packageId);
+        $cost = round((float) ($row['api_price'] ?? 0), 2);
+        $available = $this->resolveAvailable($row, $cost);
 
         return [
             'package_id' => $packageId,
@@ -85,10 +89,50 @@ class SwiftCatalog
             'network_key' => strtolower(preg_replace('/[^A-Za-z0-9]+/', '', $network) ?? ''),
             'size' => $size,
             'size_gb' => $this->gigabytes($size),
-            'cost' => round((float) ($row['api_price'] ?? 0), 2),
-            'available' => empty($row['is_unavailable']),
+            'cost' => $cost,
+            'available' => $available,
+            'is_unavailable' => ! $available,
             'product_type' => $mashup ? 'mashup' : 'data_bundle',
         ];
+    }
+
+    /**
+     * Determine whether a Swift plan is genuinely purchasable.
+     * Handles boolean/string/int `is_unavailable`, explicit `available: false`, status flags, and invalid <=0 prices.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected function resolveAvailable(array $row, float $cost): bool
+    {
+        if ($cost <= 0) {
+            return false;
+        }
+
+        if (array_key_exists('is_unavailable', $row) && $row['is_unavailable'] !== null) {
+            $unavailable = filter_var($row['is_unavailable'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+            if ($unavailable === true) {
+                return false;
+            }
+        }
+
+        if (array_key_exists('available', $row) && $row['available'] !== null) {
+            $available = filter_var($row['available'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+            if ($available === false) {
+                return false;
+            }
+        }
+
+        if (isset($row['status']) && is_string($row['status'])) {
+            $status = strtolower(trim($row['status']));
+
+            if (in_array($status, ['unavailable', 'inactive', 'disabled', 'out_of_stock', 'suspended'], true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
